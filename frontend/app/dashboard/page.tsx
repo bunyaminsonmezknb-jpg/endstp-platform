@@ -1,7 +1,12 @@
+'use client';
+
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import WeeklyChart from './WeeklyChart';
 
 export default function Dashboard() {
+  const router = useRouter();
+  
   const student = {
     name: "Ahmet Yılmaz",
     class: "11. Sınıf",
@@ -25,6 +30,12 @@ export default function Dashboard() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    router.push('/');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
       <header className="bg-white shadow-sm border-b">
@@ -36,7 +47,10 @@ export default function Dashboard() {
           
           <div className="flex items-center gap-4">
             <span className="text-gray-700">👤 {student.name}</span>
-            <button className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition">
+            <button 
+              onClick={handleLogout}
+              className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
+            >
               Çıkış
             </button>
           </div>
@@ -111,7 +125,10 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button className="bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 transition shadow-lg">
+          <button 
+            onClick={() => router.push('/test-entry')}
+            className="bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 transition shadow-lg"
+          >
             + Yeni Test Ekle
           </button>
           

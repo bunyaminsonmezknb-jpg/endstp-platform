@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
@@ -40,6 +40,17 @@ class SignInRequest(BaseModel):
     email: EmailStr
     password: str
 
+class TestResultCreate(BaseModel):
+    user_id: str
+    test_datetime: str  # test_date yerine test_datetime
+    subject: str
+    topic: str
+    correct_count: int
+    wrong_count: int
+    empty_count: int
+    net: float
+    success_rate: float
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -60,38 +71,46 @@ async def health_check():
     }
 
 # Kayıt olma
-@app.post("/api/auth/signup")
-async def signup(data: SignUpRequest):
+@app.post("/api/test-results")
+async def create_test_result(data: TestResultCreate):
     try:
-        # Supabase Auth ile kullanıcı oluştur
-        auth_response = supabase.auth.sign_up({
-            "email": data.email,
-            "password": data.password,
-        })
+        # Önce student kaydı var mı kontrol et, yoksa oluştur
+        student_check = supabase.table("students").select("*").eq("user_id", data.user_id).execute()
         
-        if auth_response.user:
-            # Profile tablosuna ekle
-            profile_data = {
-                "id": auth_response.user.id,
-                "email": data.email,
-                "full_name": data.full_name,
-                "role": data.role
-            }
+        if not student_check.data:
+            # Student kaydı yoksa oluştur
+            profile = supabase.table("profiles").select("*").eq("id", data.user_id).execute()
+            student_name = profile.data[0]["full_name"] if profile.data else "Öğrenci"
             
-            supabase.table("profiles").insert(profile_data).execute()
+            new_student = supabase.table("students").insert({
+                "user_id": data.user_id,
+                "name": student_name,
+                "class": "11. Sınıf"
+            }).execute()
             
-            return {
-                "message": "Kayıt başarılı! 🎉",
-                "user": {
-                    "id": auth_response.user.id,
-                    "email": auth_response.user.email,
-                    "role": data.role
-                }
-            }
+            student_id = new_student.data[0]["id"]
         else:
-            raise HTTPException(status_code=400, detail="Kayıt başarısız")
-            
+            student_id = student_check.data[0]["id"]
+        
+        # Test sonucunu kaydet
+        result = supabase.table("test_results").insert({
+            "student_id": student_id,
+            "subject": data.subject,
+            "topic": data.topic,
+            "correct_count": data.correct_count,
+            "wrong_count": data.wrong_count,
+            "empty_count": data.empty_count,
+            "net": data.net,
+            "success_rate": data.success_rate,
+            "entry_timestamp": data.test_datetime
+        }).execute()
+        
+        return {
+            "message": "Test sonucu kaydedildi! ✅",
+            "data": result.data
+        }
     except Exception as e:
+        print(f"Hata detayı: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # Giriş yapma
@@ -123,6 +142,30 @@ async def signin(data: SignInRequest):
             
     except Exception as e:
         raise HTTPException(status_code=401, detail="Email veya şifre hatalı")
+
+# Test sonucu kaydetme
+@app.post("/api/test-results")
+async def create_test_result(data: TestResultCreate):
+    try:
+        # Test sonucunu kaydet
+        result = supabase.table("test_results").insert({
+            "student_id": data.user_id,
+            "subject": data.subject,
+            "topic": data.topic,
+            "correct_count": data.correct_count,
+            "wrong_count": data.wrong_count,
+            "empty_count": data.empty_count,
+            "net": data.net,
+            "success_rate": data.success_rate,
+            "entry_timestamp": data.test_date
+        }).execute()
+        
+        return {
+            "message": "Test sonucu kaydedildi! ✅",
+            "data": result.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
