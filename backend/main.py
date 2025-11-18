@@ -170,3 +170,169 @@ async def create_test_result(data: TestResultCreate):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+# ============================================
+# DYNAMIC DATA ENDPOINTS (Form için)
+# ============================================
+
+@app.get("/api/subjects")
+async def get_subjects():
+    """Ders listesini getir"""
+    try:
+        result = supabase.table("subjects").select(
+            "id, code, name_tr, icon, color"
+        ).eq("is_active", True).order("order_index").execute()
+        
+        return {
+            "subjects": result.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/subjects/{subject_id}/topics")
+async def get_topics_by_subject(subject_id: str):
+    """Bir derse ait konuları getir"""
+    try:
+        result = supabase.table("topics").select(
+            "id, code, name_tr, difficulty_level, exam_weight"
+        ).eq("subject_id", subject_id).eq("is_active", True).order("order_index").execute()
+        
+        return {
+            "topics": result.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/education-levels")
+async def get_education_levels():
+    """Eğitim seviyelerini getir"""
+    try:
+        result = supabase.table("education_levels").select(
+            "id, code, name_tr, grade_range"
+        ).eq("is_active", True).order("order_index").execute()
+        
+        return {
+            "levels": result.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/class-levels")
+async def get_class_levels():
+    """Sınıf seviyelerini getir"""
+    try:
+        result = supabase.table("class_levels").select(
+            "id, code, name_tr, grade_number"
+        ).eq("is_active", True).order("order_index").execute()
+        
+        return {
+            "classes": result.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+ # ============================================
+# DASHBOARD ENDPOINTS
+# ============================================
+
+@app.get("/api/students/{student_id}/dashboard")
+async def get_student_dashboard(student_id: str):
+    """Dashboard için tüm verileri getir"""
+    try:
+        # 1. Öğrenci bilgisi
+        student = supabase.table("students").select("*").eq("id", student_id).single().execute()
+        
+        # 2. Toplam test sayısı
+        test_count = supabase.table("test_results").select("id", count="exact").eq("student_id", student_id).execute()
+        total_tests = test_count.count if test_count.count else 0
+        
+        # 3. Ortalama net
+        test_results = supabase.table("test_results").select("net").eq("student_id", student_id).execute()
+        nets = [t["net"] for t in test_results.data if t["net"]]
+        avg_net = sum(nets) / len(nets) if nets else 0
+        
+        # 4. Son 7 gün test performansı (haftalık grafik)
+        from datetime import datetime, timedelta
+        seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+        
+        weekly_tests = supabase.table("test_results").select(
+            "net, entry_timestamp"
+        ).eq("student_id", student_id).gte("entry_timestamp", seven_days_ago).order("entry_timestamp").execute()
+        
+        # Günlere göre grupla
+        daily_nets = {}
+        for test in weekly_tests.data:
+            date = test["entry_timestamp"][:10]  # YYYY-MM-DD
+            if date not in daily_nets:
+                daily_nets[date] = []
+            daily_nets[date].append(test["net"])
+        
+        # Ortalama al
+        weekly_data = []
+        for i in range(7):
+            date = (datetime.now() - timedelta(days=6-i)).strftime("%Y-%m-%d")
+            day_name = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"][(datetime.now() - timedelta(days=6-i)).weekday()]
+            avg = sum(daily_nets.get(date, [0])) / len(daily_nets.get(date, [1])) if daily_nets.get(date) else 0
+            weekly_data.append({
+                "day": day_name,
+                "net": round(avg, 2)
+            })
+        
+        # 5. Öncelikli konular (başarı oranına göre)
+        topic_stats = supabase.table("test_results").select(
+            "subject, topic, success_rate"
+        ).eq("student_id", student_id).execute()
+        
+        # Konulara göre grupla
+        topic_performance = {}
+        for test in topic_stats.data:
+            key = f"{test['subject']}-{test['topic']}"
+            if key not in topic_performance:
+                topic_performance[key] = {
+                    "subject": test["subject"],
+                    "topic": test["topic"],
+                    "rates": []
+                }
+            topic_performance[key]["rates"].append(test["success_rate"])
+        
+        # Ortalama başarı oranını hesapla
+        priority_topics = []
+        for key, data in topic_performance.items():
+            avg_rate = sum(data["rates"]) / len(data["rates"])
+            priority_topics.append({
+                "subject": data["subject"],
+                "topic": data["topic"],
+                "score": round(avg_rate, 1),
+                "priority": "urgent" if avg_rate < 50 else "high" if avg_rate < 70 else "medium"
+            })
+        
+        # Başarı oranına göre sırala (en düşük önce)
+        priority_topics.sort(key=lambda x: x["score"])
+        
+        return {
+            "student": {
+                "name": student.data["name"],
+                "class": student.data["class"],
+                "total_tests": total_tests,
+                "average_net": round(avg_net, 2)
+            },
+            "weekly_data": weekly_data,
+            "priority_topics": priority_topics[:5]  # İlk 5 konu
+        }
+        
+    except Exception as e:
+        print(f"Dashboard hatası: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/user/{user_id}/student")
+async def get_student_by_user(user_id: str):
+    """User ID'den student ID'yi bul"""
+    try:
+        result = supabase.table("students").select("*").eq("user_id", user_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Öğrenci bulunamadı")
+        
+        return {
+            "student": result.data[0]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))       

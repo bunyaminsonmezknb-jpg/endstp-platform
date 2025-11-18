@@ -4,6 +4,22 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
+interface Subject {
+  id: string;
+  code: string;
+  name_tr: string;
+  icon: string;
+  color: string;
+}
+
+interface Topic {
+  id: string;
+  code: string;
+  name_tr: string;
+  difficulty_level: number;
+  exam_weight: number;
+}
+
 export default function TestEntry() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -11,39 +27,65 @@ export default function TestEntry() {
   const [error, setError] = useState('');
 
   // Form verileri
-  const [testDate, setTestDate] = useState('');
-  const [testTime, setTestTime] = useState('');
-  const [testDateTime, setTestDateTime] = useState(''); // Birleşik
-  const [subject, setSubject] = useState('');
-  const [topic, setTopic] = useState('');
+  const [testDateTime, setTestDateTime] = useState('');
+  const [subjectId, setSubjectId] = useState('');
+  const [topicId, setTopicId] = useState('');
   const [correctCount, setCorrectCount] = useState('');
   const [wrongCount, setWrongCount] = useState('');
   const [emptyCount, setEmptyCount] = useState('');
   const [net, setNet] = useState(0);
 
-  // Dersler
-  const subjects = [
-    'Matematik',
-    'Fizik',
-    'Kimya',
-    'Biyoloji',
-    'Türkçe',
-    'Tarih',
-    'Coğrafya',
-    'İngilizce'
-  ];
+  // Dinamik veriler
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [loadingTopics, setLoadingTopics] = useState(false);
 
-  // Konular
-  const topicsBySubject: { [key: string]: string[] } = {
-    'Matematik': ['Limit', 'Türev', 'İntegral', 'Logaritma', 'Üstel Fonksiyonlar'],
-    'Fizik': ['Hareket', 'Kuvvet', 'Enerji', 'Manyetizma', 'Elektrik'],
-    'Kimya': ['Atom', 'Periyodik Tablo', 'Kimyasal Bağlar', 'Kimyasal Denge', 'Asit-Baz'],
-    'Biyoloji': ['Hücre', 'Genetik', 'Ekoloji', 'Sindirim Sistemi', 'Dolaşım Sistemi'],
-    'Türkçe': ['Anlatım', 'Paragraf', 'Sözcük', 'Cümle', 'Yapı'],
-    'Tarih': ['İlk Çağ', 'Orta Çağ', 'Yeni Çağ', 'Yakın Çağ', 'Cumhuriyet Tarihi'],
-    'Coğrafya': ['Fiziki Coğrafya', 'Beşeri Coğrafya', 'Türkiye Coğrafyası', 'Dünya Coğrafyası'],
-    'İngilizce': ['Grammar', 'Vocabulary', 'Reading', 'Listening']
+  // Max datetime (şu an)
+  const getTurkeyDateTime = () => {
+    const now = new Date();
+    return now.toISOString().slice(0, 16);
   };
+
+  // Dersleri yükle
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/subjects');
+        const data = await response.json();
+        setSubjects(data.subjects);
+      } catch (err) {
+        console.error('Dersler yüklenemedi:', err);
+      } finally {
+        setLoadingSubjects(false);
+      }
+    };
+
+    fetchSubjects();
+  }, []);
+
+  // Ders değiştiğinde konuları yükle
+  useEffect(() => {
+    if (!subjectId) {
+      setTopics([]);
+      return;
+    }
+
+    const fetchTopics = async () => {
+      setLoadingTopics(true);
+      try {
+        const response = await fetch(`http://localhost:8000/api/subjects/${subjectId}/topics`);
+        const data = await response.json();
+        setTopics(data.topics);
+      } catch (err) {
+        console.error('Konular yüklenemedi:', err);
+      } finally {
+        setLoadingTopics(false);
+      }
+    };
+
+    fetchTopics();
+  }, [subjectId]);
 
   // Net hesaplama
   useEffect(() => {
@@ -76,7 +118,10 @@ export default function TestEntry() {
       const user = JSON.parse(userStr);
       const accessToken = localStorage.getItem('access_token');
 
-      // Tarih-saat zaten ISO formatında
+      // Seçilen ders ve konu bilgilerini bul
+      const selectedSubject = subjects.find(s => s.id === subjectId);
+      const selectedTopic = topics.find(t => t.id === topicId);
+
       const testDateTimeISO = testDateTime + ':00';
 
       // Backend API'ye gönder
@@ -89,8 +134,8 @@ export default function TestEntry() {
         body: JSON.stringify({
           user_id: user.id,
           test_datetime: testDateTimeISO,
-          subject,
-          topic,
+          subject: selectedSubject?.name_tr || '',
+          topic: selectedTopic?.name_tr || '',
           correct_count: parseInt(correctCount),
           wrong_count: parseInt(wrongCount),
           empty_count: parseInt(emptyCount),
@@ -168,7 +213,7 @@ export default function TestEntry() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Tarih ve Saat Birleşik - Modern */}
+            {/* Tarih ve Saat */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 📅 Test Tarihi ve Saati
@@ -177,7 +222,7 @@ export default function TestEntry() {
                 type="datetime-local"
                 value={testDateTime}
                 onChange={(e) => setTestDateTime(e.target.value)}
-                max={new Date().toISOString().slice(0, 16)}
+                max={getTurkeyDateTime()}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
                 required
                 disabled={loading}
@@ -187,47 +232,67 @@ export default function TestEntry() {
               </p>
             </div>
 
+            {/* Ders */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 📚 Ders
               </label>
-              <select
-                value={subject}
-                onChange={(e) => {
-                  setSubject(e.target.value);
-                  setTopic('');
-                }}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
-                required
-                disabled={loading}
-              >
-                <option value="" className="text-gray-500">Ders Seçin</option>
-                {subjects.map((s) => (
-                  <option key={s} value={s} className="text-gray-700">{s}</option>
-                ))}
-              </select>
-            </div>
-
-            {subject && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📖 Konu
-                </label>
+              {loadingSubjects ? (
+                <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                  Dersler yükleniyor...
+                </div>
+              ) : (
                 <select
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
+                  value={subjectId}
+                  onChange={(e) => {
+                    setSubjectId(e.target.value);
+                    setTopicId('');
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
                   required
                   disabled={loading}
                 >
-                  <option value="" className="text-gray-500">Konu Seçin</option>
-                  {topicsBySubject[subject]?.map((t) => (
-                    <option key={t} value={t} className="text-gray-700">{t}</option>
+                  <option value="" className="text-gray-500">Ders Seçin</option>
+                  {subjects.map((subject) => (
+                    <option key={subject.id} value={subject.id} className="text-gray-700">
+                      {subject.icon} {subject.name_tr}
+                    </option>
                   ))}
                 </select>
+              )}
+            </div>
+
+            {/* Konu */}
+            {subjectId && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📖 Konu
+                </label>
+                {loadingTopics ? (
+                  <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                    Konular yükleniyor...
+                  </div>
+                ) : (
+                  <select
+                    value={topicId}
+                    onChange={(e) => setTopicId(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
+                    required
+                    disabled={loading}
+                  >
+                    <option value="" className="text-gray-500">Konu Seçin</option>
+                    {topics.map((topic) => (
+                      <option key={topic.id} value={topic.id} className="text-gray-700">
+                        {topic.name_tr} 
+                        {topic.difficulty_level && ` (⭐${topic.difficulty_level})`}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
 
+            {/* Soru Sayıları */}
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -278,11 +343,13 @@ export default function TestEntry() {
               </div>
             </div>
 
+            {/* Net Gösterimi */}
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-sm text-gray-600 mb-1">Net</p>
               <p className="text-3xl font-bold text-blue-600">{net.toFixed(2)}</p>
             </div>
 
+            {/* Butonlar */}
             <div className="flex gap-4">
               <button
                 type="button"
@@ -296,7 +363,7 @@ export default function TestEntry() {
               <button
                 type="submit"
                 className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-gray-400"
-                disabled={loading}
+                disabled={loading || !subjectId || !topicId}
               >
                 {loading ? 'Kaydediliyor...' : 'Kaydet'}
               </button>

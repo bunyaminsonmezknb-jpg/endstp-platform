@@ -24,13 +24,26 @@ ChartJS.register(
   Filler
 );
 
-export default function WeeklyChart() {
+interface WeeklyChartProps {
+  weeklyData: Array<{ day: string; net: number }>;
+}
+
+export default function WeeklyChart({ weeklyData }: WeeklyChartProps) {
+  const labels = weeklyData.map(d => d.day);
+  const netValues = weeklyData.map(d => d.net);
+  
+  // Trend hesapla
+  const firstNet = netValues[0] || 0;
+  const lastNet = netValues[netValues.length - 1] || 0;
+  const trend = firstNet > 0 ? ((lastNet - firstNet) / firstNet * 100).toFixed(0) : '0';
+  const trendPositive = parseFloat(trend) >= 0;
+
   const data = {
-    labels: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+    labels,
     datasets: [
       {
         label: 'Günlük Net Ortalaması',
-        data: [12, 15, 18, 16, 20, 19, 22.5],
+        data: netValues,
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         tension: 0.4,
@@ -43,7 +56,7 @@ export default function WeeklyChart() {
       },
       {
         label: 'Hedef Net',
-        data: [25, 25, 25, 25, 25, 25, 25],
+        data: Array(7).fill(25),
         borderColor: 'rgb(239, 68, 68)',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         borderDash: [5, 5],
@@ -103,9 +116,6 @@ export default function WeeklyChart() {
     },
   };
 
-  const trend = ((22.5 - 12) / 12 * 100).toFixed(0);
-  const targetDiff = (25 - 22.5).toFixed(1);
-
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
       <div className="flex justify-between items-center mb-4">
@@ -114,7 +124,9 @@ export default function WeeklyChart() {
         </h2>
         <div className="text-right">
           <p className="text-sm text-gray-600">Trend</p>
-          <p className="text-xl font-bold text-green-600">+{trend}% 📈</p>
+          <p className={`text-xl font-bold ${trendPositive ? 'text-green-600' : 'text-red-600'}`}>
+            {trendPositive ? '+' : ''}{trend}% {trendPositive ? '📈' : '📉'}
+          </p>
         </div>
       </div>
       
@@ -124,12 +136,12 @@ export default function WeeklyChart() {
 
       <div className="mt-4 flex justify-between items-center bg-blue-50 p-4 rounded-lg">
         <div>
-          <p className="text-sm text-gray-600">Bugün</p>
-          <p className="text-2xl font-bold text-blue-600">22.5 net</p>
+          <p className="text-sm text-gray-600">Son Net</p>
+          <p className="text-2xl font-bold text-blue-600">{lastNet.toFixed(1)}</p>
         </div>
         <div className="text-right">
           <p className="text-sm text-gray-600">Hedefe Kalan</p>
-          <p className="text-2xl font-bold text-orange-600">{targetDiff} net</p>
+          <p className="text-2xl font-bold text-orange-600">{(25 - lastNet).toFixed(1)} net</p>
         </div>
       </div>
     </div>
