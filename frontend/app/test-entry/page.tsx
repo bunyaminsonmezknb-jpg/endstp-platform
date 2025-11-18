@@ -10,6 +10,7 @@ interface Subject {
   name_tr: string;
   icon: string;
   color: string;
+  total_questions?: number;
 }
 
 interface Topic {
@@ -25,6 +26,7 @@ export default function TestEntry() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   // Form verileri
   const [testDateTime, setTestDateTime] = useState('');
@@ -41,11 +43,23 @@ export default function TestEntry() {
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [loadingTopics, setLoadingTopics] = useState(false);
 
-  // Max datetime (şu an)
+  // Seçilen ders bilgisi
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+
+  // Max datetime
   const getTurkeyDateTime = () => {
     const now = new Date();
     return now.toISOString().slice(0, 16);
   };
+
+  // LocalStorage'dan son seçimleri yükle
+  useEffect(() => {
+    const lastSubject = localStorage.getItem('last_subject_id');
+    const lastTopic = localStorage.getItem('last_topic_id');
+    
+    if (lastSubject) setSubjectId(lastSubject);
+    if (lastTopic) setTopicId(lastTopic);
+  }, []);
 
   // Dersleri yükle
   useEffect(() => {
@@ -68,8 +82,16 @@ export default function TestEntry() {
   useEffect(() => {
     if (!subjectId) {
       setTopics([]);
+      setSelectedSubject(null);
       return;
     }
+
+    // Seçilen dersi bul
+    const subject = subjects.find(s => s.id === subjectId);
+    setSelectedSubject(subject || null);
+
+    // Son seçimi kaydet
+    localStorage.setItem('last_subject_id', subjectId);
 
     const fetchTopics = async () => {
       setLoadingTopics(true);
@@ -85,7 +107,14 @@ export default function TestEntry() {
     };
 
     fetchTopics();
-  }, [subjectId]);
+  }, [subjectId, subjects]);
+
+  // Konu seçildiğinde kaydet
+  useEffect(() => {
+    if (topicId) {
+      localStorage.setItem('last_topic_id', topicId);
+    }
+  }, [topicId]);
 
   // Net hesaplama
   useEffect(() => {
@@ -95,9 +124,43 @@ export default function TestEntry() {
     setNet(Math.max(0, calculated));
   }, [correctCount, wrongCount]);
 
+  // Validasyon kontrolü
+  useEffect(() => {
+    setValidationError('');
+
+    const correct = parseInt(correctCount) || 0;
+    const wrong = parseInt(wrongCount) || 0;
+    const empty = parseInt(emptyCount) || 0;
+
+    // Negatif kontrol
+    if (correct < 0 || wrong < 0 || empty < 0) {
+      setValidationError('❌ Negatif sayı giremezsiniz!');
+      return;
+    }
+
+    // Toplam soru kontrolü (varsayılan 12, ders bilgisi varsa o)
+    const totalQuestions = selectedSubject?.total_questions || 12;
+    const total = correct + wrong + empty;
+
+    if (total > totalQuestions) {
+      setValidationError(`❌ Toplam soru sayısı ${totalQuestions}'den fazla olamaz! (Şu an: ${total})`);
+      return;
+    }
+
+    if (total > 0 && total < totalQuestions) {
+      setValidationError(`⚠️ Toplam soru sayısı ${totalQuestions} olmalı. (Şu an: ${total})`);
+    }
+  }, [correctCount, wrongCount, emptyCount, selectedSubject]);
+
   // Form gönderme
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validasyon hatası varsa gönderme
+    if (validationError && validationError.includes('❌')) {
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -118,13 +181,11 @@ export default function TestEntry() {
       const user = JSON.parse(userStr);
       const accessToken = localStorage.getItem('access_token');
 
-      // Seçilen ders ve konu bilgilerini bul
-      const selectedSubject = subjects.find(s => s.id === subjectId);
+      const selectedSubjectData = subjects.find(s => s.id === subjectId);
       const selectedTopic = topics.find(t => t.id === topicId);
 
       const testDateTimeISO = testDateTime + ':00';
 
-      // Backend API'ye gönder
       const response = await fetch('http://localhost:8000/api/test-results', {
         method: 'POST',
         headers: {
@@ -134,7 +195,7 @@ export default function TestEntry() {
         body: JSON.stringify({
           user_id: user.id,
           test_datetime: testDateTimeISO,
-          subject: selectedSubject?.name_tr || '',
+          subject: selectedSubjectData?.name_tr || '',
           topic: selectedTopic?.name_tr || '',
           correct_count: parseInt(correctCount),
           wrong_count: parseInt(wrongCount),
@@ -169,6 +230,14 @@ export default function TestEntry() {
     router.push('/');
   };
 
+  // Hızlı temizleme
+  const handleReset = () => {
+    setCorrectCount('');
+    setWrongCount('');
+    setEmptyCount('');
+    setValidationError('');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
       <header className="bg-white shadow-sm border-b">
@@ -201,14 +270,27 @@ export default function TestEntry() {
           <p className="text-gray-600 mb-6">Çözdüğünüz test sonucunu girin</p>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              {error}
+            <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded">
+              <p className="font-semibold">Hata!</p>
+              <p className="text-sm">{error}</p>
             </div>
           )}
 
           {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
-              Test sonucu kaydedildi! Dashboard'a yönlendiriliyorsunuz...
+            <div className="mb-4 p-4 bg-green-50 border-l-4 border-green-500 text-green-700 rounded">
+              <p className="font-semibold">✅ Başarılı!</p>
+              <p className="text-sm">Test sonucu kaydedildi. Net: {net.toFixed(2)} 🎉</p>
+              <p className="text-xs mt-1">Dashboard'a yönlendiriliyorsunuz...</p>
+            </div>
+          )}
+
+          {validationError && (
+            <div className={`mb-4 p-4 border-l-4 rounded ${
+              validationError.includes('❌') 
+                ? 'bg-red-50 border-red-500 text-red-700' 
+                : 'bg-yellow-50 border-yellow-500 text-yellow-700'
+            }`}>
+              <p className="text-sm font-medium">{validationError}</p>
             </div>
           )}
 
@@ -223,7 +305,7 @@ export default function TestEntry() {
                 value={testDateTime}
                 onChange={(e) => setTestDateTime(e.target.value)}
                 max={getTurkeyDateTime()}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900"
                 required
                 disabled={loading}
               />
@@ -248,13 +330,13 @@ export default function TestEntry() {
                     setSubjectId(e.target.value);
                     setTopicId('');
                   }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900"
                   required
                   disabled={loading}
                 >
                   <option value="" className="text-gray-500">Ders Seçin</option>
                   {subjects.map((subject) => (
-                    <option key={subject.id} value={subject.id} className="text-gray-700">
+                    <option key={subject.id} value={subject.id} className="text-gray-900">
                       {subject.icon} {subject.name_tr}
                     </option>
                   ))}
@@ -276,13 +358,13 @@ export default function TestEntry() {
                   <select
                     value={topicId}
                     onChange={(e) => setTopicId(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900"
                     required
                     disabled={loading}
                   >
                     <option value="" className="text-gray-500">Konu Seçin</option>
                     {topics.map((topic) => (
-                      <option key={topic.id} value={topic.id} className="text-gray-700">
+                      <option key={topic.id} value={topic.id} className="text-gray-900">
                         {topic.name_tr} 
                         {topic.difficulty_level && ` (⭐${topic.difficulty_level})`}
                       </option>
@@ -303,7 +385,7 @@ export default function TestEntry() {
                   min="0"
                   value={correctCount}
                   onChange={(e) => setCorrectCount(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 placeholder-gray-500"
                   placeholder="0"
                   required
                   disabled={loading}
@@ -319,7 +401,7 @@ export default function TestEntry() {
                   min="0"
                   value={wrongCount}
                   onChange={(e) => setWrongCount(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 placeholder-gray-500"
                   placeholder="0"
                   required
                   disabled={loading}
@@ -335,7 +417,7 @@ export default function TestEntry() {
                   min="0"
                   value={emptyCount}
                   onChange={(e) => setEmptyCount(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 placeholder-gray-500"
                   placeholder="0"
                   required
                   disabled={loading}
@@ -344,30 +426,44 @@ export default function TestEntry() {
             </div>
 
             {/* Net Gösterimi */}
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600 mb-1">Net</p>
-              <p className="text-3xl font-bold text-blue-600">{net.toFixed(2)}</p>
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border-2 border-blue-200">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Net</p>
+                  <p className="text-4xl font-bold text-blue-600">{net.toFixed(2)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600 mb-1">Başarı Oranı</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {((parseInt(correctCount) || 0) / 12 * 100).toFixed(0)}%
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Butonlar */}
             <div className="flex gap-4">
               <button
                 type="button"
-                onClick={() => router.push('/dashboard')}
+                onClick={handleReset}
                 className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition font-semibold"
                 disabled={loading}
               >
-                İptal
+                🔄 Temizle
               </button>
               
               <button
                 type="submit"
-                className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-gray-400"
-                disabled={loading || !subjectId || !topicId}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+                disabled={loading || !subjectId || !topicId || (validationError.includes('❌'))}
               >
-                {loading ? 'Kaydediliyor...' : 'Kaydet'}
+                {loading ? '⏳ Kaydediliyor...' : '💾 Kaydet'}
               </button>
             </div>
+
+            <p className="text-xs text-center text-gray-500">
+              💡 İpucu: Son seçtiğiniz ders ve konu otomatik hatırlanır
+            </p>
           </form>
         </div>
       </main>

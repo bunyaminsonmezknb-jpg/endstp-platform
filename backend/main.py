@@ -336,3 +336,149 @@ async def get_student_by_user(user_id: str):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))       
+       # ============================================
+# REPORTS ENDPOINTS
+# ============================================
+
+@app.get("/api/students/{student_id}/reports")
+async def get_student_reports(student_id: str):
+    """Detaylı raporlar için tüm verileri getir"""
+    try:
+        # 1. Tüm test sonuçları
+        all_tests = supabase.table("test_results").select(
+            "*, entry_timestamp"
+        ).eq("student_id", student_id).order("entry_timestamp", desc=True).execute()
+        
+        # 2. Ders bazlı performans
+        subject_performance = {}
+        for test in all_tests.data:
+            subject = test["subject"]
+            if subject not in subject_performance:
+                subject_performance[subject] = {
+                    "total_tests": 0,
+                    "total_net": 0,
+                    "total_correct": 0,
+                    "total_wrong": 0,
+                    "total_empty": 0
+                }
+            
+            subject_performance[subject]["total_tests"] += 1
+            subject_performance[subject]["total_net"] += test["net"]
+            subject_performance[subject]["total_correct"] += test["correct_count"]
+            subject_performance[subject]["total_wrong"] += test["wrong_count"]
+            subject_performance[subject]["total_empty"] += test["empty_count"]
+        
+        # Ortalamaları hesapla
+        subject_stats = []
+        for subject, data in subject_performance.items():
+            avg_net = data["total_net"] / data["total_tests"]
+            success_rate = (data["total_correct"] / (data["total_correct"] + data["total_wrong"] + data["total_empty"])) * 100 if (data["total_correct"] + data["total_wrong"] + data["total_empty"]) > 0 else 0
+            
+            subject_stats.append({
+                "subject": subject,
+                "test_count": data["total_tests"],
+                "avg_net": round(avg_net, 2),
+                "total_correct": data["total_correct"],
+                "total_wrong": data["total_wrong"],
+                "total_empty": data["total_empty"],
+                "success_rate": round(success_rate, 1)
+            })
+        
+        # Başarı oranına göre sırala
+        subject_stats.sort(key=lambda x: x["avg_net"], reverse=True)
+        
+        # 3. Konu bazlı performans
+        topic_performance = {}
+        for test in all_tests.data:
+            key = f"{test['subject']}-{test['topic']}"
+            if key not in topic_performance:
+                topic_performance[key] = {
+                    "subject": test["subject"],
+                    "topic": test["topic"],
+                    "tests": [],
+                    "total_net": 0,
+                    "count": 0
+                }
+            
+            topic_performance[key]["tests"].append({
+                "net": test["net"],
+                "date": test["entry_timestamp"]
+            })
+            topic_performance[key]["total_net"] += test["net"]
+            topic_performance[key]["count"] += 1
+        
+        # Konu istatistiklerini hesapla
+        topic_stats = []
+        for key, data in topic_performance.items():
+            avg_net = data["total_net"] / data["count"]
+            
+            # Trend hesapla (ilk test vs son test)
+            if len(data["tests"]) >= 2:
+                first_net = data["tests"][-1]["net"]  # En eski
+                last_net = data["tests"][0]["net"]    # En yeni
+                trend = last_net - first_net
+            else:
+                trend = 0
+            
+            topic_stats.append({
+                "subject": data["subject"],
+                "topic": data["topic"],
+                "test_count": data["count"],
+                "avg_net": round(avg_net, 2),
+                "trend": round(trend, 2),
+                "last_net": data["tests"][0]["net"] if data["tests"] else 0
+            })
+        
+        # Net'e göre sırala
+        topic_stats.sort(key=lambda x: x["avg_net"], reverse=True)
+        
+        # 4. Güçlü ve zayıf konular
+        strong_topics = [t for t in topic_stats if t["avg_net"] >= 9][:5]
+        weak_topics = [t for t in topic_stats if t["avg_net"] < 7][:5]
+        
+        # 5. Son testler (detaylı)
+        recent_tests = []
+        for test in all_tests.data[:10]:  # Son 10 test
+            recent_tests.append({
+                "id": test["id"],
+                "subject": test["subject"],
+                "topic": test["topic"],
+                "net": test["net"],
+                "correct": test["correct_count"],
+                "wrong": test["wrong_count"],
+                "empty": test["empty_count"],
+                "success_rate": test["success_rate"],
+                "date": test["entry_timestamp"]
+            })
+        
+        # 6. Genel istatistikler
+        total_tests = len(all_tests.data)
+        total_net = sum([t["net"] for t in all_tests.data])
+        avg_net = total_net / total_tests if total_tests > 0 else 0
+        
+        total_correct = sum([t["correct_count"] for t in all_tests.data])
+        total_wrong = sum([t["wrong_count"] for t in all_tests.data])
+        total_empty = sum([t["empty_count"] for t in all_tests.data])
+        total_questions = total_correct + total_wrong + total_empty
+        
+        overall_success = (total_correct / total_questions * 100) if total_questions > 0 else 0
+        
+        return {
+            "overall_stats": {
+                "total_tests": total_tests,
+                "avg_net": round(avg_net, 2),
+                "total_correct": total_correct,
+                "total_wrong": total_wrong,
+                "total_empty": total_empty,
+                "success_rate": round(overall_success, 1)
+            },
+            "subject_performance": subject_stats,
+            "topic_performance": topic_stats,
+            "strong_topics": strong_topics,
+            "weak_topics": weak_topics,
+            "recent_tests": recent_tests
+        }
+        
+    except Exception as e:
+        print(f"Reports hatası: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e)) 
