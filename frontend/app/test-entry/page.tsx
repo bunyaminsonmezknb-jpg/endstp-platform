@@ -154,82 +154,95 @@ export default function TestEntry() {
 
   // Form gönderme
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    // Validasyon hatası varsa gönderme
-    if (validationError && validationError.includes('❌')) {
-      return;
+  // Validasyon hatası varsa gönderme
+  if (validationError && validationError.includes('❌')) {
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+
+  try {
+    // Gelecek tarih kontrolü
+    const selectedDateTime = new Date(testDateTime);
+    const now = new Date();
+    
+    if (selectedDateTime > now) {
+      throw new Error('Gelecek tarih seçilemez! Test zaten çözülmüş olmalı.');
     }
 
-    setLoading(true);
-    setError('');
-
-    try {
-      // Gelecek tarih kontrolü
-      const selectedDateTime = new Date(testDateTime);
-      const now = new Date();
-      
-      if (selectedDateTime > now) {
-        throw new Error('Gelecek tarih seçilemez! Test zaten çözülmüş olmalı.');
-      }
-
-      const userStr = localStorage.getItem('user');
-      if (!userStr) {
-        throw new Error('Lütfen giriş yapın');
-      }
-
-      const user = JSON.parse(userStr);
-      const accessToken = localStorage.getItem('access_token');
-
-      const selectedSubjectData = subjects.find(s => s.id === subjectId);
-      const selectedTopic = topics.find(t => t.id === topicId);
-
-      const testDateTimeISO = testDateTime + ':00';
-
-      const response = await fetch('http://localhost:8000/api/test-results', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          test_datetime: testDateTimeISO,
-          subject: selectedSubjectData?.name_tr || '',
-          topic: selectedTopic?.name_tr || '',
-          correct_count: parseInt(correctCount),
-          wrong_count: parseInt(wrongCount),
-          empty_count: parseInt(emptyCount),
-          net: parseFloat(net.toFixed(2)),
-          success_rate: parseFloat(((parseInt(correctCount) / 12) * 100).toFixed(2))
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Test sonucu kaydedilemedi');
-      }
-
-      setSuccess(true);
-      
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000);
-
-    } catch (err: any) {
-      setError(err.message || 'Bir hata oluştu');
-      console.error('Hata detayı:', err);
-    } finally {
-      setLoading(false);
+    const userStr = localStorage.getItem('user');
+    const accessToken = localStorage.getItem('access_token');
+    
+    if (!userStr || !accessToken) {
+      throw new Error('Lütfen giriş yapın');
     }
-  };
 
+    const user = JSON.parse(userStr);
+
+    // ÖNEMLİ: Önce student ID'yi al
+    const studentResponse = await fetch(`http://localhost:8000/api/user/${user.id}/student`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+
+    if (!studentResponse.ok) {
+      throw new Error('Öğrenci bilgisi bulunamadı');
+    }
+
+    const studentData = await studentResponse.json();
+    const studentId = studentData.id; // DOĞRU STUDENT ID
+
+    const selectedSubjectData = subjects.find(s => s.id === subjectId);
+    const selectedTopicData = topics.find(t => t.id === topicId);
+
+    const testDateTimeISO = testDateTime + ':00';
+
+    // Test sonucunu kaydet
+    const response = await fetch('http://localhost:8000/api/test-results', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        student_id: studentId,  // ← DOĞRU STUDENT ID
+        test_id: testDateTime.replace(/[^0-9]/g, ''),
+        subject: selectedSubjectData?.name_tr || '',
+        topic: selectedTopicData?.name_tr || '',
+        correct_count: parseInt(correctCount),
+        wrong_count: parseInt(wrongCount),
+        empty_count: parseInt(emptyCount),
+        net: parseFloat(net.toFixed(2)),
+        success_rate: parseFloat(((parseInt(correctCount) / 12) * 100).toFixed(2)),
+        entry_timestamp: testDateTimeISO
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Test sonucu kaydedilemedi');
+    }
+
+    setSuccess(true);
+    
+    setTimeout(() => {
+      router.push('/dashboard');
+    }, 2000);
+
+  } catch (err: any) {
+    setError(err.message || 'Bir hata oluştu');
+    console.error('Hata detayı:', err);
+  } finally {
+    setLoading(false);
+  }
+};
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     router.push('/');
   };
-
   // Hızlı temizleme
   const handleReset = () => {
     setCorrectCount('');

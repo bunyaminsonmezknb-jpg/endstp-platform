@@ -79,8 +79,8 @@ export default function Reports() {
 
         if (!studentResponse.ok) throw new Error('Öğrenci bilgisi bulunamadı');
 
-        const studentData = await studentResponse.json();
-        const studentId = studentData.student.id;
+          const studentData = await studentResponse.json();
+          const studentId = studentData.id;  // ← DOĞRU
 
         // Reports verilerini al
         const reportsResponse = await fetch(`http://localhost:8000/api/students/${studentId}/reports`, {

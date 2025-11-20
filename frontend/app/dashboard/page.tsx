@@ -9,16 +9,9 @@ interface DashboardData {
   student: {
     name: string;
     class: string;
-    total_tests: number;
-    average_net: number;
   };
-  weekly_data: Array<{ day: string; net: number }>;
-  priority_topics: Array<{
-    subject: string;
-    topic: string;
-    score: number;
-    priority: string;
-  }>;
+  recent_tests: any[];
+  topic_performance: any[];
 }
 
 // Loading Skeleton Component
@@ -165,19 +158,18 @@ export default function Dashboard() {
     
     try {
       const userStr = localStorage.getItem('user');
-      if (!userStr) {
+      const accessToken = localStorage.getItem('access_token');
+      
+      if (!userStr || !accessToken) {
         router.push('/');
         return;
       }
 
       const user = JSON.parse(userStr);
-      const accessToken = localStorage.getItem('access_token');
 
-      // Önce student ID'yi al
+      // DÜZELTİLMİŞ: Önce student bilgisini al
       const studentResponse = await fetch(`http://localhost:8000/api/user/${user.id}/student`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
+        headers: { 'Authorization': `Bearer ${accessToken}` }
       });
 
       if (!studentResponse.ok) {
@@ -185,13 +177,13 @@ export default function Dashboard() {
       }
 
       const studentData = await studentResponse.json();
-      const studentId = studentData.student.id;
+      
+      // DÜZELTİLMİŞ: Doğru student ID'yi kullan
+      const studentId = studentData.id; // BURASI ÖNEMLİ!
 
       // Dashboard verilerini al
       const dashboardResponse = await fetch(`http://localhost:8000/api/students/${studentId}/dashboard`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
+        headers: { 'Authorization': `Bearer ${accessToken}` }
       });
 
       if (!dashboardResponse.ok) {
@@ -219,15 +211,6 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch(priority) {
-      case 'urgent': return 'bg-red-500';
-      case 'high': return 'bg-orange-500';
-      case 'medium': return 'bg-yellow-500';
-      default: return 'bg-green-500';
-    }
-  };
-
   // Loading State
   if (loading) {
     return <DashboardSkeleton />;
@@ -238,14 +221,14 @@ export default function Dashboard() {
     return (
       <ErrorState 
         error={error} 
-        onRetry={() => window.location.reload()} 
+        onRetry={fetchDashboard} 
         onAddTest={() => router.push('/test-entry')} 
       />
     );
   }
 
   // Empty State (hiç test yok)
-  if (!data || data.student.total_tests === 0) {
+  if (!data || !data.recent_tests || data.recent_tests.length === 0) {
     return <EmptyState onAddTest={() => router.push('/test-entry')} />;
   }
 
@@ -278,7 +261,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm mb-1">Toplam Test</p>
-                <p className="text-3xl font-bold text-blue-600">{data.student.total_tests}</p>
+                <p className="text-3xl font-bold text-blue-600">{data.recent_tests.length}</p>
               </div>
               <div className="text-4xl">📝</div>
             </div>
@@ -287,10 +270,12 @@ export default function Dashboard() {
           <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm mb-1">Ortalama Net</p>
-                <p className="text-3xl font-bold text-green-600">{data.student.average_net}</p>
+                <p className="text-gray-600 text-sm mb-1">Güçlü Konular</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {data.topic_performance?.filter((t: any) => t.mastery_level > 70).length || 0}
+                </p>
               </div>
-              <div className="text-4xl">📊</div>
+              <div className="text-4xl">✅</div>
             </div>
           </div>
 
@@ -305,42 +290,41 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Priority Topics */}
-        {data.priority_topics.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md p-6 mb-8 animate-fade-in">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              🎯 Öncelikli Çalışma Konuları
-            </h2>
-            
-            <div className="space-y-4">
-              {data.priority_topics.map((item, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-3 h-3 rounded-full ${getPriorityColor(item.priority)}`}></span>
-                      <span className="font-semibold text-gray-800">
-                        #{index + 1} {item.topic}
-                      </span>
-                      <span className="text-sm text-gray-500">({item.subject})</span>
-                    </div>
-                    <span className="text-lg font-bold text-gray-700">{item.score}%</span>
+        {/* Recent Tests */}
+        <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">Son Testler</h2>
+          
+          <div className="space-y-4">
+            {data.recent_tests.slice(0, 5).map((test: any) => (
+              <div key={test.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-semibold text-gray-800">
+                      {test.subject || 'Test'}
+                    </span>
+                    <p className="text-sm text-gray-500">
+                      {test.entry_timestamp 
+                        ? new Date(test.entry_timestamp).toLocaleDateString('tr-TR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : 'Tarih bilinmiyor'
+                      }
+                    </p>
                   </div>
-                  
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all"
-                      style={{ width: `${item.score}%` }}
-                    ></div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-gray-700">
+                      {test.net?.toFixed(2) || '0.00'}
+                    </span>
+                    <p className="text-xs text-gray-500">net</p>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        )}
-
-        {/* Weekly Chart */}
-        <div className="mb-8 animate-fade-in">
-          <WeeklyChart weeklyData={data.weekly_data} />
         </div>
 
         {/* Action Buttons */}
