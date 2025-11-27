@@ -1,0 +1,211 @@
+import { create } from 'zustand';
+import { getStudentDashboard, updateTopicStatus as apiUpdateTopicStatus } from '../api-client';
+
+// Topic interface
+export interface Topic {
+  id: number;
+  name: string;
+  subject: string;
+  rememberingRate: number;
+  status: 'critical' | 'warning' | 'good' | 'excellent' | 'frozen';
+  statusText: string;
+  statusDescription?: string;
+  emoji: string;
+  achievementBadge?: {
+    text: string;
+    icon: string;
+    description?: string;
+  };
+}
+
+// Dashboard data interface
+export interface DashboardData {
+  studentName: string;
+  streak: number;
+  dailyGoal: {
+    current: number;
+    target: number;
+  };
+  weeklySuccess: number;
+  weeklyTarget: number;
+  studyTimeToday: number;
+  weeklyQuestions: number;
+  weeklyIncrease: number;
+  topics: Topic[];
+  criticalAlert: {
+    show: boolean;
+    topicName: string;
+    daysAgo: number;
+    forgetRisk: number;
+  } | null;
+}
+
+// API Response type transformation
+function transformApiResponse(apiData: any): DashboardData {
+  return {
+    studentName: apiData.student_name,
+    streak: apiData.streak,
+    dailyGoal: {
+      current: apiData.daily_goal.current,
+      target: apiData.daily_goal.target,
+    },
+    weeklySuccess: apiData.weekly_success,
+    weeklyTarget: apiData.weekly_target,
+    studyTimeToday: apiData.study_time_today,
+    weeklyQuestions: apiData.weekly_questions,
+    weeklyIncrease: apiData.weekly_increase,
+    topics: apiData.topics.map((topic: any) => ({
+      id: topic.id,
+      name: topic.name,
+      subject: topic.subject,
+      rememberingRate: topic.remembering_rate,
+      status: topic.status,
+      statusText: topic.status_text,
+      statusDescription: topic.status_description,
+      emoji: topic.emoji,
+      achievementBadge: topic.achievement_badge ? {
+        text: topic.achievement_badge.text,
+        icon: topic.achievement_badge.icon,
+        description: topic.achievement_badge.description,
+      } : undefined,
+    })),
+    criticalAlert: apiData.critical_alert ? {
+      show: apiData.critical_alert.show,
+      topicName: apiData.critical_alert.topic_name,
+      daysAgo: apiData.critical_alert.days_ago,
+      forgetRisk: apiData.critical_alert.forget_risk,
+    } : null,
+  };
+}
+
+// Zustand store
+interface StudentDashboardStore {
+  dashboardData: DashboardData | null;
+  isLoading: boolean;
+  error: string | null;
+  studentId: number;
+  
+  fetchDashboardData: (studentId: number) => Promise<void>;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  updateTopicStatusLocal: (topicId: number, newRate: number) => void;
+  updateTopicStatusRemote: (topicId: number, newRate: number, studyCompleted: boolean) => Promise<void>;
+}
+
+export const useStudentDashboard = create<StudentDashboardStore>((set, get) => ({
+  dashboardData: null,
+  isLoading: false,
+  error: null,
+  studentId: 1,
+
+  fetchDashboardData: async (studentId: number) => {
+    set({ isLoading: true, error: null, studentId });
+    
+    try {
+      const data = await getStudentDashboard(studentId);
+      const transformedData = transformApiResponse(data);
+      set({ dashboardData: transformedData, isLoading: false });
+    } catch (error: any) {
+      set({ 
+        error: error.message || 'Dashboard verisi yüklenemedi', 
+        isLoading: false 
+      });
+    }
+  },
+
+  setLoading: (loading: boolean) => set({ isLoading: loading }),
+  
+  setError: (error: string | null) => set({ error }),
+
+  updateTopicStatusLocal: (topicId: number, newRate: number) => {
+    const { dashboardData } = get();
+    if (!dashboardData) return;
+
+    const updatedTopics = dashboardData.topics.map(topic =>
+      topic.id === topicId ? { ...topic, rememberingRate: newRate } : topic
+    );
+
+    set({
+      dashboardData: {
+        ...dashboardData,
+        topics: updatedTopics,
+      },
+    });
+  },
+
+  updateTopicStatusRemote: async (topicId: number, newRate: number, studyCompleted: boolean) => {
+    try {
+      await apiUpdateTopicStatus(topicId, newRate, studyCompleted);
+      get().updateTopicStatusLocal(topicId, newRate);
+    } catch (error: any) {
+      set({ error: error.message || 'Güncelleme başarısız' });
+    }
+  },
+}));
+
+export const getMockDashboardData = (): DashboardData => ({
+  studentName: 'Ahmet Yılmaz',
+  streak: 7,
+  dailyGoal: {
+    current: 5,
+    target: 12,
+  },
+  weeklySuccess: 72,
+  weeklyTarget: 85,
+  studyTimeToday: 150,
+  weeklyQuestions: 45,
+  weeklyIncrease: 25,
+  topics: [
+    {
+      id: 1,
+      name: 'Türev',
+      subject: 'Matematik',
+      rememberingRate: 20,
+      status: 'critical',
+      statusText: 'KRİTİK DURUM',
+      statusDescription: 'Acil tekrar gerekiyor! Unutma riski çok yüksek.',
+      emoji: '🔥',
+      achievementBadge: {
+        text: '+%40 (3 gün)',
+        icon: '⭐',
+        description: 'Son 3 günde %40 ilerleme kaydettiniz!',
+      },
+    },
+    {
+      id: 2,
+      name: 'Osmanlı Tarihi',
+      subject: 'Tarih',
+      rememberingRate: 85,
+      status: 'excellent',
+      statusText: 'MÜKEMMEL',
+      statusDescription: 'Harika! Bu konuyu çok iyi biliyorsun.',
+      emoji: '🟢',
+    },
+    {
+      id: 3,
+      name: 'Kinematik',
+      subject: 'Fizik',
+      rememberingRate: 55,
+      status: 'warning',
+      statusText: 'DİKKAT - Bu Hafta',
+      statusDescription: 'Bu hafta mutlaka tekrar et, yoksa unutacaksın.',
+      emoji: '🟡',
+    },
+    {
+      id: 4,
+      name: 'Mol Kavramı',
+      subject: 'Kimya',
+      rememberingRate: 15,
+      status: 'frozen',
+      statusText: 'DONMUŞ - Acil Çöz',
+      statusDescription: 'Uzun süredir çalışılmamış. Hemen tekrara başla.',
+      emoji: '❄️',
+    },
+  ],
+  criticalAlert: {
+    show: true,
+    topicName: 'Türev',
+    daysAgo: 14,
+    forgetRisk: 80,
+  },
+});
