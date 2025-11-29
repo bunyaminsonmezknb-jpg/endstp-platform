@@ -1,6 +1,8 @@
 /**
  * API Client for End.STP Backend
  * Handles all HTTP requests to FastAPI backend
+ * 
+ * UPDATED: 4 Motor Analysis endpoint eklendi
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -58,8 +60,12 @@ async function fetchApi<T>(
   }
 }
 
+// ============================================
+// ESKİ ENDPOINT'LER (DEĞİŞMEDİ - DOKUNMAYIN)
+// ============================================
+
 /**
- * Get student dashboard data
+ * Get student dashboard data (ESKİ SİSTEM)
  */
 export async function getStudentDashboard(studentId: number) {
   return fetchApi(`/api/v1/student/${studentId}/dashboard`);
@@ -96,4 +102,106 @@ export async function updateTopicStatus(
  */
 export async function healthCheck() {
   return fetchApi('/health');
+}
+
+// ============================================
+// YENİ: 4 MOTOR ANALİZ ENDPOINT'İ
+// ============================================
+
+/**
+ * Topic Test Input for 4 Motor Analysis
+ */
+export interface TopicTestInput {
+  topic_id: number;
+  topic_name: string;
+  correct: number;
+  incorrect: number;
+  blank: number;
+  total_questions: number;
+  
+  // BS-Model için (opsiyonel)
+  current_ease_factor?: number;
+  current_interval?: number;
+  actual_gap_days?: number;
+  repetitions?: number;
+  
+  // Time Analyzer için (opsiyonel)
+  duration_minutes?: number;
+  
+  // Priority için (opsiyonel)
+  topic_weight?: number;
+  course_importance?: number;
+  difficulty_baseline?: number;
+}
+
+/**
+ * 4 Motor Analysis Response - Tek Konu
+ */
+export interface TopicAnalysisOutput {
+  topic_id: number;
+  topic_name: string;
+  next_review_date: string;
+  next_ease_factor: number;
+  next_interval: number;
+  status: string;
+  difficulty_level: number;
+  difficulty_percentage: number;
+  pace_ratio: number;
+  time_modifier: number;
+  speed_note: string;
+  priority_score: number;
+  priority_level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  suggestion: string;
+}
+
+/**
+ * 4 Motor Analysis Response - Tam
+ */
+export interface MotorAnalysisResponse {
+  student_id: string;
+  analyzed_at: string;
+  topics: TopicAnalysisOutput[];
+  summary: {
+    total_topics: number;
+    critical_topics: number;
+    high_priority_topics: number;
+    next_review_today: number;
+  };
+}
+
+/**
+ * YENİ: 4 Motor ile Öğrenci Analizi
+ * 
+ * @example
+ * const result = await getMotorAnalysis([
+ *   {
+ *     topic_id: 1,
+ *     topic_name: "Türev",
+ *     correct: 5,
+ *     incorrect: 3,
+ *     blank: 2,
+ *     total_questions: 10,
+ *     duration_minutes: 15
+ *   }
+ * ]);
+ */
+export async function getMotorAnalysis(topics: TopicTestInput[]): Promise<ApiResponse<MotorAnalysisResponse>> {
+  // Get student ID from localStorage
+  const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  const studentId = userStr ? JSON.parse(userStr).id : 'unknown';
+  
+  return fetchApi('/api/v1/student/analyze', {
+    method: 'POST',
+    body: JSON.stringify({
+      student_id: studentId,
+      topics: topics
+    })
+  });
+}
+
+/**
+ * YENİ: Motor Health Check
+ */
+export async function getMotorHealth() {
+  return fetchApi('/api/v1/student/health');
 }

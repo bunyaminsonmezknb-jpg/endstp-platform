@@ -21,7 +21,7 @@ class TokenResponse(BaseModel):
     user: dict
 
 
-@router.post("/auth/signin", response_model=TokenResponse)
+@router.post("/signin", response_model=TokenResponse)
 async def signin(credentials: SignInRequest):
     """
     Login endpoint - Supabase Auth
@@ -61,7 +61,7 @@ async def signin(credentials: SignInRequest):
         )
 
 
-@router.get("/auth/me")
+@router.get("/me")
 async def get_current_user():
     """Mevcut kullanıcı bilgisi"""
     return {"message": "User info endpoint - ileride eklenecek"}

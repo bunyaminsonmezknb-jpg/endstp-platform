@@ -28,11 +28,6 @@ export default function DashboardHeader({ studentName, streak }: DashboardHeader
     router.push('/test-entry');
   };
 
-  const handlePastTests = () => {
-    // Geçmiş testler sayfasına git
-    router.push('/past-tests');
-  };
-
   return (
     <div className="bg-white rounded-3xl shadow-lg p-6 mb-6">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
@@ -61,13 +56,6 @@ export default function DashboardHeader({ studentName, streak }: DashboardHeader
             className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:scale-105 transition-transform shadow-lg whitespace-nowrap"
           >
             ➕ Yeni Test Ekle
-          </button>
-
-          <button
-            onClick={handlePastTests}
-            className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:scale-105 transition-transform shadow-lg whitespace-nowrap"
-          >
-            📝 Geçmiş Testlerim
           </button>
           
           <button

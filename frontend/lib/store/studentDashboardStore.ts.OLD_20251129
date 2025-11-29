@@ -14,6 +14,11 @@ interface ApiTopic {
   days_since_last_test?: number;
   total_tests?: number;
   latest_net?: number;
+  latest_success_rate?: number;
+  next_review?: {
+    days_remaining: number;
+    urgency: string;
+  };
   achievementBadge?: {
     text: string;
     icon: string;
@@ -31,6 +36,11 @@ export interface Topic {
   daysSinceLastTest: number;
   totalTests: number;
   latestNet: number;
+  latestSuccessRate: number;
+  nextReview: {
+    daysRemaining: number;
+    urgency: string;
+  };
   achievementBadge?: {
     text: string;
     icon: string;
@@ -56,6 +66,12 @@ export interface DashboardData {
     daysAgo: number;
     forgetRisk: number;
   } | null;
+  projection: {
+    totalTopics: number;
+    completedTopics: number;
+    estimatedDays: number;
+    estimatedDate: string;
+  };
 }
 
 interface ApiResponse {
@@ -77,13 +93,16 @@ interface ApiResponse {
     daysAgo: number;
     forgetRisk: number;
   } | null;
+  projection: {
+    total_topics: number;
+    completed_topics: number;
+    estimated_days: number;
+    estimated_date: string;
+  };
 }
 
 function transformApiResponse(apiData: ApiResponse): DashboardData {
-  console.log('🔄 Transforming API data:', apiData);
-  console.log('📊 Topics before transform:', apiData.topics);
-  
-  const transformed: DashboardData = {
+  return {
     studentName: apiData.student_name,
     streak: safeNumber(apiData.streak, 0),
     dailyGoal: apiData.daily_goal,
@@ -92,29 +111,32 @@ function transformApiResponse(apiData: ApiResponse): DashboardData {
     studyTimeToday: safeNumber(apiData.study_time_today, 0),
     weeklyQuestions: safeNumber(apiData.weekly_questions, 0),
     weeklyIncrease: safeNumber(apiData.weekly_increase, 0),
-    topics: apiData.topics.map((topic): Topic => {
-      console.log('🔧 Transforming topic:', topic);
-      return {
-        id: topic.id,
-        name: topic.name,
-        subject: topic.subject,
-        rememberingRate: safeNumber(topic.rememberingRate, DEFAULTS.REMEMBERING_RATE),
-        status: parseTopicStatus(topic.status),
-        statusText: topic.statusText,
-        emoji: topic.emoji,
-        daysSinceLastTest: safeNumber(topic.days_since_last_test, DEFAULTS.DAYS_SINCE_LAST_TEST),
-        totalTests: safeNumber(topic.total_tests, DEFAULTS.TOTAL_TESTS),
-        latestNet: safeNumber(topic.latest_net, DEFAULTS.LATEST_NET),
-        achievementBadge: topic.achievementBadge,
-      };
-    }),
+    topics: apiData.topics.map((topic): Topic => ({
+      id: topic.id,
+      name: topic.name,
+      subject: topic.subject,
+      rememberingRate: safeNumber(topic.rememberingRate, DEFAULTS.REMEMBERING_RATE),
+      status: parseTopicStatus(topic.status),
+      statusText: topic.statusText,
+      emoji: topic.emoji,
+      daysSinceLastTest: safeNumber(topic.days_since_last_test, DEFAULTS.DAYS_SINCE_LAST_TEST),
+      totalTests: safeNumber(topic.total_tests, DEFAULTS.TOTAL_TESTS),
+      latestNet: safeNumber(topic.latest_net, DEFAULTS.LATEST_NET),
+      latestSuccessRate: safeNumber(topic.latest_success_rate, 0),
+      nextReview: {
+        daysRemaining: topic.next_review?.days_remaining ?? 0,
+        urgency: topic.next_review?.urgency ?? 'UNKNOWN',
+      },
+      achievementBadge: topic.achievementBadge,
+    })),
     criticalAlert: apiData.critical_alert,
+    projection: {
+      totalTopics: apiData.projection.total_topics,
+      completedTopics: apiData.projection.completed_topics,
+      estimatedDays: apiData.projection.estimated_days,
+      estimatedDate: apiData.projection.estimated_date,
+    },
   };
-  
-  console.log('✅ Transformed data:', transformed);
-  console.log('📊 Topics after transform:', transformed.topics);
-  
-  return transformed;
 }
 
 interface StudentDashboardStore {
@@ -130,7 +152,6 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
   error: null,
 
   fetchDashboardData: async (studentId: string) => {
-    console.log('🚀 Fetching dashboard for student:', studentId);
     set({ isLoading: true, error: null });
 
     try {
@@ -141,7 +162,6 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
       }
 
       const url = `${API_BASE_URL}${API_ENDPOINTS.STUDENT_DASHBOARD(studentId)}`;
-      console.log('📡 Fetching from:', url);
       
       const response = await fetch(url, {
         headers: {
@@ -155,15 +175,10 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
       }
 
       const apiData: ApiResponse = await response.json();
-      console.log('📥 Raw API response:', apiData);
-      
       const transformedData = transformApiResponse(apiData);
-      console.log('💾 Setting dashboard data:', transformedData);
 
       set({ dashboardData: transformedData, isLoading: false });
-      console.log('✅ Dashboard data set successfully!');
     } catch (err: any) {
-      console.error('❌ Dashboard fetch error:', err);
       set({ 
         error: err.message || 'Veri yüklenirken hata oluştu', 
         isLoading: false 

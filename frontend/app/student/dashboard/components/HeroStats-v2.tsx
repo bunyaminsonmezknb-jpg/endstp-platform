@@ -46,13 +46,25 @@ export default function HeroStats({
     setFlippedCard(flippedCard === cardId ? null : cardId);
   };
 
-  // Dinamik hedef hesaplama
+  const getProjectionColor = () => {
+    if (!projection) return 'from-purple-500 to-indigo-600';
+    if (projection.warningLevel === 'danger') return 'from-red-500 to-red-700';
+    if (projection.warningLevel === 'warning') return 'from-orange-500 to-orange-700';
+    return 'from-purple-500 to-indigo-600';
+  };
+
+  // Dinamik hedef hesaplama (4 motordan gelen öneri)
   const calculateDynamicGoal = () => {
+    // Son 7 günün başarı oranı
     const currentWeeklySuccess = weeklySuccess;
+    
+    // Dinamik hedef: Mevcut başarının +%10'u (gerçekçi artış)
     const dynamicGoal = Math.min(currentWeeklySuccess + 10, 100);
+    
+    // Hedef mesajı
+    let goalMessage = '';
     const gap = dynamicGoal - currentWeeklySuccess;
     
-    let goalMessage = '';
     if (gap <= 5) {
       goalMessage = `Hedefine çok yakınsın! ${gap} puan kaldı 🎯`;
     } else if (gap <= 10) {
@@ -65,24 +77,96 @@ export default function HeroStats({
       current: currentWeeklySuccess,
       target: dynamicGoal,
       message: goalMessage,
-      isRealistic: gap <= 15
+      isRealistic: gap <= 15 // 15 puandan fazla artış gerçekçi değil
     };
   };
 
   const dynamicGoal = calculateDynamicGoal();
 
+  // Halka grafiği için SVG parametreleri
+  const circularProgressParams = {
+    size: 140,
+    strokeWidth: 12,
+    center: 70,
+    radius: 64
+  };
+
+  const circumference = 2 * Math.PI * circularProgressParams.radius;
+  const progressOffset = circumference - (projection?.estimatedDays ? 
+    (projection.estimatedDays / 365) * circumference : 0);
+
   return (
     <div className="mb-6">
+      {/* Tahmini Bitiş Tarihi - HALKA GRAFİĞİ İLE */}
+      {projection && projection.estimatedDays > 0 && (
+        <div className={`bg-gradient-to-r ${getProjectionColor()} text-white rounded-2xl p-5 mb-5 shadow-xl animate-fade-in`}>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="text-5xl animate-bounce-slow">🎯</div>
+              <div className="flex-1">
+                <div className="text-sm opacity-90 font-medium">Tahmini Bitiş Tarihi</div>
+                <div className="text-2xl font-bold">
+                  Bu hızla gidersen, {projection.estimatedDate} gibi bitecek!
+                </div>
+                <div className="text-xs opacity-75 mt-1">
+                  {projection.completedTopics}/{projection.totalTopics} konu tamamlandı • 
+                  Kalan: {projection.remainingTopics} konu • 
+                  Hız: {projection.velocity}
+                </div>
+                {projection.velocityWarning && (
+                  <div className="text-xs opacity-90 mt-2 bg-white/20 rounded-lg px-3 py-1 inline-block">
+                    ⚡ {projection.velocityWarning}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* HALKA GRAFİĞİ */}
+            <div className="relative" style={{ width: circularProgressParams.size, height: circularProgressParams.size }}>
+              <svg width={circularProgressParams.size} height={circularProgressParams.size} className="transform -rotate-90">
+                {/* Arka plan çemberi */}
+                <circle
+                  cx={circularProgressParams.center}
+                  cy={circularProgressParams.center}
+                  r={circularProgressParams.radius}
+                  stroke="rgba(255,255,255,0.2)"
+                  strokeWidth={circularProgressParams.strokeWidth}
+                  fill="none"
+                />
+                {/* İlerleme çemberi */}
+                <circle
+                  cx={circularProgressParams.center}
+                  cy={circularProgressParams.center}
+                  r={circularProgressParams.radius}
+                  stroke="white"
+                  strokeWidth={circularProgressParams.strokeWidth}
+                  fill="none"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={progressOffset}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000 ease-out"
+                />
+              </svg>
+              {/* Merkez yazı */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="text-4xl font-bold leading-none">{projection.estimatedDays}</div>
+                <div className="text-xs opacity-90 mt-1">gün kaldı</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-3xl p-8 shadow-lg">
         <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
           📊 Bugünkü Durum
-          <span className="text-xs text-gray-500 font-normal ml-2">(Detayları görmek için karta tıkla)</span>
+          <span className="text-xs text-gray-500 font-normal ml-2">(Karta tıkla, detay gör)</span>
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* KART 1: Günlük Hedef */}
           <div 
-            className="relative h-64 cursor-pointer group"
+            className="relative h-64 cursor-pointer"
             onClick={() => toggleFlip('daily')}
             style={{ perspective: '1000px' }}
           >
@@ -93,9 +177,8 @@ export default function HeroStats({
                 transform: flippedCard === 'daily' ? 'rotateY(180deg)' : 'rotateY(0deg)'
               }}
             >
-              {/* Ön Yüz */}
               <div
-                className="absolute w-full h-full bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-2xl p-6 border-2 border-cyan-200 group-hover:shadow-xl transition-shadow"
+                className="absolute w-full h-full bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-2xl p-6 border-2 border-cyan-200"
                 style={{ backfaceVisibility: 'hidden' }}
               >
                 <div className="text-center mb-4">
@@ -114,9 +197,11 @@ export default function HeroStats({
                 <div className="text-center mt-4 text-xs text-gray-500">
                   📚 Bu hafta {weeklyQuestions} soru (+%{weeklyIncrease})
                 </div>
+                <div className="text-center mt-4 text-xs text-purple-600 font-semibold animate-pulse">
+                  👆 Tıkla detay gör
+                </div>
               </div>
 
-              {/* Arka Yüz */}
               <div
                 className="absolute w-full h-full bg-gradient-to-br from-cyan-100 to-cyan-200 rounded-2xl p-6 border-2 border-cyan-300"
                 style={{ 
@@ -142,13 +227,16 @@ export default function HeroStats({
                     <span>1 Deneme Analizi</span>
                   </div>
                 </div>
+                <div className="text-center mt-4 text-xs text-cyan-700 font-semibold">
+                  👆 Tekrar tıkla geri dön
+                </div>
               </div>
             </div>
           </div>
 
           {/* KART 2: Haftalık Başarı - DİNAMİK HEDEF */}
           <div 
-            className="relative h-64 cursor-pointer group"
+            className="relative h-64 cursor-pointer"
             onClick={() => toggleFlip('weekly')}
             style={{ perspective: '1000px' }}
           >
@@ -159,9 +247,8 @@ export default function HeroStats({
                 transform: flippedCard === 'weekly' ? 'rotateY(180deg)' : 'rotateY(0deg)'
               }}
             >
-              {/* Ön Yüz */}
               <div
-                className="absolute w-full h-full bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border-2 border-purple-200 group-hover:shadow-xl transition-shadow"
+                className="absolute w-full h-full bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border-2 border-purple-200"
                 style={{ backfaceVisibility: 'hidden' }}
               >
                 <div className="text-center mb-4">
@@ -177,15 +264,18 @@ export default function HeroStats({
                     style={{ width: `${Math.min(weeklyProgress, 100)}%` }}
                   />
                 </div>
+                {/* DİNAMİK HEDEF MESAJI */}
                 <div className="text-center mt-4 text-xs text-gray-600">
                   🎯 {dynamicGoal.message}
                 </div>
                 <div className="text-center mt-1 text-xs font-semibold text-purple-600">
                   Hedef: %{dynamicGoal.target}
                 </div>
+                <div className="text-center mt-4 text-xs text-purple-600 font-semibold animate-pulse">
+                  👆 Tıkla detay gör
+                </div>
               </div>
 
-              {/* Arka Yüz */}
               <div
                 className="absolute w-full h-full bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl p-6 border-2 border-purple-300"
                 style={{ 
@@ -208,13 +298,16 @@ export default function HeroStats({
                     <div className="text-gray-700">• Edebiyat (%85)</div>
                   </div>
                 </div>
+                <div className="text-center mt-4 text-xs text-purple-700 font-semibold">
+                  👆 Tekrar tıkla geri dön
+                </div>
               </div>
             </div>
           </div>
 
           {/* KART 3: Çalışma Süresi */}
           <div 
-            className="relative h-64 cursor-pointer group"
+            className="relative h-64 cursor-pointer"
             onClick={() => toggleFlip('time')}
             style={{ perspective: '1000px' }}
           >
@@ -225,9 +318,8 @@ export default function HeroStats({
                 transform: flippedCard === 'time' ? 'rotateY(180deg)' : 'rotateY(0deg)'
               }}
             >
-              {/* Ön Yüz */}
               <div
-                className="absolute w-full h-full bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border-2 border-blue-200 group-hover:shadow-xl transition-shadow"
+                className="absolute w-full h-full bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border-2 border-blue-200"
                 style={{ backfaceVisibility: 'hidden' }}
               >
                 <div className="text-center mb-4">
@@ -246,9 +338,11 @@ export default function HeroStats({
                 <div className="text-center mt-4 text-xs text-gray-500">
                   {studyTimeToday < 60 ? '⚡ Daha fazla çalışabilirsin!' : '🔥 Harika gidiyorsun!'}
                 </div>
+                <div className="text-center mt-4 text-xs text-blue-600 font-semibold animate-pulse">
+                  👆 Tıkla detay gör
+                </div>
               </div>
 
-              {/* Arka Yüz */}
               <div
                 className="absolute w-full h-full bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl p-6 border-2 border-blue-300"
                 style={{ 
@@ -280,6 +374,9 @@ export default function HeroStats({
                   <div className="text-xs text-orange-700 font-semibold">
                     💡 Test süreni artırmalısın!
                   </div>
+                </div>
+                <div className="text-center mt-4 text-xs text-blue-700 font-semibold">
+                  👆 Tekrar tıkla geri dön
                 </div>
               </div>
             </div>

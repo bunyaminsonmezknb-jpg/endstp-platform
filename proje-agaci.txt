@@ -1,0 +1,214 @@
+[4.0K]  .
+├── [  63]  .env
+├── [ 216]  .gitignore
+├── [4.0K]  .vscode
+│   └── [ 238]  tasks.json
+├── [   0]  =2.11.7
+├── [1.2K]  =2.7.0
+├── [8.5K]  README.md
+├── [4.0K]  backend
+│   ├── [ 777]  .env
+│   ├── [   5]  .gitignore
+│   ├── [4.0K]  .pytest_cache
+│   │   ├── [  37]  .gitignore
+│   │   ├── [ 191]  CACHEDIR.TAG
+│   │   ├── [ 302]  README.md
+│   │   └── [4.0K]  v
+│   │       └── [4.0K]  cache
+│   ├── [4.2K]  README.md
+│   ├── [4.7K]  TABLE_CREATION_ANAYASA.sql
+│   ├── [2.6K]  api_commercial_columns.sql
+│   ├── [4.0K]  app
+│   │   ├── [   0]  __init__.py
+│   │   ├── [4.0K]  api
+│   │   │   ├── [   0]  __init__.py
+│   │   │   ├── [2.0K]  deps.py
+│   │   │   └── [4.0K]  v1
+│   │   ├── [4.0K]  core
+│   │   │   ├── [   0]  __init__.py
+│   │   │   ├── [3.8K]  bs_model.py
+│   │   │   ├── [ 667]  config.py
+│   │   │   ├── [7.7K]  difficulty_engine.py
+│   │   │   ├── [ 10K]  priority_engine.py
+│   │   │   └── [6.8K]  time_analyzer.py
+│   │   ├── [4.0K]  db
+│   │   │   ├── [   0]  __init__.py
+│   │   │   └── [ 898]  session.py
+│   │   ├── [1.1K]  main.py
+│   │   ├── [4.0K]  models
+│   │   │   ├── [   0]  __init__.py
+│   │   │   └── [ 298]  user.py
+│   │   └── [4.0K]  tests
+│   │       ├── [2.3K]  quick_test.py
+│   │       └── [6.7K]  test_motors.py
+│   ├── [5.8K]  backend-api-complete.tar.gz
+│   ├── [  25]  backend-api-complete.tar.gz:Zone.Identifier
+│   ├── [ 229]  check_policies.sql
+│   ├── [ 669]  fix_rls_policy.sql
+│   ├── [1.1K]  fix_rls_policy_v2.sql
+│   ├── [ 56K]  main.py.OLD_BACKUP
+│   ├── [4.0K]  migrations
+│   │   └── [4.0K]  20241128_add_5_motors.sql
+│   ├── [4.0K]  models
+│   │   ├── [  17]  __init__.py
+│   │   └── [4.5K]  schemas.py
+│   ├── [ 282]  requirements.txt
+│   ├── [4.0K]  services
+│   │   ├── [  19]  __init__.py
+│   │   └── [6.1K]  analytics_service.py
+│   └── [2.4K]  test_motors_simple.py
+├── [  25]  backend-phase1-complete.tar.gz:Zone.Identifier
+├── [4.0K]  database
+│   ├── [2.8K]  ROADMAP.md
+│   └── [4.0K]  migrations
+│       ├── [5.0K]  2025-11-18_01_analytics_tables.sql
+│       ├── [5.1K]  2025-11-18_02_global_structure.sql
+│       ├── [   0]  2025-11-18_03_dashboard_improvements.sql
+│       ├── [   0]  2025-11-18_04_reports_endpoint.sql
+│       ├── [7.7K]  2025-11-18_DEMO_DATA.sql
+│       ├── [ 12K]  2025-11-18_FULL_BACKUP.sql
+│       └── [ 12K]  2025-11-19_03_flexible_osym_mapping.sql
+├── [4.0K]  frontend
+│   ├── [ 142]  .env.local
+│   ├── [4.0K]  admin-osym-final-with-mapping.tar.gz
+│   ├── [  25]  admin-osym-final-with-mapping.tar.gz:Zone.Identifier
+│   ├── [9.3K]  admin-pages-modernized.tar.gz
+│   ├── [  25]  admin-pages-modernized.tar.gz:Zone.Identifier
+│   ├── [4.0K]  app
+│   │   ├── [4.0K]  admin
+│   │   │   ├── [4.0K]  exams
+│   │   │   ├── [4.0K]  osym
+│   │   │   └── [ 24K]  page.tsx
+│   │   ├── [1.3K]  globals.css
+│   │   ├── [ 643]  layout.tsx
+│   │   ├── [4.0K]  login
+│   │   │   └── [5.0K]  page.tsx
+│   │   ├── [ 164]  page.tsx
+│   │   ├── [4.0K]  reports
+│   │   │   └── [ 17K]  page.tsx
+│   │   ├── [4.0K]  student
+│   │   │   └── [4.0K]  dashboard
+│   │   └── [4.0K]  test-entry
+│   │       └── [ 16K]  page.tsx
+│   ├── [4.0K]  components
+│   │   └── [3.9K]  SafeExternalLink.tsx
+│   ├── [ 911]  dashboard-logout-fix.tar.gz
+│   ├── [  25]  dashboard-logout-fix.tar.gz:Zone.Identifier
+│   ├── [   0]  end-stp-frontend@0.1.0
+│   ├── [1.2K]  frontend-final-fix-redirect-and-auth.tar.gz
+│   ├── [2.3K]  frontend-middleware-cookie-fix.tar.gz
+│   ├── [   0]  frontend@0.1.0
+│   ├── [4.0K]  lib
+│   │   ├── [2.3K]  api-client.ts
+│   │   ├── [1.1K]  constants.ts
+│   │   ├── [ 783]  security-meta.ts
+│   │   ├── [4.0K]  store
+│   │   │   ├── [4.3K]  studentDashboardStore copy.ts
+│   │   │   ├── [4.9K]  studentDashboardStore.ts
+│   │   │   └── [5.6K]  studentDashboardStore.ts.backup
+│   │   ├── [ 795]  supabase.ts
+│   │   └── [4.0K]  utils
+│   │       └── [ 980]  type-guards.ts
+│   ├── [4.0K]  middleware
+│   ├── [ 983]  middleware.ts
+│   ├── [ 865]  middleware.ts.backup
+│   ├── [   0]  next
+│   ├── [ 201]  next-env.d.ts
+│   ├── [ 118]  next.config.js
+│   ├── [106K]  package-lock.json
+│   ├── [ 562]  package.json
+│   ├── [9.1K]  phase3-all-pages-modernized.tar.gz
+│   ├── [  25]  phase3-all-pages-modernized.tar.gz:Zone.Identifier
+│   ├── [3.9K]  phase3-fixes-middleware-and-reports.tar.gz
+│   ├── [  25]  phase3-fixes-middleware-and-reports.tar.gz:Zone.Identifier
+│   ├── [  82]  postcss.config.js
+│   ├── [4.0K]  public
+│   ├── [1.2K]  tailwind.config.js
+│   ├── [3.1K]  test-entry-page.tar.gz
+│   ├── [  25]  test-entry-page.tar.gz:Zone.Identifier
+│   └── [ 595]  tsconfig.json
+├── [  25]  frontend-backend-integrated.tar.gz:Zone.Identifier
+├── [4.0K]  frontend-backup
+│   ├── [ 304]  .env.local
+│   ├── [ 480]  .gitignore
+│   ├── [1.4K]  README.md
+│   ├── [4.0K]  app
+│   │   ├── [4.0K]  admin
+│   │   │   ├── [4.0K]  exams
+│   │   │   ├── [4.0K]  osym
+│   │   │   └── [ 22K]  page.tsx
+│   │   ├── [4.0K]  dashboard
+│   │   │   ├── [3.6K]  WeeklyChart.tsx
+│   │   │   └── [ 13K]  page.tsx
+│   │   ├── [ 25K]  favicon.ico
+│   │   ├── [ 167]  globals.css
+│   │   ├── [ 466]  layout.tsx
+│   │   ├── [ 114]  page.tsx
+│   │   ├── [4.0K]  reports
+│   │   │   └── [ 15K]  page.tsx
+│   │   ├── [4.0K]  signup
+│   │   │   └── [5.1K]  page.tsx
+│   │   ├── [4.0K]  student
+│   │   │   └── [4.0K]  dashboard
+│   │   └── [4.0K]  test-entry
+│   │       └── [ 17K]  page.tsx
+│   ├── [ 465]  eslint.config.mjs
+│   ├── [4.0K]  frontend
+│   │   ├── [4.0K]  app
+│   │   │   ├── [ 167]  globals.css
+│   │   │   ├── [ 466]  layout.tsx
+│   │   │   ├── [ 114]  page.tsx
+│   │   │   └── [4.0K]  student
+│   │   ├── [4.0K]  lib
+│   │   │   ├── [2.1K]  api-client.ts
+│   │   │   └── [4.0K]  store
+│   │   ├── [ 201]  next-env.d.ts
+│   │   ├── [ 118]  next.config.js
+│   │   ├── [ 55K]  package-lock.json
+│   │   ├── [ 534]  package.json
+│   │   ├── [  82]  postcss.config.js
+│   │   ├── [4.0K]  public
+│   │   ├── [1.2K]  tailwind.config.js
+│   │   └── [ 595]  tsconfig.json
+│   ├── [   0]  frontend@0.1.0
+│   ├── [4.0K]  lib
+│   │   ├── [4.0K]  store
+│   │   │   └── [4.3K]  studentDashboardStore.ts
+│   │   └── [ 246]  supabase.ts
+│   ├── [   0]  next
+│   ├── [ 201]  next-env.d.ts
+│   ├── [ 118]  next.config.js
+│   ├── [ 133]  next.config.ts
+│   ├── [ 55K]  package-lock.json
+│   ├── [ 534]  package.json
+│   ├── [  82]  postcss.config.js
+│   ├── [  94]  postcss.config.mjs
+│   ├── [4.0K]  public
+│   │   ├── [ 381]  OSYM_Topics_Template.csv
+│   │   ├── [ 391]  file.svg
+│   │   ├── [1.0K]  globe.svg
+│   │   ├── [205K]  logo.png
+│   │   ├── [1.3K]  next.svg
+│   │   ├── [ 128]  vercel.svg
+│   │   └── [ 385]  window.svg
+│   ├── [1.2K]  tailwind.config.js
+│   └── [ 595]  tsconfig.json
+├── [1.2K]  frontend-final-fix-redirect-and-auth.tar.gz
+├── [  25]  frontend-final-fix-redirect-and-auth.tar.gz:Zone.Identifier
+├── [1.8K]  frontend-login-final-fix.tar.gz
+├── [  25]  frontend-login-final-fix.tar.gz:Zone.Identifier
+├── [1.8K]  frontend-login-fixed.tar.gz
+├── [  25]  frontend-login-fixed.tar.gz:Zone.Identifier
+├── [  25]  frontend-middleware-cookie-fix.tar.gz:Zone.Identifier
+├── [ 70M]  frontend-phase2-security.tar.gz
+├── [  25]  frontend-phase2-security.tar.gz:Zone.Identifier
+├── [ 70M]  frontend-with-auth.tar.gz
+├── [  25]  frontend-with-auth.tar.gz:Zone.Identifier
+├── [   0]  next
+├── [7.1K]  package-lock.json
+├── [  75]  package.json
+├── [   0]  proje-agaci.txt
+├── [3.6M]  proje_agaci.txt
+└── [2.8K]  table_template.sql
+
+53 directories, 158 files

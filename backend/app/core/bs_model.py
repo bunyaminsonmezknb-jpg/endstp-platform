@@ -1,0 +1,116 @@
+"""
+BS-Model v2025 - WITH OPTIONAL FIELDS
+"""
+
+from typing import Optional
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+
+class ReviewInput(BaseModel):
+    """Girdi parametreleri"""
+    correct: int = Field(ge=0, description="Doğru sayısı")
+    incorrect: int = Field(ge=0, description="Yanlış sayısı")
+    blank: int = Field(ge=0, description="Boş sayısı")
+    total: int = Field(gt=0, description="Toplam soru")
+    difficulty: int = Field(ge=1, le=5, description="Konu zorluğu")
+    
+    # OPTIONAL - İlk test için None gelebilir
+    current_ef: Optional[float] = Field(default=None, ge=1.3, le=2.5, description="Mevcut EF")
+    current_ia: Optional[int] = Field(default=None, ge=0, description="Mevcut interval")
+    actual_gap: Optional[int] = Field(default=None, ge=0, description="Gerçek gecikme (gün)")
+    repetitions: int = Field(ge=0, default=0, description="Tekrar sayısı")
+
+
+class ReviewOutput(BaseModel):
+    """Çıktı sonuçları"""
+    status: str
+    next_ef: float
+    next_ia: int
+    next_repetition: int
+    score: float
+    analysis: str
+
+
+class BSModel:
+    """BS-Model v2025"""
+    
+    # Eşikler
+    HERO_THRESHOLD = 0.7
+    RESET_THRESHOLD = 0.35
+    
+    @classmethod
+    def calculate(cls, review: ReviewInput) -> ReviewOutput:
+        """Ana hesaplama - None değerlerini handle et!"""
+        
+        total = review.total
+        correct = review.correct
+        incorrect = review.incorrect
+        blank = review.blank
+        
+        # Success rate
+        success_rate = correct / total
+        
+        # Skor (net üzerinden)
+        net = correct - (incorrect * 0.25)
+        score = max(0, net / total)
+        
+        # NONE KONTROLÜ - İlk test ise varsayılan değerler
+        current_ef = review.current_ef if review.current_ef is not None else 2.5
+        current_ia = review.current_ia if review.current_ia is not None else 1
+        actual_gap = review.actual_gap if review.actual_gap is not None else 0
+        repetitions = review.repetitions
+        
+        # YENİ TEST (repetitions == 0)
+        if repetitions == 0:
+            new_ef = max(1.3, current_ef - (review.difficulty * 0.1))
+            return ReviewOutput(
+                status="NEW",
+                next_ef=new_ef,
+                next_ia=1,
+                next_repetition=1,
+                score=score,
+                analysis=f"İlk test. Başarı: %{success_rate*100:.0f}"
+            )
+        
+        # HERO MODE
+        if score >= cls.HERO_THRESHOLD and actual_gap > current_ia:
+            bonus = min(0.1, (actual_gap - current_ia) * 0.01)
+            new_ef = min(2.5, current_ef + bonus)
+            new_ia = int(current_ia * new_ef * 1.2)
+            
+            return ReviewOutput(
+                status="HERO",
+                next_ef=round(new_ef, 2),
+                next_ia=new_ia,
+                next_repetition=repetitions + 1,
+                score=score,
+                analysis="Mükemmel! Gecikmeye rağmen başarılı."
+            )
+        
+        # RESET MODE
+        if score < cls.RESET_THRESHOLD:
+            penalty_ef = max(1.3, current_ef - 0.2)
+            
+            return ReviewOutput(
+                status="RESET",
+                next_ef=penalty_ef,
+                next_ia=1,
+                next_repetition=1,
+                score=score,
+                analysis="Zorluk var. Baştan başlıyoruz."
+            )
+        
+        # NORMAL MODE
+        ef_change = (score - 0.5) * 0.15
+        new_ef = max(1.3, min(2.5, current_ef + ef_change))
+        new_ia = int(current_ia * new_ef)
+        
+        return ReviewOutput(
+            status="NORMAL",
+            next_ef=round(new_ef, 2),
+            next_ia=max(1, new_ia),
+            next_repetition=repetitions + 1,
+            score=score,
+            analysis=f"Normal ilerleme. Başarı: %{success_rate*100:.0f}"
+        )

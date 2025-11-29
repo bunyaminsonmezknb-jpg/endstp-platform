@@ -6,22 +6,17 @@ import { useStudentDashboard } from '@/lib/store/studentDashboardStore';
 import DashboardHeader from './components/DashboardHeader';
 import CriticalAlert from './components/CriticalAlert';
 import HeroStats from './components/HeroStats';
-import ProjectionCard from './components/ProjectionCard';
-import UniversityGoalCard from './components/UniversityGoalCard';
-import SmartActionCards from './components/SmartActionCards';
+import ActionCards from './components/ActionCards';
 import TopicHealthBar from './components/TopicHealthBar';
-import HealthStatusBar from './components/HealthStatusBar';
 import MotorAnalysisPanel from './components/MotorAnalysisPanel';
 
 /**
- * Student Dashboard - v3
+ * Student Dashboard - TAB SİSTEMLİ
  * 
- * YENİ LAYOUT:
- * - Üstte: Projection + University Goal (2'li)
- * - Ortada: Bugünkü Durum (3'lü kartlar)
- * - Smart Action Cards (4 motor önerisi)
- * - Health Status Bar
- * - Topic Health Bars
+ * [Genel Bakış] [4 Motor Analizi]
+ *      ↓              ↓
+ *   Mevcut         Yeni 4
+ *   Dashboard      Motorlu
  */
 
 export default function StudentDashboard() {
@@ -113,13 +108,12 @@ export default function StudentDashboard() {
         {/* TAB CONTENT */}
         {activeTab === 'overview' ? (
           <>
-            {/* YENİ LAYOUT - GENEL BAKIŞ */}
+            {/* ESKİ SİSTEM - GENEL BAKIŞ */}
             <div className="bg-green-500 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
               <span className="font-semibold">Canlı Veri (Gerçek Backend API)</span>
             </div>
 
-            {/* ACİL UYARI (Varsa) */}
             {dashboardData.criticalAlert && dashboardData.criticalAlert.show && (
               <CriticalAlert
                 topicName={dashboardData.criticalAlert.topicName}
@@ -128,15 +122,6 @@ export default function StudentDashboard() {
               />
             )}
 
-            {/* ÜST ALAN: Projection + University Goal (2'li) */}
-            {dashboardData.projection && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-                <ProjectionCard projection={dashboardData.projection} />
-                <UniversityGoalCard />
-              </div>
-            )}
-
-            {/* BUGÜNKÜ DURUM (3'lü Kartlar) */}
             <HeroStats
               dailyGoal={dashboardData.dailyGoal}
               weeklySuccess={dashboardData.weeklySuccess}
@@ -144,24 +129,13 @@ export default function StudentDashboard() {
               studyTimeToday={dashboardData.studyTimeToday}
               weeklyQuestions={dashboardData.weeklyQuestions}
               weeklyIncrease={dashboardData.weeklyIncrease}
+              projection={dashboardData.projection}
             />
 
-            {/* SMART ACTION CARDS (4 Motor Önerisi) */}
-            <SmartActionCards />
+            <ActionCards />
 
-            {/* BİLGİ SAĞLIĞI BAR */}
-            <HealthStatusBar
-              totalTopics={30}
-              healthyTopics={24}
-              warningTopics={4}
-              criticalTopics={2}
-              currentlyShown={dashboardData.topics.length}
-            />
-
-            {/* TOPIC HEALTH BARS */}
             <TopicHealthBar topics={dashboardData.topics} />
 
-            {/* PERFORMANS TRENDİ (Placeholder) */}
             <div className="bg-white rounded-3xl p-8 shadow-lg mt-8">
               <h2 className="text-2xl font-bold text-gray-800 mb-6">
                 📈 Son 30 Gün Performans Trendi
@@ -174,7 +148,7 @@ export default function StudentDashboard() {
           </>
         ) : (
           <>
-            {/* 4 MOTOR ANALİZİ */}
+            {/* YENİ SİSTEM - 4 MOTOR ANALİZİ */}
             <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
               <span className="font-semibold">4 Motor Sistemi (POST /api/v1/student/analyze)</span>
@@ -184,7 +158,6 @@ export default function StudentDashboard() {
           </>
         )}
 
-        {/* CHAT BUTONU */}
         <button className="fixed bottom-5 right-5 w-16 h-16 bg-gradient-to-br from-purple-600 to-purple-800 rounded-full flex items-center justify-center text-white text-3xl shadow-2xl hover:scale-110 transition-transform">
           💬
         </button>

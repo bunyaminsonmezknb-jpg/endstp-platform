@@ -25,7 +25,7 @@ export default function LoginPage() {
       console.log('Login başlıyor...', { email });
       
       // Backend API'ye POST isteği
-      const response = await fetch('http://localhost:8000/api/v1/auth/signin', {
+      const response = await fetch('http://localhost:8000/api/v1/signin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ export default function LoginPage() {
         {/* Login Form */}
         <div className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="email" className="blfock text-sm font-medium text-gray-700 mb-2">
               E-posta
             </label>
             <input
