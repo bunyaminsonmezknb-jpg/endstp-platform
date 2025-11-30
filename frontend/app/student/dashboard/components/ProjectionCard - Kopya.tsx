@@ -20,28 +20,10 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
   // İlerleme yüzdesi
   const progressPercent = (projection.completedTopics / projection.totalTopics) * 100;
   
-  // ✅ VELOCITY DÜZELTMESİ - Daha anlamlı format
-  const formatVelocity = () => {
-    if (remainingTopics === 0) return 'Tamamlandı! 🎉';
-    if (projection.estimatedDays === 0) return 'Veri yetersiz';
-    
-    const dailyRate = remainingTopics / projection.estimatedDays;
-    
-    // Günlük 1'den az ise haftalık göster
-    if (dailyRate < 1) {
-      const weeklyRate = dailyRate * 7;
-      if (weeklyRate < 1) {
-        // Kaç günde 1 konu
-        const daysPerTopic = Math.ceil(1 / dailyRate);
-        return `1 konu/${daysPerTopic} günde`;
-      }
-      return `${weeklyRate.toFixed(1)} konu/hafta`;
-    }
-    
-    return `${dailyRate.toFixed(1)} konu/gün`;
-  };
-
-  const velocityText = formatVelocity();
+  // Günlük hız hesapla (tahmini)
+  const dailyVelocity = remainingTopics > 0 && projection.estimatedDays > 0
+    ? (remainingTopics / projection.estimatedDays).toFixed(2)
+    : '0';
 
   // Uyarı seviyesi belirle
   const getWarningLevel = () => {
@@ -83,7 +65,7 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
             <div className="text-xs opacity-75 mt-1">
               {projection.completedTopics}/{projection.totalTopics} konu tamamlandı • 
               Kalan: {remainingTopics} konu • 
-              Hız: {velocityText}
+              Hız: ~{dailyVelocity} konu/gün
             </div>
           </div>
         </div>
@@ -122,53 +104,6 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
         </div>
       </div>
 
-      {/* ✅ YENİ: İLERLEME YÜZDES İ AÇIKLAMASI */}
-      <div className="mt-4 bg-white/10 rounded-xl p-4">
-        <div className="flex items-start gap-2 mb-3">
-          <span className="text-blue-200 text-lg">ℹ️</span>
-          <div className="flex-1">
-            <div className="text-sm font-bold mb-1">📊 Nihai Hedef İlerlemesi: %{progressPercent.toFixed(0)}</div>
-            <p className="text-xs opacity-90">
-              Bu oran, tüm konuların <strong>%85+ hatırlama oranına</strong> ulaşma hedefinizdir.
-              Şu ana kadar <strong>{projection.totalTopics} konunun {projection.completedTopics}'unu</strong> başarıyla tamamladınız.
-            </p>
-          </div>
-        </div>
-
-        {/* ✅ YENİ: PROGRESS BAR - ORTA NOKTA İMİ + NET SAYISI */}
-        <div className="relative">
-          {/* Progress bar */}
-          <div className="w-full h-6 bg-white/20 rounded-full overflow-hidden relative">
-            <div 
-              className="h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-1000"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-
-          {/* Orta nokta imi + Net sayısı */}
-          {progressPercent > 0 && (
-            <div 
-              className="absolute top-0 transform -translate-x-1/2 transition-all duration-1000"
-              style={{ left: `${progressPercent}%` }}
-            >
-              {/* İm (Üstte) */}
-              <div className="w-1 h-6 bg-white mx-auto"></div>
-              {/* Tooltip (Altta) */}
-              <div className="bg-purple-900 text-white px-3 py-1 rounded-lg text-xs font-bold shadow-lg whitespace-nowrap mt-1">
-                {projection.completedTopics}/{projection.totalTopics} konu
-              </div>
-            </div>
-          )}
-
-          {/* Yüzde etiketleri */}
-          <div className="flex justify-between text-xs opacity-75 mt-1">
-            <span>0%</span>
-            <span>%{progressPercent.toFixed(0)}</span>
-            <span>100%</span>
-          </div>
-        </div>
-      </div>
-
       {/* Accordion Detaylar */}
       {showDetails && (
         <div className="mt-4 pt-4 border-t border-white/20 space-y-3 animate-fade-in">
@@ -178,7 +113,7 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
             <div className="space-y-1 text-sm">
               <div>
                 <span className="opacity-75">Güncel Hızın:</span>{' '}
-                <span className="font-bold">{velocityText}</span>
+                <span className="font-bold">~{dailyVelocity} konu/gün</span>
               </div>
               <div>
                 <span className="opacity-75">İlerleme:</span>{' '}
@@ -211,7 +146,7 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
             <div className="text-xs font-bold opacity-75 mb-1">💡 ÖNERI</div>
             <div className="text-xs opacity-90">
               {remainingTopics > 0 
-                ? `${velocityText} çalışarak hedefe ulaşabilirsin`
+                ? `Günde ${dailyVelocity} konu çalışarak hedefe ulaşabilirsin`
                 : 'Tebrikler! Tüm konuları tamamladın 🎉'
               }
             </div>

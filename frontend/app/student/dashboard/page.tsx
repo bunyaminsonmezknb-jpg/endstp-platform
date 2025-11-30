@@ -152,12 +152,12 @@ export default function StudentDashboard() {
             {/* BİLGİ SAĞLIĞI BAR */}
             <HealthStatusBar
               totalTopics={30}
-              healthyTopics={24}
-              warningTopics={4}
-              criticalTopics={2}
+              healthyTopics={18}
+              warningTopics={5}
+              frozenTopics={4}
+              criticalTopics={3}
               currentlyShown={dashboardData.topics.length}
             />
-
             {/* TOPIC HEALTH BARS */}
             <TopicHealthBar topics={dashboardData.topics} />
 

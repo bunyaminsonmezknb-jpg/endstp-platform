@@ -4,7 +4,6 @@ interface HealthStatusBarProps {
   totalTopics: number;
   healthyTopics: number;
   warningTopics: number;
-  frozenTopics: number;      // ❄️ YENİ!
   criticalTopics: number;
   currentlyShown: number;
 }
@@ -13,7 +12,6 @@ export default function HealthStatusBar({
   totalTopics,
   healthyTopics,
   warningTopics,
-  frozenTopics,              // ❄️ YENİ!
   criticalTopics,
   currentlyShown
 }: HealthStatusBarProps) {
@@ -21,14 +19,12 @@ export default function HealthStatusBar({
   // Yüzdeleri hesapla
   const healthyPercent = (healthyTopics / totalTopics) * 100;
   const warningPercent = (warningTopics / totalTopics) * 100;
-  const frozenPercent = (frozenTopics / totalTopics) * 100;   // ❄️ YENİ!
   const criticalPercent = (criticalTopics / totalTopics) * 100;
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-lg mb-6">
-      {/* 🧠 YENİ BAŞLIK */}
       <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-        🧠 Genel Bilgi Sağlığı
+        📊 Bilgi Sağlığı Durumu
       </h3>
 
       {/* Gradient Bar */}
@@ -38,7 +34,6 @@ export default function HealthStatusBar({
           className="absolute left-0 h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-500"
           style={{ width: `${healthyPercent}%` }}
         />
-        
         {/* Sarı (Uyarı) */}
         <div
           className="absolute h-full bg-gradient-to-r from-yellow-400 to-yellow-500 transition-all duration-500"
@@ -47,63 +42,32 @@ export default function HealthStatusBar({
             width: `${warningPercent}%` 
           }}
         />
-        
-        {/* ❄️ MAVİ (DONMUŞ) - YENİ! */}
-        <div
-          className="absolute h-full bg-gradient-to-r from-blue-300 to-blue-400 transition-all duration-500"
-          style={{ 
-            left: `${healthyPercent + warningPercent}%`,
-            width: `${frozenPercent}%` 
-          }}
-        />
-        
         {/* Kırmızı (Kritik) */}
         <div
           className="absolute h-full bg-gradient-to-r from-red-400 to-red-500 transition-all duration-500"
           style={{ 
-            left: `${healthyPercent + warningPercent + frozenPercent}%`,
+            left: `${healthyPercent + warningPercent}%`,
             width: `${criticalPercent}%` 
           }}
         />
       </div>
 
       {/* İstatistikler */}
-      <div className="flex items-center justify-between text-sm flex-wrap gap-2">
-        <div className="flex items-center gap-4 flex-wrap">
-          {/* Sağlıklı */}
+      <div className="flex items-center justify-between text-sm">
+        <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-500"></div>
-            <span className="text-gray-600">
-              Sağlıklı: <span className="font-bold text-green-600">{healthyTopics}</span>
-            </span>
+            <span className="text-gray-600">Sağlıklı: <span className="font-bold text-green-600">{healthyTopics}</span></span>
           </div>
-
-          {/* Risk */}
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <span className="text-gray-600">
-              ⚠️ Risk: <span className="font-bold text-yellow-600">{warningTopics}</span>
-            </span>
+            <span className="text-gray-600">⚠️ Risk: <span className="font-bold text-yellow-600">{warningTopics}</span></span>
           </div>
-
-          {/* ❄️ DONMUŞ - YENİ! */}
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-400"></div>
-            <span className="text-gray-600">
-              ❄️ Donmuş: <span className="font-bold text-blue-600">{frozenTopics}</span>
-            </span>
-          </div>
-
-          {/* Kritik */}
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500"></div>
-            <span className="text-gray-600">
-              🆘 Kritik: <span className="font-bold text-red-600">{criticalTopics}</span>
-            </span>
+            <span className="text-gray-600">🆘 Kritik: <span className="font-bold text-red-600">{criticalTopics}</span></span>
           </div>
         </div>
-
-        {/* Toplam */}
         <div className="text-gray-500">
           <span className="font-bold text-purple-600">{totalTopics}</span> konu izleniyor
         </div>

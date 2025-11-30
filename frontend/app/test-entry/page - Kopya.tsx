@@ -28,6 +28,7 @@ export default function TestEntryPage() {
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState('');
 
   // Form state
   const [testDateTime, setTestDateTime] = useState('');
@@ -44,9 +45,6 @@ export default function TestEntryPage() {
   const totalQuestions = correct + wrong + empty;
   const net = Math.max(0, correct - (wrong / 4));
   const successRate = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0;
-  
-  // ✅ TOPLAM SORU KONTROLÜ (EditTestModal gibi)
-  const isValidTotal = () => totalQuestions === 12;
 
   // Max datetime
   const getTurkeyDateTime = () => {
@@ -114,18 +112,39 @@ export default function TestEntryPage() {
     }
   }, [selectedTopic]);
 
+  // Validasyon kontrolü
+  useEffect(() => {
+    setValidationError('');
+
+    if (correct < 0 || wrong < 0 || empty < 0) {
+      setValidationError('❌ Negatif sayı giremezsiniz!');
+      return;
+    }
+
+    // KONU ÖĞRENMESİ: 12 SORU
+    const maxQuestions = 12;
+
+    if (totalQuestions > maxQuestions) {
+      setValidationError(`❌ Toplam soru sayısı ${maxQuestions}'den fazla olamaz! (Şu an: ${totalQuestions})`);
+      return;
+    }
+
+    if (totalQuestions > 0 && totalQuestions < maxQuestions) {
+      setValidationError(`⚠️ Konu öğrenme testi ${maxQuestions} soru olmalı. (Şu an: ${totalQuestions})`);
+    }
+  }, [correctCount, wrongCount, emptyCount, correct, wrong, empty, totalQuestions]);
+
   const handleReset = () => {
     setCorrectCount('');
     setWrongCount('');
     setEmptyCount('');
+    setValidationError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // ✅ TOPLAM SORU KONTROLÜ
-    if (!isValidTotal()) {
-      setError('Toplam soru sayısı tam olarak 12 olmalıdır!');
+    if (validationError && validationError.includes('❌')) {
       return;
     }
 
@@ -180,7 +199,7 @@ export default function TestEntryPage() {
       setSuccess(true);
       
       setTimeout(() => {
-        router.push('/past-tests');
+        router.push('/student/dashboard');
       }, 2000);
 
     } catch (err: any) {
@@ -235,7 +254,7 @@ export default function TestEntryPage() {
               <div>
                 <div className="font-bold">Test başarıyla kaydedildi!</div>
                 <div className="text-sm">Net: {net.toFixed(2)} 🎉</div>
-                <div className="text-xs mt-1">Geçmiş testlere yönlendiriliyorsunuz...</div>
+                <div className="text-xs mt-1">Dashboard'a yönlendiriliyorsunuz...</div>
               </div>
             </div>
           </div>
@@ -251,6 +270,17 @@ export default function TestEntryPage() {
                 <div className="text-sm">{error}</div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Validation Warning */}
+        {validationError && (
+          <div className={`border-2 px-6 py-4 rounded-2xl mb-6 ${
+            validationError.includes('❌') 
+              ? 'bg-red-50 border-red-500 text-red-700' 
+              : 'bg-yellow-50 border-yellow-500 text-yellow-700'
+          }`}>
+            <p className="font-medium">{validationError}</p>
           </div>
         )}
 
@@ -392,46 +422,24 @@ export default function TestEntryPage() {
             </div>
           </div>
 
-          {/* ✅ HESAPLANAN DEĞERLER - EditTestModal Tarzı */}
-          <div className={`rounded-2xl p-6 mb-6 border-2 ${
-            isValidTotal() 
-              ? 'bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200' 
-              : 'bg-gradient-to-br from-red-50 to-orange-50 border-red-300'
-          }`}>
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center justify-center gap-2">
-              📊 Hesaplanan Değerler
-              {!isValidTotal() && totalQuestions > 0 && (
-                <span className="text-sm bg-red-500 text-white px-3 py-1 rounded-full animate-pulse">
-                  ⚠️ Toplam 12 soru olmalı!
-                </span>
-              )}
-            </h3>
-            
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="text-center">
-                <div className="text-sm text-gray-600 mb-1">Toplam Soru</div>
-                <div className={`text-3xl font-bold ${
-                  totalQuestions === 12 ? 'text-green-600' : 
-                  totalQuestions < 12 ? 'text-orange-600' : 
-                  'text-red-600'
-                }`}>
-                  {totalQuestions} / 12
-                </div>
-              </div>
-              
+          {/* Hesaplanan Değerler */}
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-6 mb-6 border-2 border-purple-200">
+            <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">📊 Net</div>
-                <div className="text-3xl font-bold text-purple-600">
+                <div className="text-4xl font-bold text-purple-600">
                   {net.toFixed(2)}
                 </div>
               </div>
-              
               <div className="text-center">
-                <div className="text-sm text-gray-600 mb-1">📈 Başarı %</div>
-                <div className="text-3xl font-bold text-blue-600">
-                  {successRate.toFixed(0)}%
+                <div className="text-sm text-gray-600 mb-1">📈 Başarı Oranı</div>
+                <div className="text-4xl font-bold text-blue-600">
+                  %{successRate.toFixed(0)}
                 </div>
               </div>
+            </div>
+            <div className="text-center mt-3 text-xs text-gray-500">
+              Toplam {totalQuestions}/12 soru
             </div>
           </div>
 
@@ -448,16 +456,14 @@ export default function TestEntryPage() {
 
             <button
               type="submit"
-              disabled={loading || !selectedSubject || !selectedTopic || !testDateTime || !isValidTotal()}
+              disabled={loading || !selectedSubject || !selectedTopic || !testDateTime || (validationError.includes('❌'))}
               className={`flex-1 py-3 rounded-xl text-white font-semibold transition-all ${
-                loading || !selectedSubject || !selectedTopic || !testDateTime || !isValidTotal()
+                loading || !selectedSubject || !selectedTopic || !testDateTime || (validationError.includes('❌'))
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:scale-105 shadow-lg'
               }`}
             >
-              {loading ? '⏳ Kaydediliyor...' : 
-               !isValidTotal() ? '❌ Toplam 12 soru olmalı' : 
-               '💾 Test Sonucunu Kaydet'}
+              {loading ? '⏳ Kaydediliyor...' : '💾 Test Sonucunu Kaydet'}
             </button>
           </div>
 
