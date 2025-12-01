@@ -455,3 +455,216 @@ async def delete_test(test_id: str):
         return {"success": False, "error": "Test bulunamadı"}
     
     return {"success": True, "message": "Test silindi"}
+@router.post("/student/analyze")
+async def analyze_student_performance(request: dict):
+    """
+    4 Motor Analizi
+    BS-Model, Difficulty Engine, Time Analyzer, Priority Engine
+    """
+    student_id = request.get("student_id")
+    
+    if not student_id:
+        return {"error": "student_id gerekli"}
+    
+    supabase = get_supabase_admin()
+    
+    # Tüm testleri çek
+    all_tests = supabase.table("student_topic_tests").select(
+        "*, topics(name_tr, difficulty_level, subjects(name_tr))"
+    ).eq("student_id", student_id).order("test_date", desc=True).execute()
+    
+    if not all_tests.data or len(all_tests.data) == 0:
+        return {
+            "status": "no_data",
+            "message": "Henüz test verisi yok",
+            "bs_model": {"urgent_topics": []},
+            "difficulty_engine": {"struggling_topics": []},
+            "time_analyzer": {"slow_topics": []},
+            "priority_engine": {"this_week_topics": []}
+        }
+    
+    # Topic bazında grupla
+    topic_performance = {}
+    now = datetime.now(timezone.utc)
+    
+    for test in all_tests.data:
+        topic_id = test["topic_id"]
+        
+        if topic_id not in topic_performance:
+            topic_performance[topic_id] = {
+                "topic_id": topic_id,
+                "topic_name": test["topics"]["name_tr"] if test.get("topics") else "Unknown",
+                "subject_name": test["topics"]["subjects"]["name_tr"] if test.get("topics") and test["topics"].get("subjects") else "Unknown",
+                "difficulty_level": test["topics"].get("difficulty_level", 3) if test.get("topics") else 3,
+                "tests": []
+            }
+        
+        topic_performance[topic_id]["tests"].append(test)
+    
+    # BS-MODEL
+    bs_model_topics = []
+    
+    for topic_id, data in topic_performance.items():
+        tests = data["tests"]
+        latest_test = tests[0]
+        test_date = datetime.fromisoformat(latest_test["test_date"].replace('Z', '+00:00'))
+        days_since = (now - test_date).days
+        
+        remembering_rate = calculate_remembering_rate(tests)
+        next_review = calculate_next_review_date(remembering_rate, test_date)
+        
+        urgency_score = 0
+        
+        if next_review["urgency"] == "HEMEN":
+            urgency_score = 100
+        elif next_review["urgency"] == "ACİL":
+            urgency_score = 80
+        elif next_review["urgency"] == "YAKIN":
+            urgency_score = 60
+        elif next_review["urgency"] == "NORMAL":
+            urgency_score = 40
+        else:
+            urgency_score = 20
+        
+        forgetting_risk = 100 - remembering_rate
+        urgency_score += forgetting_risk * 0.3
+        urgency_score = min(100, urgency_score)
+        
+        if urgency_score >= 60:
+            bs_model_topics.append({
+                "topic_name": data["topic_name"],
+                "subject_name": data["subject_name"],
+                "remembering_rate": remembering_rate,
+                "days_since_last_test": days_since,
+                "next_review_urgency": next_review["urgency"],
+                "urgency_score": int(urgency_score),
+                "recommendation": f"{next_review['urgency']} - {next_review['days_remaining']} gün içinde tekrar et"
+            })
+    
+    bs_model_topics.sort(key=lambda x: x["urgency_score"], reverse=True)
+    
+    # DIFFICULTY ENGINE
+    difficulty_topics = []
+    
+    for topic_id, data in topic_performance.items():
+        tests = data["tests"]
+        recent_tests = tests[:3]
+        avg_success = sum([t["success_rate"] for t in recent_tests]) / len(recent_tests)
+        
+        difficulty_score = 0
+        
+        if avg_success < 50:
+            difficulty_score = 80 + (50 - avg_success)
+        elif avg_success < 70:
+            difficulty_score = 60 + (70 - avg_success)
+        else:
+            difficulty_score = max(0, 60 - (avg_success - 70))
+        
+        if len(tests) < 3 and avg_success < 60:
+            difficulty_score += 20
+        
+        difficulty_score = min(100, difficulty_score)
+        
+        if difficulty_score >= 60:
+            difficulty_topics.append({
+                "topic_name": data["topic_name"],
+                "subject_name": data["subject_name"],
+                "difficulty_score": int(difficulty_score),
+                "average_success": round(avg_success, 1),
+                "total_tests": len(tests),
+                "topic_difficulty_level": data["difficulty_level"],
+                "recommendation": "Bu konuya daha fazla zaman ayır"
+            })
+    
+    difficulty_topics.sort(key=lambda x: x["difficulty_score"], reverse=True)
+    
+    # TIME ANALYZER
+    time_topics = []
+    
+    for topic_id, data in topic_performance.items():
+        tests = data["tests"]
+        
+        if len(tests) >= 2:
+            intervals = []
+            for i in range(len(tests) - 1):
+                t1 = datetime.fromisoformat(tests[i]["test_date"].replace('Z', '+00:00'))
+                t2 = datetime.fromisoformat(tests[i+1]["test_date"].replace('Z', '+00:00'))
+                intervals.append((t1 - t2).days)
+            
+            avg_interval = sum(intervals) / len(intervals)
+            
+            if avg_interval > 30:
+                time_topics.append({
+                    "topic_name": data["topic_name"],
+                    "subject_name": data["subject_name"],
+                    "average_interval_days": round(avg_interval, 1),
+                    "total_tests": len(tests),
+                    "recommendation": f"Bu konuya {int(avg_interval)} günde bir dönüyorsun. Daha sık tekrar et!"
+                })
+    
+    time_topics.sort(key=lambda x: x["average_interval_days"], reverse=True)
+    
+    # PRIORITY ENGINE
+    priority_topics = []
+    
+    for topic_id, data in topic_performance.items():
+        tests = data["tests"]
+        latest_test = tests[0]
+        
+        remembering_rate = calculate_remembering_rate(tests)
+        
+        priority_score = 0
+        forgetting_risk = 100 - remembering_rate
+        priority_score += forgetting_risk * 0.5
+        
+        difficulty = data["difficulty_level"]
+        priority_score += difficulty * 5
+        
+        if len(tests) < 3:
+            priority_score += 20
+        
+        if latest_test["success_rate"] < 60:
+            priority_score += 15
+        
+        priority_score = min(100, priority_score)
+        
+        if priority_score >= 50:
+            priority_level = "CRITICAL" if priority_score >= 80 else "HIGH" if priority_score >= 65 else "MEDIUM" 
+            
+            priority_topics.append({
+                "topic_name": data["topic_name"],
+                "subject_name": data["subject_name"],
+                "priority_score": int(priority_score),
+                "priority_level": priority_level,
+                "remembering_rate": remembering_rate,
+                "difficulty_level": difficulty,
+                "total_tests": len(tests),
+                "recommendation": f"{priority_level} öncelik - Bu hafta mutlaka çalış"
+            })
+    
+    priority_topics.sort(key=lambda x: x["priority_score"], reverse=True)
+    
+    return {
+        "status": "success",
+        "analyzed_topics": len(topic_performance),
+        "bs_model": {
+            "name": "Akıllı Tekrar Planlayıcı",
+            "description": "Unutma eğrisine göre optimal tekrar zamanı",
+            "urgent_topics": bs_model_topics[:10]
+        },
+        "difficulty_engine": {
+            "name": "Zorluk Analizi",
+            "description": "Hangi konularda zorlanıyorsun",
+            "struggling_topics": difficulty_topics[:10]
+        },
+        "time_analyzer": {
+            "name": "Hız Analizi",
+            "description": "Hangi konulara yeterince zaman ayırmıyorsun",
+            "slow_topics": time_topics[:10]
+        },
+        "priority_engine": {
+            "name": "Öncelik Motoru",
+            "description": "Bu hafta hangi konulara odaklanmalısın",
+            "this_week_topics": priority_topics[:10]
+        }
+    }

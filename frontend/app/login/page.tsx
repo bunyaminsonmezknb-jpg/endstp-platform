@@ -22,7 +22,6 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      console.log('Login başlıyor...', { email });
       
       // Backend API'ye POST isteği
       const response = await fetch('http://localhost:8000/api/v1/signin', {
@@ -37,8 +36,7 @@ export default function LoginPage() {
       });
 
       const data = await response.json();
-      console.log('Backend response:', data);
-
+ 
       if (!response.ok) {
         setError(data.detail || 'Giriş başarısız');
         setLoading(false);
@@ -46,8 +44,7 @@ export default function LoginPage() {
       }
 
       // Başarılı giriş
-      console.log('Login başarılı! Yönlendiriliyor...');
-      
+        
       // Access token'ı localStorage'a kaydet
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
