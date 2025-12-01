@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import FeedbackButtons from './FeedbackButtons';
 
 interface MotorAction {
   topic_name: string;
@@ -194,8 +195,8 @@ export default function SmartActionCards() {
         <div className="bg-white rounded-2xl p-8 shadow-lg text-center">
           <div className="text-5xl mb-3">🎯</div>
           <p className="text-gray-600">Test ekledikçe akıllı öneriler burada görünecek</p>
-          <a
-            href="/test-entry"
+          
+           <a href="/test-entry"
             className="inline-block mt-4 bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700"
           >
             Test Ekle
@@ -222,7 +223,7 @@ export default function SmartActionCards() {
 
           return (
             <div key={index} className="space-y-2">
-              {/* ANA KART - En Öncelikli Aksiyon */}
+              {/* ANA KART */}
               <div
                 className={`bg-white rounded-2xl p-5 border-2 ${motor.borderColor} shadow-lg hover:shadow-xl transition-all`}
               >
@@ -258,21 +259,36 @@ export default function SmartActionCards() {
                 >
                   {topAction.action} →
                 </button>
+
+                {/* Rating */}
+                <div className="mt-3 flex justify-center">
+                  <FeedbackButtons
+                    componentType="action_card"
+                    componentId={topAction.topic_name}
+                    variant="rating"
+                    size="sm"
+                    metadata={{
+                      motor: motor.name,
+                      topic: topAction.topic_name,
+                      urgency: topAction.urgency
+                    }}
+                  />
+                </div>
               </div>
 
-                {/* Hepsini Gör - Tıklanabilir Yazı */}
-                {remainingCount > 0 && (
-                  <div
-                    onClick={() => setExpandedMotor(isExpanded ? null : motor.name)}
-                    className="text-center text-xs text-purple-600 hover:text-purple-800 cursor-pointer mt-3 font-semibold transition"
-                  >
-                    {isExpanded ? '▲ Daha azını görüntüle' : `▼ Hepsini Gör (${remainingCount} Aksiyon Daha)`}
-                  </div>
-                )}
+              {/* Hepsini Gör */}
+              {remainingCount > 0 && (
+                <div
+                  onClick={() => setExpandedMotor(isExpanded ? null : motor.name)}
+                  className="text-center text-xs text-purple-600 hover:text-purple-800 cursor-pointer font-semibold transition"
+                >
+                  {isExpanded ? '▲ Daha azını görüntüle' : `▼ Hepsini Gör (${remainingCount} Aksiyon Daha)`}
+                </div>
+              )}
 
-              {/* DİĞER AKSİYONLAR (Accordion) */}
+              {/* Diğer Aksiyonlar */}
               {isExpanded && remainingCount > 0 && (
-                <div className="space-y-2 animate-fade-in">
+                <div className="space-y-2">
                   {motor.actions.slice(1).map((action, idx) => (
                     <div
                       key={idx}
@@ -301,6 +317,20 @@ export default function SmartActionCards() {
                       >
                         {action.action}
                       </button>
+                      {/* Rating için küçük kartlarda */}
+                      <div className="mt-2 flex justify-center">
+                        <FeedbackButtons
+                          componentType="action_card"
+                          componentId={action.topic_name}
+                          variant="rating"
+                          size="sm"
+                          metadata={{
+                            motor: motor.name,
+                            topic: action.topic_name,
+                            urgency: action.urgency
+                          }}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>

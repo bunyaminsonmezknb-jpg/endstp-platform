@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import FeedbackButtons from './FeedbackButtons';
 
 interface MotorTopic {
   topic_name: string;
@@ -15,6 +16,7 @@ interface MotorTopic {
   average_interval_days?: number;
   average_success?: number;
   total_tests?: number;
+  days_since_last_test?: number;
 }
 
 interface MotorAnalysisData {
@@ -48,7 +50,6 @@ export default function MotorAnalysisPanel() {
   const [error, setError] = useState<string | null>(null);
   const [selectedMotor, setSelectedMotor] = useState<'all' | 'bs' | 'difficulty' | 'time' | 'priority'>('all');
 
-  // Sayfa yüklendiğinde otomatik analiz yap
   useEffect(() => {
     runAnalysis();
   }, []);
@@ -85,7 +86,6 @@ export default function MotorAnalysisPanel() {
       const data = await response.json();
       setAnalysisData(data);
     } catch (err: any) {
-      console.error('Motor analiz hatası:', err);
       setError(err.message || 'Analiz sırasında hata oluştu');
     } finally {
       setIsLoading(false);
@@ -111,16 +111,18 @@ export default function MotorAnalysisPanel() {
       default: return 'bg-blue-500 text-white';
     }
   };
-const getPriorityText = (level?: string) => {
-  if (!level) return 'BELİRSİZ';
-  switch (level) {
-    case 'CRITICAL': return 'KRİTİK';
-    case 'HIGH': return 'YÜKSEK';
-    case 'MEDIUM': return 'ORTA';
-    case 'LOW': return 'DÜŞÜK';
-    default: return level;
-  }
-};
+
+  const getPriorityText = (level?: string) => {
+    if (!level) return 'BELİRSİZ';
+    switch (level) {
+      case 'CRITICAL': return 'KRİTİK';
+      case 'HIGH': return 'YÜKSEK';
+      case 'MEDIUM': return 'ORTA';
+      case 'LOW': return 'DÜŞÜK';
+      default: return level;
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="bg-white rounded-2xl p-8 shadow-lg">
@@ -277,6 +279,17 @@ const getPriorityText = (level?: string) => {
               Acil tekrar gereken konu yok 🎉
             </div>
           )}
+          
+          {/* Feedback - BS Model */}
+          <div className="mt-4 pt-4 border-t border-gray-200 flex justify-center">
+            <FeedbackButtons
+              componentType="motor_analysis"
+              componentId="bs_model"
+              variant="like-dislike"
+              size="sm"
+              metadata={{ motor: "BS-Model (Akıllı Tekrar)" }}
+            />
+          </div>
         </div>
       )}
 
@@ -300,7 +313,7 @@ const getPriorityText = (level?: string) => {
                   </div>
                   <div className="text-sm text-gray-700 mb-2">{topic.recommendation}</div>
                   <div className="flex gap-4 text-xs text-gray-600">
-                    <span>Ortalama Başarı: %{topic.average_success}</span>
+                    <span>Ortalama Başarı: %{Math.round(topic.average_success || 0)}</span>
                     <span>Test Sayısı: {topic.total_tests}</span>
                   </div>
                 </div>
@@ -311,6 +324,17 @@ const getPriorityText = (level?: string) => {
               Zorlanılan konu yok 🎉
             </div>
           )}
+          
+          {/* Feedback - Difficulty Engine */}
+          <div className="mt-4 pt-4 border-t border-gray-200 flex justify-center">
+            <FeedbackButtons
+              componentType="motor_analysis"
+              componentId="difficulty_engine"
+              variant="like-dislike"
+              size="sm"
+              metadata={{ motor: "Zorluk Analizi" }}
+            />
+          </div>
         </div>
       )}
 
@@ -329,7 +353,7 @@ const getPriorityText = (level?: string) => {
                       <div className="text-sm text-gray-600">{topic.subject_name}</div>
                     </div>
                     <span className="px-3 py-1 rounded-full text-xs font-bold bg-yellow-500 text-white">
-                      {topic.average_interval_days} gün
+                      {Math.round(topic.average_interval_days || 0)} gün
                     </span>
                   </div>
                   <div className="text-sm text-gray-700">{topic.recommendation}</div>
@@ -341,6 +365,17 @@ const getPriorityText = (level?: string) => {
               Hız sorunu yok 🎉
             </div>
           )}
+          
+          {/* Feedback - Time Analyzer */}
+          <div className="mt-4 pt-4 border-t border-gray-200 flex justify-center">
+            <FeedbackButtons
+              componentType="motor_analysis"
+              componentId="time_analyzer"
+              variant="like-dislike"
+              size="sm"
+              metadata={{ motor: "Hız Analizi" }}
+            />
+          </div>
         </div>
       )}
 
@@ -364,7 +399,7 @@ const getPriorityText = (level?: string) => {
                   </div>
                   <div className="text-sm text-gray-700 mb-2">{topic.recommendation}</div>
                   <div className="flex gap-4 text-xs text-gray-600">
-                    <span>Öncelik Skoru: {topic.priority_score}</span>
+                    <span>Öncelik Skoru: {Math.round(topic.priority_score || 0)}</span>
                     <span>Hatırlama: %{topic.remembering_rate}</span>
                   </div>
                 </div>
@@ -375,6 +410,17 @@ const getPriorityText = (level?: string) => {
               Bu hafta öncelikli konu yok 🎉
             </div>
           )}
+          
+          {/* Feedback - Priority Engine */}
+          <div className="mt-4 pt-4 border-t border-gray-200 flex justify-center">
+            <FeedbackButtons
+              componentType="motor_analysis"
+              componentId="priority_engine"
+              variant="like-dislike"
+              size="sm"
+              metadata={{ motor: "Öncelik Motoru" }}
+            />
+          </div>
         </div>
       )}
     </div>

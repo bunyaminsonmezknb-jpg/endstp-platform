@@ -1,7 +1,7 @@
 """
 API Router v1
 """
-
+from app.api.v1.endpoints import feedback
 from fastapi import APIRouter
 from app.api.v1.endpoints import auth, student, admin_osym, admin_exams, test_entry
 
@@ -19,3 +19,4 @@ api_router.include_router(test_entry.router, tags=["test-entry"])
 # Admin
 api_router.include_router(admin_osym.router, prefix="/admin", tags=["admin-osym"])
 api_router.include_router(admin_exams.router, prefix="/admin", tags=["admin-exams"])
+api_router.include_router(feedback.router, tags=["feedback"])
