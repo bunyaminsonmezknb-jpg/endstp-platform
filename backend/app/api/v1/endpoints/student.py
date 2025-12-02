@@ -17,7 +17,7 @@ TURKISH_MONTHS = {
 }
 
 # Sınav tarihi (Config - Gerçekte DB'den gelecek)
-EXAM_DATE = datetime(2025, 6, 15, tzinfo=timezone.utc)
+EXAM_DATE = datetime(2026, 6, 15, tzinfo=timezone.utc)
 
 
 def format_turkish_date(date_obj):
@@ -455,6 +455,456 @@ async def delete_test(test_id: str):
         return {"success": False, "error": "Test bulunamadı"}
     
     return {"success": True, "message": "Test silindi"}
+@router.post("/student/projection")
+async def get_student_projection(request: dict):
+    """
+    Öğrenci ilerleme projeksiyonu
+    """
+    student_id = request.get("student_id")
+    
+    if not student_id:
+        return {"error": "student_id gerekli"}
+    
+    try:
+        supabase = get_supabase_admin()
+        
+        # ✅ DÜZELTME: student_topic_tests tablosundan çek
+        all_tests = supabase.table("student_topic_tests").select(
+            "*, topics(name_tr, subjects(name_tr))"
+        ).eq("student_id", student_id).order("test_date", desc=True).execute()
+        
+        if not all_tests.data:
+            return {
+                "status": "no_data",
+                "projection": {
+                    "total_topics": 0,
+                    "completed_topics": 0,
+                    "remaining_topics": 0,
+                    "progress_percent": 0,
+                    "velocity": 0,
+                    "estimated_days": 0,
+                    "estimated_date": "Veri yetersiz"
+                }
+            }
+        
+        # Topic bazında grupla
+        topic_performance = {}
+        for test in all_tests.data:
+            topic_id = test["topic_id"]
+            if topic_id not in topic_performance:
+                topic_performance[topic_id] = {
+                    "tests": []
+                }
+            topic_performance[topic_id]["tests"].append(test)
+        
+        total_topics = len(topic_performance)
+        
+        # Tamamlanan konular (%85+ hatırlama oranı)
+        completed_topics = []
+        for topic_id, data in topic_performance.items():
+            tests = data["tests"]
+            remembering_rate = calculate_remembering_rate(tests)
+            if remembering_rate >= 85:
+                completed_topics.append({
+                    "topic_id": topic_id,
+                    "completed_at": tests[0]["test_date"]
+                })
+        
+        completed_count = len(completed_topics)
+        remaining_topics = total_topics - completed_count
+        
+        # İlerleme yüzdesi
+        progress_percent = (completed_count / total_topics * 100) if total_topics > 0 else 0
+        
+        # VELOCITY HESAPLAMA
+        from datetime import datetime, timedelta
+        now = datetime.now(timezone.utc)
+        thirty_days_ago = now - timedelta(days=30)
+        
+        recent_completions = [
+            c for c in completed_topics 
+            if datetime.fromisoformat(c["completed_at"].replace('Z', '+00:00')) >= thirty_days_ago
+        ]
+        
+        velocity = len(recent_completions) / 30
+        
+        if velocity == 0 and completed_count > 0:
+            # Tüm geçmişe göre hesapla
+            first_test_date = min([test["test_date"] for test in all_tests.data])
+            days_since_start = (now - datetime.fromisoformat(first_test_date.replace('Z', '+00:00'))).days
+            if days_since_start > 0:
+                velocity = completed_count / max(days_since_start, 1)
+        
+        # TAHMİNİ SÜRE
+        if velocity > 0 and remaining_topics > 0:
+            estimated_days = int(remaining_topics / velocity)
+        elif remaining_topics == 0:
+            estimated_days = 0
+        else:
+            # Varsayılan: Haftada 2 konu
+            estimated_days = int(remaining_topics * 3.5)
+        
+        # TAHMİNİ TARİH - TÜRKÇE
+        estimated_date_obj = now + timedelta(days=estimated_days)
+        estimated_date = format_turkish_date(estimated_date_obj)
+        
+        return {
+            "status": "success",
+            "projection": {
+                "total_topics": total_topics,
+                "completed_topics": completed_count,
+                "remaining_topics": remaining_topics,
+                "progress_percent": round(progress_percent, 1),
+                "velocity": round(velocity, 2),
+                "estimated_days": estimated_days,
+                "estimated_date": estimated_date
+            }
+        }
+        
+    except Exception as e:
+        print(f"Projection error: {str(e)}")
+        return {"error": str(e)}
+@router.post("/student/goal")
+async def get_university_goal(request: dict):
+    """
+    Üniversite hedefi ilerlemesi (MVP - 12. sınıf için)
+    """
+    student_id = request.get("student_id")
+    
+    if not student_id:
+        return {"error": "student_id gerekli"}
+    
+    try:
+        supabase = get_supabase_admin()
+        
+        # Öğrencinin tüm testlerini al
+        all_tests = supabase.table("student_topic_tests").select(
+            "*, topics(name_tr, subjects(name_tr))"
+        ).eq("student_id", student_id).order("test_date", desc=True).execute()
+        
+        if not all_tests.data:
+            return {
+                "status": "no_data",
+                "active_goal": None,
+                "ladder": []
+            }
+        
+        # Ders bazlı net hesaplama
+        subject_stats = {}
+        for test in all_tests.data:
+            subject = test["topics"]["subjects"]["name_tr"] if test.get("topics") and test["topics"].get("subjects") else "Diğer"
+            
+            if subject not in subject_stats:
+                subject_stats[subject] = {
+                    'total_correct': 0,
+                    'total_questions': 0
+                }
+            
+            subject_stats[subject]['total_correct'] += test['correct_count']
+            subject_stats[subject]['total_questions'] += (test['correct_count'] + test['wrong_count'] + test['empty_count'])
+        
+        # TYT Tahmini (120 soru: Türkçe 40, Matematik 40, Sosyal 20, Fen 20)
+        tyt_structure = {
+            'Türkçe': 40,
+            'Matematik': 40,
+            'Sosyal Bilimler': 20,
+            'Fen Bilimleri': 20
+        }
+        
+        tyt_subjects = []
+        tyt_total = 0
+        for subject, question_count in tyt_structure.items():
+            stats = subject_stats.get(subject, {'total_correct': 0, 'total_questions': 1})
+            ratio = stats['total_correct'] / stats['total_questions'] if stats['total_questions'] > 0 else 0
+            estimated = int(question_count * ratio)
+            
+            tyt_subjects.append({
+                'name': subject,
+                'current': estimated,
+                'target': question_count
+            })
+            tyt_total += estimated
+        
+        # AYT Sayısal Tahmini (80 soru: Mat 40, Fiz 14, Kim 13, Bio 13)
+        ayt_structure = {
+            'Matematik': 40,
+            'Fizik': 14,
+            'Kimya': 13,
+            'Biyoloji': 13
+        }
+        
+        ayt_subjects = []
+        ayt_total = 0
+        for subject, question_count in ayt_structure.items():
+            stats = subject_stats.get(subject, {'total_correct': 0, 'total_questions': 1})
+            ratio = stats['total_correct'] / stats['total_questions'] if stats['total_questions'] > 0 else 0
+            estimated = int(question_count * ratio)
+            
+            ayt_subjects.append({
+                'name': subject,
+                'current': estimated,
+                'target': question_count
+            })
+            ayt_total += estimated
+        
+        # Hedef tercihler (Mock data - gerçekte DB'den gelecek)
+        GOALS = [
+            {"priority": 1, "university": "Konya Teknik Ünv.", "department": "Bilgisayar Müh.", "tyt": 80, "ayt": 50},
+            {"priority": 2, "university": "Antalya Bilim Ünv.", "department": "Bilgisayar Müh.", "tyt": 85, "ayt": 60},
+            {"priority": 3, "university": "Selçuk Üniversitesi", "department": "Bilgisayar Müh.", "tyt": 100, "ayt": 76},
+            {"priority": 4, "university": "Ankara Üniversitesi", "department": "Bilgisayar Müh.", "tyt": 105, "ayt": 80},
+            {"priority": 5, "university": "İTÜ", "department": "Bilgisayar Müh.", "tyt": 110, "ayt": 85},
+        ]
+        
+        # Aktif hedef (3. tercih)
+        active_goal = GOALS[2]
+        
+        # TYT progress
+        tyt_progress = min(100, int((tyt_total / active_goal["tyt"]) * 100))
+        tyt_remaining = max(0, active_goal["tyt"] - tyt_total)
+        
+        # AYT progress
+        ayt_progress = min(100, int((ayt_total / active_goal["ayt"]) * 100))
+        ayt_remaining = max(0, active_goal["ayt"] - ayt_total)
+        
+        # Genel progress (ağırlıklı: TYT %40, AYT %60)
+        overall_progress = int((tyt_progress * 0.4) + (ayt_progress * 0.6))
+        
+        # Sınava kalan gün
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        exam_date = datetime(2026, 6, 15, tzinfo=timezone.utc)
+        days_remaining = (exam_date - now).days
+        
+        # Günlük artış gerekliliği (TYT için)
+        if tyt_remaining > 0 and days_remaining > 0:
+            tyt_daily_increase = round(tyt_remaining / days_remaining, 1)
+        else:
+            tyt_daily_increase = 0.0
+
+        # Günlük artış gerekliliği (AYT için)
+        if ayt_remaining > 0 and days_remaining > 0:
+            ayt_daily_increase = round(ayt_remaining / days_remaining, 1)
+        else:
+            ayt_daily_increase = 0.0
+        
+        # Merdiven (5 tercih)
+        ladder = []
+        for goal in GOALS:
+            tyt_p = min(100, int((tyt_total / goal["tyt"]) * 100))
+            ayt_p = min(100, int((ayt_total / goal["ayt"]) * 100))
+            combined_p = int((tyt_p * 0.4) + (ayt_p * 0.6))
+            
+            if combined_p >= 100:
+                status = "achieved"
+            elif combined_p >= 80:
+                status = "close"
+            elif combined_p >= 50:
+                status = "inProgress"
+            else:
+                status = "distant"
+            
+            ladder.append({
+                "priority": goal["priority"],
+                "universityName": goal["university"],
+                "departmentName": goal["department"],
+                "requiredTYT": goal["tyt"],
+                "requiredAYT": goal["ayt"],
+                "currentProgress": combined_p,
+                "status": status
+            })
+        
+        return {
+            "status": "success",
+            "overall_progress": overall_progress,
+            "days_remaining": days_remaining,
+            "tyt": {
+                "current_net": tyt_total,
+                "target_net": active_goal["tyt"],
+                "progress_percent": tyt_progress,
+                "remaining_net": tyt_remaining,
+                "daily_increase_needed": tyt_daily_increase,  # ← YENİ
+                "subjects": tyt_subjects
+            },
+            "ayt": {
+                "current_net": ayt_total,
+                "target_net": active_goal["ayt"],
+                "progress_percent": ayt_progress,
+                "remaining_net": ayt_remaining,
+                "daily_increase_needed": ayt_daily_increase,  # ← Değişken adı
+                "subjects": ayt_subjects
+            },
+            "active_goal": {
+                "university": active_goal["university"],
+                "department": active_goal["department"],
+                "level": active_goal["priority"]
+            },
+            "ladder": ladder
+        }
+        
+    except Exception as e:
+        print(f"Goal error: {str(e)}")
+        return {"error": str(e)}
+@router.get("/student/todays-tasks")
+async def get_todays_tasks(student_id: str, date: str = None):
+    """
+    Öğrencinin bugünkü görevlerini getir
+    
+    Args:
+        student_id: Öğrenci UUID
+        date: YYYY-MM-DD formatında tarih (opsiyonel, bugün)
+    """
+    from datetime import datetime, timezone, timedelta
+    
+    if not date:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    try:
+        supabase = get_supabase_admin()
+        
+        # Bugün için görevler zaten var mı?
+        existing_tasks = supabase.table("student_tasks").select("*").eq(
+            "student_id", student_id
+        ).eq(
+            "task_date", date
+        ).execute()
+        
+        # Eğer bugün için görev varsa, onları döndür
+        if existing_tasks.data:
+            tasks = []
+            for task in existing_tasks.data:
+                tasks.append({
+                    "id": task["id"],
+                    "type": task["task_type"],
+                    "topic_name": task["topic_name"],
+                    "subject_id": task["subject_id"],
+                    "source_motor": task["source_motor"],
+                    "priority_level": task["priority_level"],
+                    "estimated_time_minutes": task["estimated_time_minutes"],
+                    "question_count": task.get("question_count"),
+                    "status": task["status"],
+                    "completed_at": task.get("completed_at")
+                })
+            
+            total_time = sum([t["estimated_time_minutes"] for t in tasks if t["status"] == "pending"])
+            
+            return {
+                "status": "success",
+                "tasks": tasks,
+                "total_estimated_time": total_time,
+                "date": date
+            }
+        
+        # Görev yoksa, yeni görevler oluştur
+        tasks = []
+        
+        # 1. BS-Model Tekrar Planı (bugün tekrar zamanı gelen)
+        # TODO: BS-Model entegrasyonu sonra eklenecek
+        # bs_tasks = get_bs_model_tasks(student_id, date)
+        
+        # 2. Acil Unutma Uyarıları
+        # TODO: Unutma eğrisi hesaplaması sonra
+        
+        # 3. FALLBACK: En düşük başarılı 3 konu (şimdilik mock)
+        # Gerçek veri için: success_rate hesapla, en düşük 3 konuyu seç
+        
+        all_tests = supabase.table("student_topic_tests").select(
+            "*, topics(name_tr, subjects(name_tr, id))"
+        ).eq("student_id", student_id).eq("is_analysis_eligible", True).execute()
+        
+        if not all_tests.data:
+            return {
+                "status": "no_data",
+                "tasks": [],
+                "total_estimated_time": 0
+            }
+        
+        # Konu bazında başarı oranı hesapla
+        topic_stats = {}
+        for test in all_tests.data:
+            topic_id = test["topic_id"]
+            topic_name = test["topics"]["name_tr"] if test.get("topics") else "Bilinmeyen Konu"
+            subject_id = test["topics"]["subjects"]["id"] if test.get("topics") and test["topics"].get("subjects") else None
+            
+            if topic_id not in topic_stats:
+                topic_stats[topic_id] = {
+                    "topic_name": topic_name,
+                    "subject_id": subject_id,
+                    "total_questions": 0,
+                    "total_correct": 0,
+                    "test_count": 0
+                }
+            
+            topic_stats[topic_id]["total_questions"] += (test["correct_count"] + test["wrong_count"] + test["empty_count"])
+            topic_stats[topic_id]["total_correct"] += test["correct_count"]
+            topic_stats[topic_id]["test_count"] += 1
+        
+        # Başarı oranı hesapla
+        for topic_id, stats in topic_stats.items():
+            if stats["total_questions"] > 0:
+                stats["success_rate"] = (stats["total_correct"] / stats["total_questions"]) * 100
+            else:
+                stats["success_rate"] = 0
+        
+        # En düşük başarılı 5 konu seç
+        sorted_topics = sorted(topic_stats.items(), key=lambda x: x[1]["success_rate"])[:5]
+        
+        # Görevleri oluştur
+        for i, (topic_id, stats) in enumerate(sorted_topics):
+            # İlk 2 test görevi, son 3 çalışma görevi
+            if i < 2:
+                task_type = "test"
+                estimated_time = 20  # 10 soru * 2 dk
+                question_count = 10
+            else:
+                task_type = "study"
+                estimated_time = 25
+                question_count = None
+            
+            task = {
+                "student_id": student_id,
+                "task_date": date,
+                "task_type": task_type,
+                "topic_id": topic_id,
+                "subject_id": stats["subject_id"],
+                "topic_name": stats["topic_name"],
+                "source_motor": "fallback",
+                "priority_level": i + 1,  # 1-5
+                "estimated_time_minutes": estimated_time,
+                "question_count": question_count,
+                "status": "pending"
+            }
+            
+            # Veritabanına ekle
+            result = supabase.table("student_tasks").insert(task).execute()
+            
+            tasks.append({
+                "id": result.data[0]["id"],
+                "type": task_type,
+                "topic_name": stats["topic_name"],
+                "subject_id": stats["subject_id"],
+                "source_motor": "fallback",
+                "priority_level": i + 1,
+                "estimated_time_minutes": estimated_time,
+                "question_count": question_count,
+                "status": "pending",
+                "completed_at": None
+            })
+        
+        total_time = sum([t["estimated_time_minutes"] for t in tasks])
+        
+        return {
+            "status": "success",
+            "tasks": tasks,
+            "total_estimated_time": total_time,
+            "date": date
+        }
+        
+    except Exception as e:
+        print(f"Todays tasks error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
 @router.post("/student/analyze")
 async def analyze_student_performance(request: dict):
     """

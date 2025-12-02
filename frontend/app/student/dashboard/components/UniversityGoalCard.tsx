@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
+import FeedbackButtons from './FeedbackButtons';
 
-// Arayüz Tanımlamaları (Mevcut kodlardan birleştirildi)
+// Arayüz Tanımlamaları
 interface SubjectGoal {
   name: string;
   current: number;
@@ -10,55 +11,98 @@ interface SubjectGoal {
 }
 
 interface UniversityGoal {
-  priority: number; // 1-5
+  priority: number;
   universityName: string;
   departmentName: string;
-  requiredScore: number;
-  currentProgress: number; // 0-100
+  requiredTYT: number;
+  requiredAYT: number;
+  currentProgress: number;
   status: 'achieved' | 'close' | 'inProgress' | 'distant';
 }
 
-interface UniversityGoalCardProps {
-  goals?: UniversityGoal[];
+interface GoalData {
+  overall_progress: number;
+  days_remaining: number;
+  tyt: {
+    current_net: number;
+    target_net: number;
+    progress_percent: number;
+    remaining_net: number;
+    daily_increase_needed: number;
+    subjects: SubjectGoal[];
+  };
+  ayt: {
+    current_net: number;
+    target_net: number;
+    progress_percent: number;
+    remaining_net: number;
+    daily_increase_needed: number;
+    subjects: SubjectGoal[];
+  };
+  active_goal: {
+    university: string;
+    department: string;
+    level: number;
+  };
+  ladder: UniversityGoal[];
 }
 
-// DEMO DATA (Birleştirilmiş ve Geliştirilmiş)
-const DEMO_GOALS: UniversityGoal[] = [
-  // ... (Mevcut DEMO_GOALS verisi buraya eklenecek)
-  { priority: 1, universityName: 'Konya Teknik Ünv.', departmentName: 'Bilgisayar Müh.', requiredScore: 450, currentProgress: 85, status: 'achieved' },
-  { priority: 2, universityName: 'Antalya Bilim Ünv.', departmentName: 'Bilgisayar Müh.', requiredScore: 475, currentProgress: 65, status: 'close' },
-  { priority: 3, universityName: 'Ankara Üniversitesi', departmentName: 'Bilgisayar Müh.', requiredScore: 500, currentProgress: 45, status: 'inProgress' },
-  { priority: 4, universityName: 'İstanbul Medeniyet', departmentName: 'Bilgisayar Müh.', requiredScore: 525, currentProgress: 25, status: 'distant' },
-  { priority: 5, universityName: 'İstanbul Teknik Ünv.', departmentName: 'Bilgisayar Müh.', requiredScore: 550, currentProgress: 10, status: 'distant' }
-];
-
-// AKTİF HEDEF DATA (Mock data, merdivenden ayrı tutulur)
-const ACTIVE_GOAL_DATA = {
-  university: "Selçuk Üniversitesi", // Önceki görsellerdeki hedef
-  department: "Bilgisayar Mühendisliği",
-  level: 3, // (3. Tercih)
-  targetNet: 400,
-  currentNet: 280,
-  progressPercent: 70,
-  remainingNet: 120,
-  daysToReach: 60,
-  dailyIncreaseNeeded: 2.0,
-  subjects: [
-    { name: "Matematik", current: 8, target: 12 },
-    { name: "Fizik", current: 6, target: 10 },
-    { name: "Kimya", current: 7, target: 9 },
-    { name: "Biyoloji", current: 5, target: 8 },
-  ] as SubjectGoal[],
-};
-
-export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoalCardProps) {
-  // 1. Durum Yönetimi
+export default function UniversityGoalCard() {
+  const [goalData, setGoalData] = useState<GoalData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showLadder, setShowLadder] = useState(false);
-  const [showActiveDetails, setShowActiveDetails] = useState(false); // Yeni detay açma/kapama durumu
+  const [showTYTDetails, setShowTYTDetails] = useState(false);
+  const [showAYTDetails, setShowAYTDetails] = useState(false);
 
-  // Helper fonksiyonları (Mevcut kodlardan kopyalandı)
+  useEffect(() => {
+    fetchGoalData();
+  }, []);
+
+  const fetchGoalData = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const userStr = localStorage.getItem('user');
+      const accessToken = localStorage.getItem('access_token');
+
+      if (!userStr || !accessToken) {
+        throw new Error('Lütfen giriş yapın');
+      }
+
+      const user = JSON.parse(userStr);
+
+      const response = await fetch('http://localhost:8000/api/v1/student/goal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          student_id: user.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Hedef bilgisi alınamadı');
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'no_data') {
+        setGoalData(null);
+      } else {
+        setGoalData(data);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Hedef bilgisi yüklenemedi');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
-    // ... (Mevcut getStatusIcon fonksiyonu)
     switch (status) {
       case 'achieved': return '🟢';
       case 'close': return '🟡';
@@ -69,7 +113,6 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
   };
 
   const getStatusText = (status: string) => {
-    // ... (Mevcut getStatusText fonksiyonu)
     switch (status) {
       case 'achieved': return 'Başarıldı';
       case 'close': return 'Çok Yakın';
@@ -78,9 +121,8 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
       default: return '';
     }
   };
-  
+
   const getStatusColor = (status: string) => {
-    // ... (Mevcut getStatusColor fonksiyonu)
     switch (status) {
       case 'achieved': return 'bg-green-500';
       case 'close': return 'bg-yellow-500';
@@ -90,23 +132,6 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
     }
   };
 
-  const calculateOverallProgress = () => {
-    // ... (Mevcut calculateOverallProgress fonksiyonu)
-    const weights = [1, 2, 3, 4, 5]; // Priority 5 en yüksek ağırlık
-    let totalWeighted = 0;
-    let totalWeight = 0;
-
-    goals.forEach((goal, index) => {
-      totalWeighted += goal.currentProgress * weights[index];
-      totalWeight += weights[index];
-    });
-
-    return Math.round(totalWeighted / totalWeight);
-  };
-
-  const overallCalc = calculateOverallProgress();
-  
-  // Aktif Hedef için Renkler
   const getProgressColor = (percent: number) => {
     if (percent >= 80) return 'from-green-400 to-green-600';
     if (percent >= 60) return 'from-yellow-400 to-yellow-600';
@@ -119,13 +144,56 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
     return '📈';
   };
 
-  // Aktif Hedef Verisi
-  const goal = ACTIVE_GOAL_DATA;
+  if (isLoading) {
+    return (
+      <div className="bg-purple-100 rounded-2xl p-8 shadow-lg min-w-80">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Hedef bilgisi yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
 
+  if (error) {
+    return (
+      <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-6 min-w-80">
+        <div className="text-center">
+          <div className="text-4xl mb-2">⚠️</div>
+          <div className="text-red-700 font-bold mb-2">Hedef Bilgisi Hatası</div>
+          <div className="text-sm text-red-600 mb-4">{error}</div>
+          <button
+            onClick={fetchGoalData}
+            className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
+          >
+            Tekrar Dene
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!goalData) {
+    return (
+      <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-8 text-center min-w-80">
+        <div className="text-6xl mb-4">🎯</div>
+        <h3 className="text-xl font-bold text-gray-800 mb-2">Henüz Hedef Verisi Yok</h3>
+        <p className="text-gray-600 mb-4">
+          Hedef hesaplayabilmek için önce test sonuçları girmelisiniz.
+        </p>
+        <a
+          href="/test-entry"
+          className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700"
+        >
+          Test Ekle
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-2xl p-6 shadow-xl min-w-80">
-      {/* -------------------- ANA BAŞLIK BÖLÜMÜ (Sabit) -------------------- */}
+      {/* ANA BAŞLIK */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="text-5xl">🏆</div>
@@ -135,7 +203,7 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
               Hedefine Doğru İlerliyorsun
             </div>
             <div className="text-xs opacity-75 mt-1">
-              Genel İlerleme: <span className="font-bold">%{overallCalc}</span>
+              Genel İlerleme: <span className="font-bold">%{goalData.overall_progress}</span>
             </div>
           </div>
         </div>
@@ -143,136 +211,210 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
         {/* İlerleme Halkası */}
         <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
           <svg viewBox="0 0 100 100" className="transform -rotate-90">
-            {/* Arkaplan Çizgisi */}
             <circle cx="50" cy="50" r="45" stroke="rgba(255,255,255,0.2)" strokeWidth="8" fill="none" />
-            {/* İlerleme Çizgisi */}
             <circle
               cx="50" cy="50" r="45" stroke="white" strokeWidth="8" fill="none"
               strokeDasharray="282.6"
-              strokeDashoffset={282.6 * (1 - overallCalc / 100)}
+              strokeDashoffset={282.6 * (1 - goalData.overall_progress / 100)}
               strokeLinecap="round"
               className="transition-all duration-1000"
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-lg font-bold">{overallCalc}%</span>
+            <span className="text-lg font-bold">{goalData.overall_progress}%</span>
           </div>
         </div>
       </div>
-      
-      {/* -------------------- ANA İÇERİK BÖLÜMÜ (Dinamik) -------------------- */}
+
+      {/* ANA İÇERİK */}
       <div className={`mt-6 pt-6 ${!showLadder ? 'border-t border-white/20' : ''}`}>
         
-        {/* MERDİVEN GİZLİ (Aktif Hedef Görünümü) */}
+        {/* MERDİVEN GİZLİ - AKTİF HEDEF */}
         {!showLadder && (
           <div className="space-y-4">
-            {/* Aktif Hedef Özet Alanı (Beyaz Karttan Kopyalandı) */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border-2 border-white/30 transition-all duration-300">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border-2 border-white/30">
               
-              {/* Başlık ve Net Bilgisi */}
+              {/* Başlık */}
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">{getStatusEmoji(goal.progressPercent)}</span>
+                <span className="text-2xl">{getStatusEmoji(goalData.overall_progress)}</span>
                 <div className="flex-1">
-                  <div className="text-xs opacity-90 font-medium">Aktif Hedef ({goal.level}. Tercih)</div>
-                  <div className="text-lg font-bold leading-tight">{goal.university}</div>
-                  <div className="text-xs opacity-75">{goal.department}</div>
+                  <div className="text-xs opacity-90 font-medium">Aktif Hedef ({goalData.active_goal.level}. Tercih)</div>
+                  <div className="text-lg font-bold leading-tight">{goalData.active_goal.university}</div>
+                  <div className="text-xs opacity-75">{goalData.active_goal.department}</div>
                 </div>
               </div>
 
-              {/* Progress Bar ve Özet */}
+              {/* TYT BÖLÜMÜ */}
               <div className="bg-white/10 rounded-lg p-3 mb-3">
                 <div className="flex justify-between items-center mb-2">
+                  <div className="text-sm font-bold">📘 TYT</div>
                   <div className="text-sm">
-                    <span className="opacity-75">Mevcut Net:</span>
-                    <span className="font-bold ml-2 text-xl">{goal.currentNet}</span>
-                  </div>
-                  <div className="text-sm">
-                    <span className="opacity-75">Hedef:</span>
-                    <span className="font-bold ml-2 text-xl">{goal.targetNet}</span>
+                    <span className="font-bold text-xl">{goalData.tyt.current_net}</span>
+                    <span className="opacity-75">/{goalData.tyt.target_net}</span>
                   </div>
                 </div>
                 <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
                   <div
-                    className={`h-full bg-gradient-to-r ${getProgressColor(goal.progressPercent)} transition-all duration-1000`}
-                    style={{ width: `${goal.progressPercent}%` }}
+                    className={`h-full bg-gradient-to-r ${getProgressColor(goalData.tyt.progress_percent)} transition-all duration-1000`}
+                    style={{ width: `${goalData.tyt.progress_percent}%` }}
                   />
                 </div>
                 <div className="flex justify-between text-xs opacity-75 mt-1">
                   <span>0</span>
-                  <span className="font-bold">%{goal.progressPercent}</span>
-                  <span>{goal.targetNet}</span>
+                  <span className="font-bold">%{goalData.tyt.progress_percent}</span>
+                  <span>{goalData.tyt.target_net}</span>
                 </div>
+                
+                {/* TYT Detaylar */}
+                <button
+                  onClick={() => setShowTYTDetails(!showTYTDetails)}
+                  className="mt-2 text-xs opacity-75 hover:opacity-100 transition-opacity underline w-full text-center"
+                >
+                  {showTYTDetails ? '▲ Ders detaylarını gizle' : '▼ Ders detaylarını göster'}
+                </button>
+                
+                {showTYTDetails && (
+                  <div className="mt-3 pt-3 border-t border-white/20 space-y-2">
+                    {goalData.tyt.subjects.map((subject, index) => {
+                      const subjectProgress = (subject.current / subject.target) * 100;
+                      return (
+                        <div key={index} className="bg-white/5 rounded-lg p-2">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium">{subject.name}</span>
+                            <span className="opacity-75">{subject.current} / {subject.target} net</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-white/60 transition-all"
+                              style={{ width: `${subjectProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* AYT BÖLÜMÜ */}
+              <div className="bg-white/10 rounded-lg p-3 mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <div className="text-sm font-bold">📗 AYT</div>
+                  <div className="text-sm">
+                    <span className="font-bold text-xl">{goalData.ayt.current_net}</span>
+                    <span className="opacity-75">/{goalData.ayt.target_net}</span>
+                  </div>
+                </div>
+                <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full bg-gradient-to-r ${getProgressColor(goalData.ayt.progress_percent)} transition-all duration-1000`}
+                    style={{ width: `${goalData.ayt.progress_percent}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs opacity-75 mt-1">
+                  <span>0</span>
+                  <span className="font-bold">%{goalData.ayt.progress_percent}</span>
+                  <span>{goalData.ayt.target_net}</span>
+                </div>
+                
+                {/* AYT Detaylar */}
+                <button
+                  onClick={() => setShowAYTDetails(!showAYTDetails)}
+                  className="mt-2 text-xs opacity-75 hover:opacity-100 transition-opacity underline w-full text-center"
+                >
+                  {showAYTDetails ? '▲ Ders detaylarını gizle' : '▼ Ders detaylarını göster'}
+                </button>
+                
+                {showAYTDetails && (
+                  <div className="mt-3 pt-3 border-t border-white/20 space-y-2">
+                    {goalData.ayt.subjects.map((subject, index) => {
+                      const subjectProgress = (subject.current / subject.target) * 100;
+                      return (
+                        <div key={index} className="bg-white/5 rounded-lg p-2">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium">{subject.name}</span>
+                            <span className="opacity-75">{subject.current} / {subject.target} net</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-white/60 transition-all"
+                              style={{ width: `${subjectProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               
-              {/* Durum Mesajı (120 net daha gerekli vb.) */}
+              {/* DURUM MESAJI */}
               <div className="space-y-2 text-sm">
-                {goal.remainingNet > 0 && (
+                {/* Sınav Tarihi Geçtiyse */}
+                {goalData.days_remaining <= 0 && (
+                  <div className="flex items-center gap-2 bg-red-500/20 rounded-lg p-2">
+                    <span className="text-red-200">⚠️</span>
+                    <span className="text-red-200">
+                      Sınav tarihi geçti! Yeni bir hedef ve tarih belirlemelisin.
+                    </span>
+                  </div>
+                )}
+                
+                {/* Sınav Henüz Gelmemişse */}
+                {goalData.days_remaining > 0 && (
                   <>
+                    {/* TYT Mesajı */}
+                    {goalData.tyt.remaining_net > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-blue-200">📘</span>
+                        <span>
+                          <strong>{goalData.tyt.remaining_net} net</strong> daha gerekli (TYT)
+                          {goalData.tyt.daily_increase_needed > 0 && (
+                            <> • Günde <strong>{goalData.tyt.daily_increase_needed}</strong> net artırsan yetişir</>
+                          )}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 bg-green-500/20 rounded-lg p-2">
+                        <span className="text-green-200">🎉</span>
+                        <span className="text-green-200 font-bold">TYT hedefini başardın!</span>
+                      </div>
+                    )}
+                    
+                    {/* AYT Mesajı */}
+                    {goalData.ayt.remaining_net > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-200">📗</span>
+                        <span>
+                          <strong>{goalData.ayt.remaining_net} net</strong> daha gerekli (AYT)
+                          {goalData.ayt.daily_increase_needed > 0 && (
+                            <> • Günde <strong>{goalData.ayt.daily_increase_needed}</strong> net artırsan yetişir</>
+                          )}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 bg-green-500/20 rounded-lg p-2">
+                        <span className="text-green-200">🎉</span>
+                        <span className="text-green-200 font-bold">AYT hedefini başardın!</span>
+                      </div>
+                    )}
+                    
+                    {/* Geri Sayım */}
                     <div className="flex items-center gap-2">
-                      <span className="text-orange-200">⚠️</span>
-                      <span><strong>{goal.remainingNet} net</strong> daha gerekli</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-blue-200">💡</span>
-                      <span>
-                        Günde <strong>{goal.dailyIncreaseNeeded} net</strong> artırsan{' '}
-                        <strong>{goal.daysToReach} günde</strong> hedefe ulaşırsın
-                      </span>
+                      <span className="text-yellow-200">⏰</span>
+                      <span>Sınava <strong>{goalData.days_remaining} gün</strong> kaldı!</span>
                     </div>
                   </>
                 )}
               </div>
-              
-              {/* Aktif Detayları Göster Butonu */}
-              <button
-                onClick={() => setShowActiveDetails(!showActiveDetails)}
-                className="mt-4 text-xs opacity-75 hover:opacity-100 transition-opacity underline w-full text-center"
-              >
-                {showActiveDetails ? '▲ Ders detaylarını gizle' : '▼ Ders detaylarını göster'}
-              </button>
-              
-              {/* Aktif Detaylar (Ders Bazlı Net) */}
-              {showActiveDetails && goal.subjects && (
-                <div className="mt-3 pt-3 border-t border-white/20 space-y-2 animate-fade-in">
-                  <div className="text-xs font-bold opacity-90 mb-2">📚 DERS BAZLI HEDEFLER</div>
-                  {goal.subjects.map((subject, index) => {
-                    const subjectProgress = (subject.current / subject.target) * 100;
-                    const subjectRemaining = subject.target - subject.current;
-                    return (
-                      <div key={index} className="bg-white/5 rounded-lg p-2">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="font-medium">{subject.name}</span>
-                          <span className="opacity-75">
-                            {subject.current} / {subject.target} net
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-white/60 transition-all"
-                            style={{ width: `${subjectProgress}%` }}
-                          />
-                        </div>
-                        {subjectRemaining > 0 && (
-                          <div className="text-xs opacity-75 mt-1">
-                            **+{subjectRemaining} net gerekli**
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              
             </div>
-            
           </div>
         )}
 
-        {/* MERDİVEN AÇIK (5 Tercihli Merdiven Görünümü) */}
+        {/* MERDİVEN AÇIK */}
         {showLadder && (
           <div className="space-y-3 animate-fade-in">
-            {/* Merdiven Detayları */}
-            {[...goals].reverse().map((goal) => (
+            {[...goalData.ladder].reverse().map((goal) => (
               <div
                 key={goal.priority}
                 className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-all cursor-pointer"
@@ -293,7 +435,6 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
                   </div>
                 </div>
 
-                {/* İlerleme Barı */}
                 <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
                   <div
                     className={`h-full ${getStatusColor(goal.status)} transition-all duration-500`}
@@ -301,14 +442,12 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
                   />
                 </div>
 
-                {/* Net Bilgisi */}
                 <div className="mt-2 text-xs opacity-75">
-                  Gereken Net: <span className="font-semibold">{goal.requiredScore}</span>
+                  TYT: {goal.requiredTYT} • AYT: {goal.requiredAYT}
                 </div>
               </div>
             ))}
 
-            {/* Motivasyon Mesajı */}
             <div className="bg-yellow-500/20 rounded-xl p-3 text-xs">
               <span className="font-bold">💡 Koçluk İpucu:</span> En üst hedefine odaklan, 
               diğerleri doğal olarak gelecek!
@@ -317,19 +456,33 @@ export default function UniversityGoalCard({ goals = DEMO_GOALS }: UniversityGoa
         )}
       </div>
 
-      {/* -------------------- Merdiven Açma/Kapama Butonu -------------------- */}
+      {/* MERDİVEN AÇMA/KAPAMA */}
       <button
         onClick={() => {
           setShowLadder(!showLadder);
-          // Merdiven açıldığında ders detaylarını gizlemek iyi bir UX kuralıdır.
           if (!showLadder) {
-            setShowActiveDetails(false);
+            setShowTYTDetails(false);
+            setShowAYTDetails(false);
           }
         }}
         className="mt-4 text-xs opacity-75 hover:opacity-100 transition-opacity underline w-full text-center"
       >
         {showLadder ? '▲ Merdiveni Gizle' : '▼ Merdiveni Göster'}
       </button>
+
+      {/* FEEDBACK BUTONU */}
+      <div className="mt-4 pt-4 border-t border-white/20 flex justify-center">
+        <FeedbackButtons
+          componentType="goal_card"
+          variant="like-dislike"
+          size="sm"
+          metadata={{ 
+            overall_progress: goalData.overall_progress,
+            tyt_progress: goalData.tyt.progress_percent,
+            ayt_progress: goalData.ayt.progress_percent
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -1,18 +1,119 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import FeedbackButtons from './FeedbackButtons';
 
-interface ProjectionCardProps {
-  projection: {
-    totalTopics: number;
-    completedTopics: number;
-    estimatedDays: number;
-    estimatedDate: string;
-  };
+interface ProjectionData {
+  totalTopics: number;
+  completedTopics: number;
+  estimatedDays: number;
+  estimatedDate: string;
 }
 
-export default function ProjectionCard({ projection }: ProjectionCardProps) {
+export default function ProjectionCard() {
+  const [projection, setProjection] = useState<ProjectionData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+
+  useEffect(() => {
+    fetchProjection();
+  }, []);
+
+  const fetchProjection = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const userStr = localStorage.getItem('user');
+      const accessToken = localStorage.getItem('access_token');
+
+      if (!userStr || !accessToken) {
+        throw new Error('Lütfen giriş yapın');
+      }
+
+      const user = JSON.parse(userStr);
+
+      const response = await fetch('http://localhost:8000/api/v1/student/projection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          student_id: user.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Projeksiyon alınamadı');
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'no_data') {
+        setProjection(null);
+      } else if (data.projection) {
+        setProjection({
+          totalTopics: data.projection.total_topics || data.projection.totalTopics,
+          completedTopics: data.projection.completed_topics || data.projection.completedTopics,
+          estimatedDays: data.projection.estimated_days || data.projection.estimatedDays,
+          estimatedDate: data.projection.estimated_date || data.projection.estimatedDate,
+        });
+      }
+    } catch (err: any) {
+      setError(err.message || 'Projeksiyon yüklenemedi');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-purple-100 rounded-2xl p-8 shadow-lg">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Projeksiyon hesaplanıyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-6">
+        <div className="text-center">
+          <div className="text-4xl mb-2">⚠️</div>
+          <div className="text-red-700 font-bold mb-2">Projeksiyon Hatası</div>
+          <div className="text-sm text-red-600 mb-4">{error}</div>
+          <button
+            onClick={fetchProjection}
+            className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
+          >
+            Tekrar Dene
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!projection) {
+    return (
+      <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-8 text-center">
+        <div className="text-6xl mb-4">📊</div>
+        <h3 className="text-xl font-bold text-gray-800 mb-2">Henüz Projeksiyon Verisi Yok</h3>
+        <p className="text-gray-600 mb-4">
+          Projeksiyon hesaplayabilmek için önce test sonuçları girmelisiniz.
+        </p>
+        <a
+          href="/test-entry"
+          className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700"
+        >
+          Test Ekle
+        </a>
+      </div>
+    );
+  }
 
   // Kalan konuları hesapla
   const remainingTopics = projection.totalTopics - projection.completedTopics;
@@ -20,7 +121,7 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
   // İlerleme yüzdesi
   const progressPercent = (projection.completedTopics / projection.totalTopics) * 100;
   
-  // ✅ VELOCITY DÜZELTMESİ - Daha anlamlı format
+  // VELOCITY DÜZELTMESİ - Daha anlamlı format
   const formatVelocity = () => {
     if (remainingTopics === 0) return 'Tamamlandı! 🎉';
     if (projection.estimatedDays === 0) return 'Veri yetersiz';
@@ -122,7 +223,7 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
         </div>
       </div>
 
-      {/* ✅ YENİ: İLERLEME YÜZDES İ AÇIKLAMASI */}
+      {/* İLERLEME YÜZDESİ AÇIKLAMASI */}
       <div className="mt-4 bg-white/10 rounded-xl p-4">
         <div className="flex items-start gap-2 mb-3">
           <span className="text-blue-200 text-lg">ℹ️</span>
@@ -135,7 +236,7 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
           </div>
         </div>
 
-        {/* ✅ YENİ: PROGRESS BAR - ORTA NOKTA İMİ + NET SAYISI */}
+        {/* PROGRESS BAR - ORTA NOKTA İMİ + NET SAYISI */}
         <div className="relative">
           {/* Progress bar */}
           <div className="w-full h-6 bg-white/20 rounded-full overflow-hidden relative">
@@ -241,6 +342,19 @@ export default function ProjectionCard({ projection }: ProjectionCardProps) {
       >
         {showDetails ? '▲ Detayları Gizle' : '▼ Detayları Göster'}
       </button>
+
+      {/* FEEDBACK BUTONU */}
+      <div className="mt-4 pt-4 border-t border-white/20 flex justify-center">
+        <FeedbackButtons
+          componentType="projection_card"
+          variant="like-dislike"
+          size="sm"
+          metadata={{ 
+            estimated_days: projection.estimatedDays,
+            progress_percent: progressPercent.toFixed(1)
+          }}
+        />
+      </div>
     </div>
   );
 }
