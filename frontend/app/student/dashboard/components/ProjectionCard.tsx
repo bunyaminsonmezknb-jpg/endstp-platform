@@ -53,14 +53,22 @@ export default function ProjectionCard() {
 
       if (data.status === 'no_data') {
         setProjection(null);
-      } else if (data.projection) {
-        setProjection({
-          totalTopics: data.projection.total_topics || data.projection.totalTopics,
-          completedTopics: data.projection.completed_topics || data.projection.completedTopics,
-          estimatedDays: data.projection.estimated_days || data.projection.estimatedDays,
-          estimatedDate: data.projection.estimated_date || data.projection.estimatedDate,
-        });
-      }
+    } else if (data.projection) {
+      const totalTopics =
+        Number(data.projection.total_topics ?? data.projection.totalTopics ?? 0);
+      const completedTopics =
+        Number(data.projection.completed_topics ?? data.projection.completedTopics ?? 0);
+      const estimatedDays =
+        Number(data.projection.estimated_days ?? data.projection.estimatedDays ?? 0);
+
+      setProjection({
+        totalTopics,
+        completedTopics,
+        estimatedDays,
+        estimatedDate:
+          data.projection.estimated_date ?? data.projection.estimatedDate ?? '',
+      });
+    }
     } catch (err: any) {
       setError(err.message || 'Projeksiyon yüklenemedi');
     } finally {
@@ -119,7 +127,19 @@ export default function ProjectionCard() {
   const remainingTopics = projection.totalTopics - projection.completedTopics;
   
   // İlerleme yüzdesi
-  const progressPercent = (projection.completedTopics / projection.totalTopics) * 100;
+const totalTopics = Number(projection.totalTopics ?? 0);
+const completedTopics = Number(projection.completedTopics ?? 0);
+
+let progressPercent = 0;
+
+if (Number.isFinite(totalTopics) && totalTopics > 0 && Number.isFinite(completedTopics)) {
+  progressPercent = (completedTopics / totalTopics) * 100;
+}
+
+// Eğer yine de bir sebeple NaN olursa 0'a düş
+if (!Number.isFinite(progressPercent)) {
+  progressPercent = 0;
+}
   
   // VELOCITY DÜZELTMESİ - Daha anlamlı format
   const formatVelocity = () => {
