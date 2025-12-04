@@ -1163,4 +1163,160 @@ def get_mock_todays_tasks():
             student_id="demo"
         ),
         message="Mock data (no tests)"
-    )
+    )# ============================================
+# 🎯 GÖREV TAMAMLAMA
+# ============================================
+
+@router.post("/student/tasks/{task_id}/complete")
+async def complete_task(task_id: str, manual: bool = True):
+    """
+    Görevi tamamla
+    manual=True → Öğrenci manuel tik attı
+    manual=False → Test girişi sonrası otomatik
+    """
+    try:
+        supabase = get_supabase_admin()
+        
+        # Görevi bul
+        task = supabase.table("student_tasks").select("*").eq("id", task_id).execute()
+        
+        if not task.data:
+            return {"success": False, "error": "Görev bulunamadı"}
+        
+        # Tamamla
+        update_data = {
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "manual_completion": manual
+        }
+        
+        result = supabase.table("student_tasks").update(update_data).eq("id", task_id).execute()
+        
+        return {
+            "success": True,
+            "task": result.data[0],
+            "message": "Görev tamamlandı! 🎉"
+        }
+        
+    except Exception as e:
+        print(f"Task completion error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/student/tasks/today")
+async def get_todays_tasks_list(student_id: str):
+    """
+    Bugünün görev listesi (5 görev)
+    """
+    try:
+        today = datetime.now(timezone.utc).date().isoformat()
+        
+        supabase = get_supabase_admin()
+        
+        # Bugünün görevlerini getir
+        tasks = supabase.table("student_tasks").select("*").eq(
+            "student_id", student_id
+        ).eq(
+            "task_date", today
+        ).order("priority_level", desc=False).execute()
+        
+        # Eğer bugün için görev yoksa, oluştur
+        if not tasks.data:
+            # 4 Motor'dan görev oluştur (şimdilik mock)
+            created_tasks = create_daily_tasks(student_id, today)
+            tasks = supabase.table("student_tasks").select("*").eq(
+                "student_id", student_id
+            ).eq(
+                "task_date", today
+            ).execute()
+        
+        # Süre hesapla
+        total_time = sum([t["estimated_time_minutes"] for t in tasks.data])
+        completed_time = sum([t["estimated_time_minutes"] for t in tasks.data if t["status"] == "completed"])
+        
+        return {
+            "success": True,
+            "tasks": tasks.data,
+            "summary": {
+                "total_tasks": len(tasks.data),
+                "completed_tasks": len([t for t in tasks.data if t["status"] == "completed"]),
+                "total_time_minutes": total_time,
+                "completed_time_minutes": completed_time,
+                "remaining_time_minutes": total_time - completed_time
+            },
+            "date": today
+        }
+        
+    except Exception as e:
+        print(f"Todays tasks error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+def create_daily_tasks(student_id: str, date: str):
+    """
+    4 Motor'dan günlük görevler oluştur (basit versiyon)
+    """
+    supabase = get_supabase_admin()
+    
+    # Mock görevler (gerçekte 4 motor'dan gelecek)
+    tasks = [
+        {
+            "student_id": student_id,
+            "task_date": date,
+            "task_type": "test",
+            "topic_name": "Limit",
+            "source_motor": "priority",
+            "priority_level": 1,
+            "estimated_time_minutes": 20,
+            "question_count": 10,
+            "status": "pending"
+        },
+        {
+            "student_id": student_id,
+            "task_date": date,
+            "task_type": "test",
+            "topic_name": "İntegral",
+            "source_motor": "repetition",
+            "priority_level": 2,
+            "estimated_time_minutes": 20,
+            "question_count": 10,
+            "status": "pending"
+        },
+        {
+            "student_id": student_id,
+            "task_date": date,
+            "task_type": "study",
+            "topic_name": "Türev",
+            "source_motor": "weakness",
+            "priority_level": 3,
+            "estimated_time_minutes": 30,
+            "status": "pending"
+        },
+        {
+            "student_id": student_id,
+            "task_date": date,
+            "task_type": "study",
+            "topic_name": "Fonksiyonlar",
+            "source_motor": "speed",
+            "priority_level": 4,
+            "estimated_time_minutes": 25,
+            "status": "pending"
+        },
+        {
+            "student_id": student_id,
+            "task_date": date,
+            "task_type": "test",
+            "topic_name": "Denklemler",
+            "source_motor": "priority",
+            "priority_level": 5,
+            "estimated_time_minutes": 15,
+            "question_count": 8,
+            "status": "pending"
+        }
+    ]
+    
+    # Veritabanına ekle
+    for task in tasks:
+        supabase.table("student_tasks").insert(task).execute()
+    
+    return tasks

@@ -4,7 +4,32 @@ import React from 'react';
 import { useTodaysTasks } from '@/lib/api/useTodaysTasks';
 import { TopicAtRisk, PriorityTopic } from '@/lib/types/todaysTasks';
 
-// 🔥 Icons (using emoji for simplicity - can be replaced with lucide-react)
+// Task interfaces
+interface Task {
+  id: string;
+  task_type: string;
+  topic_name: string;
+  source_motor: string;
+  priority_level: number;
+  estimated_time_minutes: number;
+  question_count: number | null;
+  status: string;
+  completed_at: string | null;
+}
+
+interface TasksResponse {
+  success: boolean;
+  tasks: Task[];
+  summary: {
+    total_tasks: number;
+    completed_tasks: number;
+    total_time_minutes: number;
+    completed_time_minutes: number;
+    remaining_time_minutes: number;
+  };
+}
+
+// Icons
 const AlertIcon = () => <span className="text-2xl">⚠️</span>;
 const TargetIcon = () => <span className="text-2xl">🎯</span>;
 const FireIcon = () => <span className="text-2xl">🔥</span>;
@@ -14,13 +39,55 @@ const ChartIcon = () => <span className="text-xl">📊</span>;
 /**
  * TodayStatusCards Component
  * 
- * Displays 3 key cards:
+ * Displays 3 key cards + Task list:
  * 1. Unutulmaya Yakın Konular (At Risk Topics)
  * 2. Bugün Çalışılacak Konular (Priority Topics)
  * 3. Zaman Durumu (Streak + Time Stats)
+ * 4. Bugünkü Görevlerim (Task list with completion)
  */
 export default function TodayStatusCards() {
   const { data, isLoading, error, refetch } = useTodaysTasks();
+  
+  // Task list states
+  const [tasksList, setTasksList] = React.useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = React.useState(false);
+
+  // Fetch tasks on mount
+  React.useEffect(() => {
+    const fetchTasks = async () => {
+      setTasksLoading(true);
+      try {
+        const res = await fetch('http://localhost:8000/api/v1/student/tasks/today?student_id=53a971d3-7492-4670-a31d-ca8422d0781b');
+        const tasksData: TasksResponse = await res.json();
+        if (tasksData.success) {
+          setTasksList(tasksData.tasks);
+        }
+      } catch (err) {
+        console.error('Tasks fetch error:', err);
+      } finally {
+        setTasksLoading(false);
+      }
+    };
+    fetchTasks();
+  }, []);
+
+  // Handle task completion
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      const res = await fetch(
+        `http://localhost:8000/api/v1/student/tasks/${taskId}/complete?manual=true`,
+        { method: 'POST' }
+      );
+      const result = await res.json();
+      if (result.success) {
+        setTasksList(prev =>
+          prev.map(t => (t.id === taskId ? { ...t, status: 'completed' } : t))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Loading state
   if (isLoading) {
@@ -73,16 +140,65 @@ export default function TodayStatusCards() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      {/* Card 1: Unutulmaya Yakın Konular */}
-      <AtRiskCard topics={data.at_risk_topics} total={data.total_at_risk} />
+    <>
+      {/* 3 Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <AtRiskCard topics={data.at_risk_topics} total={data.total_at_risk} />
+        <PriorityCard topics={data.priority_topics} total={data.total_priority} />
+        <StreakCard streak={data.streak} timeStats={data.time_stats} />
+      </div>
 
-      {/* Card 2: Bugün Çalışılacak Konular */}
-      <PriorityCard topics={data.priority_topics} total={data.total_priority} />
-
-      {/* Card 3: Zaman Durumu */}
-      <StreakCard streak={data.streak} timeStats={data.time_stats} />
-    </div>
+      {/* Task List */}
+      <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
+        <h3 className="text-xl font-bold text-gray-800 mb-4">
+          ✅ Bugünkü Görevlerim ({tasksList.filter(t => t.status === 'completed').length}/{tasksList.length})
+        </h3>
+        
+        {tasksLoading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-600 mx-auto"></div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {tasksList.map((task) => (
+              <div
+                key={task.id}
+                className={`flex items-center justify-between p-4 rounded-xl border-2 ${
+                  task.status === 'completed'
+                    ? 'bg-green-50 border-green-300'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="flex items-center gap-4 flex-1">
+                  <div className="text-3xl">
+                    {task.task_type === 'test' ? '📝' : '📚'}
+                  </div>
+                  <div>
+                    <div className="font-bold text-gray-800">{task.topic_name}</div>
+                    <div className="text-sm text-gray-600">
+                      {task.task_type === 'test' ? `${task.question_count} soru` : 'Çalışma'} • {task.estimated_time_minutes} dk
+                    </div>
+                  </div>
+                </div>
+                
+                {task.status === 'completed' ? (
+                  <div className="text-green-600 font-bold flex items-center gap-2">
+                    <span className="text-2xl">✅</span> Tamamlandı
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleCompleteTask(task.id)}
+                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700"
+                  >
+                    Tamamladım ✓
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -327,11 +443,11 @@ function StreakCard({ streak, timeStats }: StreakCardProps) {
     broken: 'bg-gray-50 border-gray-300',
   };
 
-    const streakStatusText = {
+  const streakStatusText = {
     active: 'Devamlılık Aktif!',
     at_risk: 'Devamlılık Risk Altında',
     broken: 'Devamlılık Kırıldı',
-    };
+  };
 
   const streakStatusTextColor = {
     active: 'text-green-700',
