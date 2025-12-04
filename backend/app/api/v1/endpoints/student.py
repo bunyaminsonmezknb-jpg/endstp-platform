@@ -3,9 +3,11 @@ Student Dashboard Endpoints
 v3.1: Türkçe Tarih + Gerçekçi Projeksiyon
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.db.session import get_supabase_admin
 from datetime import datetime, timedelta, timezone
+from pydantic import BaseModel
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -745,166 +747,7 @@ async def get_university_goal(request: dict):
     except Exception as e:
         print(f"Goal error: {str(e)}")
         return {"error": str(e)}
-@router.get("/student/todays-tasks")
-async def get_todays_tasks(student_id: str, date: str = None):
-    """
-    Öğrencinin bugünkü görevlerini getir
-    
-    Args:
-        student_id: Öğrenci UUID
-        date: YYYY-MM-DD formatında tarih (opsiyonel, bugün)
-    """
-    from datetime import datetime, timezone, timedelta
-    
-    if not date:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    
-    try:
-        supabase = get_supabase_admin()
-        
-        # Bugün için görevler zaten var mı?
-        existing_tasks = supabase.table("student_tasks").select("*").eq(
-            "student_id", student_id
-        ).eq(
-            "task_date", date
-        ).execute()
-        
-        # Eğer bugün için görev varsa, onları döndür
-        if existing_tasks.data:
-            tasks = []
-            for task in existing_tasks.data:
-                tasks.append({
-                    "id": task["id"],
-                    "type": task["task_type"],
-                    "topic_name": task["topic_name"],
-                    "subject_id": task["subject_id"],
-                    "source_motor": task["source_motor"],
-                    "priority_level": task["priority_level"],
-                    "estimated_time_minutes": task["estimated_time_minutes"],
-                    "question_count": task.get("question_count"),
-                    "status": task["status"],
-                    "completed_at": task.get("completed_at")
-                })
-            
-            total_time = sum([t["estimated_time_minutes"] for t in tasks if t["status"] == "pending"])
-            
-            return {
-                "status": "success",
-                "tasks": tasks,
-                "total_estimated_time": total_time,
-                "date": date
-            }
-        
-        # Görev yoksa, yeni görevler oluştur
-        tasks = []
-        
-        # 1. BS-Model Tekrar Planı (bugün tekrar zamanı gelen)
-        # TODO: BS-Model entegrasyonu sonra eklenecek
-        # bs_tasks = get_bs_model_tasks(student_id, date)
-        
-        # 2. Acil Unutma Uyarıları
-        # TODO: Unutma eğrisi hesaplaması sonra
-        
-        # 3. FALLBACK: En düşük başarılı 3 konu (şimdilik mock)
-        # Gerçek veri için: success_rate hesapla, en düşük 3 konuyu seç
-        
-        all_tests = supabase.table("student_topic_tests").select(
-            "*, topics(name_tr, subjects(name_tr, id))"
-        ).eq("student_id", student_id).eq("is_analysis_eligible", True).execute()
-        
-        if not all_tests.data:
-            return {
-                "status": "no_data",
-                "tasks": [],
-                "total_estimated_time": 0
-            }
-        
-        # Konu bazında başarı oranı hesapla
-        topic_stats = {}
-        for test in all_tests.data:
-            topic_id = test["topic_id"]
-            topic_name = test["topics"]["name_tr"] if test.get("topics") else "Bilinmeyen Konu"
-            subject_id = test["topics"]["subjects"]["id"] if test.get("topics") and test["topics"].get("subjects") else None
-            
-            if topic_id not in topic_stats:
-                topic_stats[topic_id] = {
-                    "topic_name": topic_name,
-                    "subject_id": subject_id,
-                    "total_questions": 0,
-                    "total_correct": 0,
-                    "test_count": 0
-                }
-            
-            topic_stats[topic_id]["total_questions"] += (test["correct_count"] + test["wrong_count"] + test["empty_count"])
-            topic_stats[topic_id]["total_correct"] += test["correct_count"]
-            topic_stats[topic_id]["test_count"] += 1
-        
-        # Başarı oranı hesapla
-        for topic_id, stats in topic_stats.items():
-            if stats["total_questions"] > 0:
-                stats["success_rate"] = (stats["total_correct"] / stats["total_questions"]) * 100
-            else:
-                stats["success_rate"] = 0
-        
-        # En düşük başarılı 5 konu seç
-        sorted_topics = sorted(topic_stats.items(), key=lambda x: x[1]["success_rate"])[:5]
-        
-        # Görevleri oluştur
-        for i, (topic_id, stats) in enumerate(sorted_topics):
-            # İlk 2 test görevi, son 3 çalışma görevi
-            if i < 2:
-                task_type = "test"
-                estimated_time = 20  # 10 soru * 2 dk
-                question_count = 10
-            else:
-                task_type = "study"
-                estimated_time = 25
-                question_count = None
-            
-            task = {
-                "student_id": student_id,
-                "task_date": date,
-                "task_type": task_type,
-                "topic_id": topic_id,
-                "subject_id": stats["subject_id"],
-                "topic_name": stats["topic_name"],
-                "source_motor": "fallback",
-                "priority_level": i + 1,  # 1-5
-                "estimated_time_minutes": estimated_time,
-                "question_count": question_count,
-                "status": "pending"
-            }
-            
-            # Veritabanına ekle
-            result = supabase.table("student_tasks").insert(task).execute()
-            
-            tasks.append({
-                "id": result.data[0]["id"],
-                "type": task_type,
-                "topic_name": stats["topic_name"],
-                "subject_id": stats["subject_id"],
-                "source_motor": "fallback",
-                "priority_level": i + 1,
-                "estimated_time_minutes": estimated_time,
-                "question_count": question_count,
-                "status": "pending",
-                "completed_at": None
-            })
-        
-        total_time = sum([t["estimated_time_minutes"] for t in tasks])
-        
-        return {
-            "status": "success",
-            "tasks": tasks,
-            "total_estimated_time": total_time,
-            "date": date
-        }
-        
-    except Exception as e:
-        print(f"Todays tasks error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
+
 @router.post("/student/analyze")
 async def analyze_student_performance(request: dict):
     """
@@ -1118,3 +961,148 @@ async def analyze_student_performance(request: dict):
             "this_week_topics": priority_topics[:10]
         }
     }
+# ============================================
+# 🎯 BUGÜNKÜ GÖREVLER (3 KART)
+# ============================================
+
+class TopicAtRisk(BaseModel):
+    topic_id: str
+    topic_name: str
+    subject: str
+    retention_rate: int
+    days_until_forgotten: int
+    last_studied: str
+    difficulty_score: int
+    priority_score: int
+
+class PriorityTopic(BaseModel):
+    topic_id: str
+    topic_name: str
+    subject: str
+    priority_score: int
+    priority_reason: str
+    difficulty_score: int
+    retention_rate: int
+    estimated_study_time: int
+
+class StudyStreak(BaseModel):
+    current_streak: int
+    longest_streak: int
+    streak_status: str
+    last_study_date: str
+    next_milestone: int
+
+class TimeStats(BaseModel):
+    total_study_time_today: int
+    total_study_time_week: int
+    avg_daily_time: int
+    target_daily_time: int
+    time_efficiency: int
+
+class TodaysTasksDataOld(BaseModel):
+    at_risk_topics: List[TopicAtRisk]
+    total_at_risk: int
+    priority_topics: List[PriorityTopic]
+    total_priority: int
+    streak: StudyStreak
+    time_stats: TimeStats
+    generated_at: str
+    student_id: str
+
+class TodaysTasksResponseOld(BaseModel):
+    success: bool
+    data: TodaysTasksDataOld
+    message: Optional[str] = None
+
+
+@router.get("/student/todays-tasks", response_model=TodaysTasksResponseOld)
+async def get_todays_tasks():
+    """🎯 Bugünkü Görevler (3 Kart)"""
+    return TodaysTasksResponseOld(
+        success=True,
+        data=TodaysTasksDataOld(
+            at_risk_topics=[
+                TopicAtRisk(
+                    topic_id="mat-001",
+                    topic_name="Türev Alma Kuralları",
+                    subject="Matematik",
+                    retention_rate=45,
+                    days_until_forgotten=2,
+                    last_studied="2025-11-28T14:30:00Z",
+                    difficulty_score=68,
+                    priority_score=85
+                ),
+                TopicAtRisk(
+                    topic_id="fiz-003",
+                    topic_name="Elektromanyetik İndüksiyon",
+                    subject="Fizik",
+                    retention_rate=52,
+                    days_until_forgotten=3,
+                    last_studied="2025-11-27T10:15:00Z",
+                    difficulty_score=72,
+                    priority_score=78
+                ),
+                TopicAtRisk(
+                    topic_id="kim-005",
+                    topic_name="Kimyasal Denge",
+                    subject="Kimya",
+                    retention_rate=38,
+                    days_until_forgotten=1,
+                    last_studied="2025-11-29T16:45:00Z",
+                    difficulty_score=81,
+                    priority_score=92
+                ),
+            ],
+            total_at_risk=3,
+            priority_topics=[
+                PriorityTopic(
+                    topic_id="mat-015",
+                    topic_name="İntegral Uygulamaları",
+                    subject="Matematik",
+                    priority_score=88,
+                    priority_reason="prerequisite",
+                    difficulty_score=75,
+                    retention_rate=55,
+                    estimated_study_time=45
+                ),
+                PriorityTopic(
+                    topic_id="fiz-008",
+                    topic_name="Kuvvet ve Hareket",
+                    subject="Fizik",
+                    priority_score=82,
+                    priority_reason="difficulty",
+                    difficulty_score=85,
+                    retention_rate=48,
+                    estimated_study_time=60
+                ),
+                PriorityTopic(
+                    topic_id="biy-012",
+                    topic_name="Hücre Bölünmesi",
+                    subject="Biyoloji",
+                    priority_score=76,
+                    priority_reason="never_studied",
+                    difficulty_score=0,
+                    retention_rate=0,
+                    estimated_study_time=90
+                ),
+            ],
+            total_priority=3,
+            streak=StudyStreak(
+                current_streak=5,
+                longest_streak=12,
+                streak_status="active",
+                last_study_date="2025-12-04T09:00:00Z",
+                next_milestone=7
+            ),
+            time_stats=TimeStats(
+                total_study_time_today=45,
+                total_study_time_week=380,
+                avg_daily_time=54,
+                target_daily_time=120,
+                time_efficiency=75
+            ),
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            student_id="demo-student"
+        ),
+        message="Mock data (3 kart)"
+    )

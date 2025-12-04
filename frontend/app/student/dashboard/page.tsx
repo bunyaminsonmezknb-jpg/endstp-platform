@@ -12,22 +12,21 @@ import SmartActionCards from './components/SmartActionCards';
 import TopicHealthBar from './components/TopicHealthBar';
 import HealthStatusBar from './components/HealthStatusBar';
 import MotorAnalysisPanel from './components/MotorAnalysisPanel';
+import TodayStatusCards from './components/TodayStatusCards';
 
 /**
- * Student Dashboard - v3
+ * Student Dashboard - v4
  * 
- * YENİ LAYOUT:
- * - Üstte: Projection + University Goal (2'li)
- * - Ortada: Bugünkü Durum (3'lü kartlar)
- * - Smart Action Cards (4 motor önerisi)
- * - Health Status Bar
- * - Topic Health Bars
+ * TAB'LAR:
+ * - 📊 Genel Bakış (Projection + HeroStats + Health Bars)
+ * - 🚀 4 Motor Analizi
+ * - 🎯 Bugünkü Görevler (TodayStatusCards)
  */
 
 export default function StudentDashboard() {
   const router = useRouter();
   const { dashboardData, isLoading, error, fetchDashboardData } = useStudentDashboard();
-  const [activeTab, setActiveTab] = useState<'overview' | 'motors'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'motors' | 'tasks'>('overview');
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -96,6 +95,7 @@ export default function StudentDashboard() {
             <span className="text-xl mr-2">📊</span>
             Genel Bakış
           </button>
+          
           <button
             onClick={() => setActiveTab('motors')}
             className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${
@@ -107,6 +107,19 @@ export default function StudentDashboard() {
             <span className="text-xl mr-2">🚀</span>
             4 Motor Analizi
             <span className="ml-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">YENİ</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${
+              activeTab === 'tasks'
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <span className="text-xl mr-2">🎯</span>
+            Bugünkü Görevler
+            <span className="ml-2 bg-orange-500 text-white text-xs px-2 py-1 rounded-full">YENİ</span>
           </button>
         </div>
 
@@ -158,6 +171,7 @@ export default function StudentDashboard() {
               criticalTopics={3}
               currentlyShown={dashboardData.topics.length}
             />
+
             {/* TOPIC HEALTH BARS */}
             <TopicHealthBar topics={dashboardData.topics} />
 
@@ -172,7 +186,7 @@ export default function StudentDashboard() {
               </div>
             </div>
           </>
-        ) : (
+        ) : activeTab === 'motors' ? (
           <>
             {/* 4 MOTOR ANALİZİ */}
             <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
@@ -181,6 +195,16 @@ export default function StudentDashboard() {
             </div>
 
             <MotorAnalysisPanel />
+          </>
+        ) : (
+          <>
+            {/* BUGÜNKÜ GÖREVLER TAB */}
+            <div className="bg-orange-500 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
+              <span className="animate-pulse">🟢</span>
+              <span className="font-semibold">Canlı Veri (GET /api/v1/student/todays-tasks)</span>
+            </div>
+
+            <TodayStatusCards />
           </>
         )}
 
