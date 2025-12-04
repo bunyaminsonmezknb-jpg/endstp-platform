@@ -104,7 +104,7 @@ export default function UniversityGoalCard() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'achieved': return '🟢';
+      case 'achieved': return '✅';  // Yeşil tick
       case 'close': return '🟡';
       case 'inProgress': return '🟠';
       case 'distant': return '🔴';
@@ -417,7 +417,11 @@ export default function UniversityGoalCard() {
             {[...goalData.ladder].reverse().map((goal) => (
               <div
                 key={goal.priority}
-                className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-all cursor-pointer"
+                className={`${
+                  goal.status === 'achieved' 
+                    ? 'bg-green-500/30 border-2 border-green-400' 
+                    : 'bg-white/10'
+                } backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-all cursor-pointer`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">

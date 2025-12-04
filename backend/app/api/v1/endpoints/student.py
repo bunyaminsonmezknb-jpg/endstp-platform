@@ -651,7 +651,7 @@ async def get_university_goal(request: dict):
         
         # Hedef tercihler (Mock data - gerçekte DB'den gelecek)
         GOALS = [
-            {"priority": 1, "university": "Konya Teknik Ünv.", "department": "Bilgisayar Müh.", "tyt": 80, "ayt": 50},
+            {"priority": 1, "university": "Konya Teknik Ünv.", "department": "Bilgisayar Müh.", "tyt": 20, "ayt": 15},
             {"priority": 2, "university": "Antalya Bilim Ünv.", "department": "Bilgisayar Müh.", "tyt": 85, "ayt": 60},
             {"priority": 3, "university": "Selçuk Üniversitesi", "department": "Bilgisayar Müh.", "tyt": 100, "ayt": 76},
             {"priority": 4, "university": "Ankara Üniversitesi", "department": "Bilgisayar Müh.", "tyt": 105, "ayt": 80},
@@ -659,7 +659,20 @@ async def get_university_goal(request: dict):
         ]
         
         # Aktif hedef (3. tercih)
-        active_goal = GOALS[2]
+        # Aktif hedef = İlk başarılmamış tercih
+        active_goal = None
+        for goal in GOALS:
+            tyt_p = min(100, int((tyt_total / goal["tyt"]) * 100))
+            ayt_p = min(100, int((ayt_total / goal["ayt"]) * 100))
+            combined_p = int((tyt_p * 0.4) + (ayt_p * 0.6))
+            
+            if combined_p < 100:  # Henüz başarılmamış
+                active_goal = goal
+                break
+
+        # Eğer hepsi başarıldıysa, en son tercihi göster
+        if not active_goal:
+            active_goal = GOALS[-1]
         
         # TYT progress
         tyt_progress = min(100, int((tyt_total / active_goal["tyt"]) * 100))
