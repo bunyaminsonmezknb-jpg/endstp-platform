@@ -1017,92 +1017,137 @@ class TodaysTasksResponseOld(BaseModel):
 
 @router.get("/student/todays-tasks", response_model=TodaysTasksResponseOld)
 async def get_todays_tasks():
-    """🎯 Bugünkü Görevler (3 Kart)"""
+    """🎯 Bugünkü Görevler - Gerçek Veri"""
+    try:
+        # Demo student ID (gerçekte auth'dan gelecek)
+        student_id = "53a971d3-7492-4670-a31d-ca8422d0781b"
+        
+        supabase = get_supabase_admin()
+        
+        # Tüm testleri çek
+        all_tests = supabase.table("student_topic_tests").select(
+            "*, topics(name_tr, subjects(name_tr))"
+        ).eq("student_id", student_id).order("test_date", desc=True).execute()
+        
+        if not all_tests.data:
+            # Veri yoksa mock data döndür
+            return get_mock_todays_tasks()
+        
+        # Topic bazında grupla
+        topic_performance = {}
+        for test in all_tests.data:
+            topic_id = test["topic_id"]
+            if topic_id not in topic_performance:
+                topic_performance[topic_id] = {
+                    "topic_name": test["topics"]["name_tr"] if test.get("topics") else "Bilinmeyen",
+                    "subject_name": test["topics"]["subjects"]["name_tr"] if test.get("topics") and test["topics"].get("subjects") else "Bilinmeyen",
+                    "tests": []
+                }
+            topic_performance[topic_id]["tests"].append(test)
+        
+        # AT RISK TOPICS (retention rate düşük)
+        at_risk = []
+        for topic_id, data in topic_performance.items():
+            latest = data["tests"][0]
+            retention = int(latest["success_rate"])
+            days_ago = (datetime.now(timezone.utc) - datetime.fromisoformat(latest["test_date"].replace('Z', '+00:00'))).days
+            
+            if retention < 70 and days_ago > 3:
+                at_risk.append(TopicAtRisk(
+                    topic_id=topic_id,
+                    topic_name=data["topic_name"],
+                    subject=data["subject_name"],
+                    retention_rate=retention,
+                    days_until_forgotten=max(1, 7 - days_ago),
+                    last_studied=latest["test_date"],
+                    difficulty_score=70,
+                    priority_score=85
+                ))
+        
+        at_risk.sort(key=lambda x: x.retention_rate)
+        at_risk = at_risk[:3]
+        
+        # PRIORITY TOPICS (success rate düşük)
+        priority = []
+        for topic_id, data in topic_performance.items():
+            avg_success = sum([t["success_rate"] for t in data["tests"][:3]]) / min(3, len(data["tests"]))
+            
+            if avg_success < 75:
+                priority.append(PriorityTopic(
+                    topic_id=topic_id,
+                    topic_name=data["topic_name"],
+                    subject=data["subject_name"],
+                    priority_score=int(100 - avg_success),
+                    priority_reason="difficulty" if avg_success < 60 else "retention",
+                    difficulty_score=int(100 - avg_success),
+                    retention_rate=int(avg_success),
+                    estimated_study_time=45
+                ))
+        
+        priority.sort(key=lambda x: x.priority_score, reverse=True)
+        priority = priority[:3]
+        
+        # STREAK (günlük test girişi)
+        today = datetime.now(timezone.utc).date()
+        streak_days = []
+        check_date = today
+        
+        for _ in range(365):
+            day_tests = [t for t in all_tests.data 
+                        if datetime.fromisoformat(t["test_date"].replace('Z', '+00:00')).date() == check_date]
+            if day_tests:
+                streak_days.append(check_date)
+                check_date -= timedelta(days=1)
+            else:
+                break
+        
+        current_streak = len(streak_days)
+        
+        return TodaysTasksResponseOld(
+            success=True,
+            data=TodaysTasksDataOld(
+                at_risk_topics=at_risk,
+                total_at_risk=len(at_risk),
+                priority_topics=priority,
+                total_priority=len(priority),
+                streak=StudyStreak(
+                    current_streak=current_streak,
+                    longest_streak=12,
+                    streak_status="active" if current_streak > 0 else "broken",
+                    last_study_date=str(streak_days[0]) if streak_days else "",
+                    next_milestone=7
+                ),
+                time_stats=TimeStats(
+                    total_study_time_today=45,
+                    total_study_time_week=380,
+                    avg_daily_time=54,
+                    target_daily_time=120,
+                    time_efficiency=75
+                ),
+                generated_at=datetime.now(timezone.utc).isoformat(),
+                student_id=student_id
+            ),
+            message="Gerçek veri"
+        )
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return get_mock_todays_tasks()
+
+
+def get_mock_todays_tasks():
+    """Fallback mock data"""
     return TodaysTasksResponseOld(
         success=True,
         data=TodaysTasksDataOld(
-            at_risk_topics=[
-                TopicAtRisk(
-                    topic_id="mat-001",
-                    topic_name="Türev Alma Kuralları",
-                    subject="Matematik",
-                    retention_rate=45,
-                    days_until_forgotten=2,
-                    last_studied="2025-11-28T14:30:00Z",
-                    difficulty_score=68,
-                    priority_score=85
-                ),
-                TopicAtRisk(
-                    topic_id="fiz-003",
-                    topic_name="Elektromanyetik İndüksiyon",
-                    subject="Fizik",
-                    retention_rate=52,
-                    days_until_forgotten=3,
-                    last_studied="2025-11-27T10:15:00Z",
-                    difficulty_score=72,
-                    priority_score=78
-                ),
-                TopicAtRisk(
-                    topic_id="kim-005",
-                    topic_name="Kimyasal Denge",
-                    subject="Kimya",
-                    retention_rate=38,
-                    days_until_forgotten=1,
-                    last_studied="2025-11-29T16:45:00Z",
-                    difficulty_score=81,
-                    priority_score=92
-                ),
-            ],
-            total_at_risk=3,
-            priority_topics=[
-                PriorityTopic(
-                    topic_id="mat-015",
-                    topic_name="İntegral Uygulamaları",
-                    subject="Matematik",
-                    priority_score=88,
-                    priority_reason="prerequisite",
-                    difficulty_score=75,
-                    retention_rate=55,
-                    estimated_study_time=45
-                ),
-                PriorityTopic(
-                    topic_id="fiz-008",
-                    topic_name="Kuvvet ve Hareket",
-                    subject="Fizik",
-                    priority_score=82,
-                    priority_reason="difficulty",
-                    difficulty_score=85,
-                    retention_rate=48,
-                    estimated_study_time=60
-                ),
-                PriorityTopic(
-                    topic_id="biy-012",
-                    topic_name="Hücre Bölünmesi",
-                    subject="Biyoloji",
-                    priority_score=76,
-                    priority_reason="never_studied",
-                    difficulty_score=0,
-                    retention_rate=0,
-                    estimated_study_time=90
-                ),
-            ],
-            total_priority=3,
-            streak=StudyStreak(
-                current_streak=5,
-                longest_streak=12,
-                streak_status="active",
-                last_study_date="2025-12-04T09:00:00Z",
-                next_milestone=7
-            ),
-            time_stats=TimeStats(
-                total_study_time_today=45,
-                total_study_time_week=380,
-                avg_daily_time=54,
-                target_daily_time=120,
-                time_efficiency=75
-            ),
+            at_risk_topics=[],
+            total_at_risk=0,
+            priority_topics=[],
+            total_priority=0,
+            streak=StudyStreak(current_streak=0, longest_streak=0, streak_status="broken", last_study_date="", next_milestone=7),
+            time_stats=TimeStats(total_study_time_today=0, total_study_time_week=0, avg_daily_time=0, target_daily_time=120, time_efficiency=0),
             generated_at=datetime.now(timezone.utc).isoformat(),
-            student_id="demo-student"
+            student_id="demo"
         ),
-        message="Mock data (3 kart)"
+        message="Mock data (no tests)"
     )
