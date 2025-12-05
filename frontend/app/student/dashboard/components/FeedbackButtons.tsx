@@ -113,7 +113,7 @@ export default function FeedbackButtons({
     return (
       <div className="flex flex-col items-center gap-2">
         {/* Açıklama */}
-        <p className="text-xs text-gray-600 font-medium">Bu analiz size faydalı oldu mu?</p>
+        <p className="text-xs text-white-600 font-medium">Bu analiz size faydalı oldu mu?</p>
         
         <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-1">
           {/* Like Button */}

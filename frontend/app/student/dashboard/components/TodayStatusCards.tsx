@@ -3,6 +3,7 @@
 import React from 'react';
 import { useTodaysTasks } from '@/lib/api/useTodaysTasks';
 import { TopicAtRisk, PriorityTopic } from '@/lib/types/todaysTasks';
+import { getUserTimezone } from '@/lib/utils/timezone'; // ✅ EKLE
 
 // Task interfaces
 interface Task {
@@ -51,17 +52,22 @@ export default function TodayStatusCards() {
   // Task list states
   const [tasksList, setTasksList] = React.useState<Task[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
-
+  const [atRiskTopics, setAtRiskTopics] = React.useState<any[]>([]);
+  const [totalAtRisk, setTotalAtRisk] = React.useState(0);
   // Fetch tasks on mount
   React.useEffect(() => {
     const fetchTasks = async () => {
       setTasksLoading(true);
       try {
-        const res = await fetch('http://localhost:8000/api/v1/student/tasks/today?student_id=53a971d3-7492-4670-a31d-ca8422d0781b');
+        const res = await fetch('http://localhost:8000/api/v1/student/tasks/today?student_id=53a971d3-7492-4670-a31d-ca8422d0781b', {
+  headers: { 'X-User-Timezone': getUserTimezone() }
+});
         const tasksData: TasksResponse = await res.json();
-        if (tasksData.success) {
-          setTasksList(tasksData.tasks);
-        }
+      if (tasksData.success) {
+        setTasksList(tasksData.tasks);
+        setAtRiskTopics(tasksData.at_risk_topics || []);
+        setTotalAtRisk(tasksData.total_at_risk || 0);
+      }
       } catch (err) {
         console.error('Tasks fetch error:', err);
       } finally {
@@ -72,23 +78,46 @@ export default function TodayStatusCards() {
   }, []);
 
   // Handle task completion
-  const handleCompleteTask = async (taskId: string) => {
+        const handleCompleteTask = async (taskId: string) => {
+          try {
+            const res = await fetch(
+              `http://localhost:8000/api/v1/student/tasks/${taskId}/complete?manual=true`,
+              { method: 'POST' }
+            );
+            const result = await res.json();
+            if (result.success) {
+              setTasksList(prev =>
+                prev.map(t => (t.id === taskId ? { 
+                  ...t, 
+                  status: 'completed',
+                  manual_completion: true,
+                  completed_at: new Date().toISOString()
+                } : t))
+              );
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        };
+// Handle task uncomplete (geri al)
+  const handleUncompleteTask = async (taskId: string) => {
     try {
       const res = await fetch(
-        `http://localhost:8000/api/v1/student/tasks/${taskId}/complete?manual=true`,
+        `http://localhost:8000/api/v1/student/tasks/${taskId}/uncomplete`,
         { method: 'POST' }
       );
       const result = await res.json();
       if (result.success) {
         setTasksList(prev =>
-          prev.map(t => (t.id === taskId ? { ...t, status: 'completed' } : t))
+          prev.map(t => (t.id === taskId ? { ...t, status: 'pending', completed_at: null, manual_completion: false } : t))
         );
+      } else {
+        alert(result.error || 'Geri alınamadı');
       }
     } catch (err) {
       console.error(err);
     }
   };
-
   // Loading state
   if (isLoading) {
     return (
@@ -143,7 +172,7 @@ export default function TodayStatusCards() {
     <>
       {/* 3 Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <AtRiskCard topics={data.at_risk_topics} total={data.total_at_risk} />
+        <AtRiskCard topics={atRiskTopics} total={totalAtRisk} />
         <PriorityCard topics={data.priority_topics} total={data.total_priority} />
         <StreakCard streak={data.streak} timeStats={data.time_stats} />
       </div>
@@ -182,17 +211,36 @@ export default function TodayStatusCards() {
                 </div>
                 
                 {task.status === 'completed' ? (
-                  <div className="text-green-600 font-bold flex items-center gap-2">
-                    <span className="text-2xl">✅</span> Tamamlandı
+                  <div className="flex items-center gap-3">
+                    <div className="text-green-600 font-bold flex items-center gap-2">
+                      <span className="text-2xl">✅</span> Tamamlandı
+                    </div>
+                    {task.manual_completion && (
+                      <button
+                        onClick={() => handleUncompleteTask(task.id)}
+                        className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full transition-all duration-200 group"
+                        title="Geri Al"
+                      >
+                        <span className="text-xl group-hover:rotate-180 transition-transform duration-300">↺</span>
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <button
-                    onClick={() => handleCompleteTask(task.id)}
-                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700"
-                  >
-                    Tamamladım ✓
-                  </button>
-                )}
+                  ) : (
+                    <>
+                      {task.task_type === 'test' ? (
+                        <div className="text-purple-600 font-semibold flex items-center gap-2">
+                          <span>📝</span> Test girişi ile tamamlanacak
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleCompleteTask(task.id)}
+                          className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          Tamamladım ✓
+                        </button>
+                      )}
+                    </>
+                  )}
               </div>
             ))}
           </div>
@@ -266,7 +314,7 @@ function AtRiskCard({ topics, total }: AtRiskCardProps) {
                   {topic.topic_name}
                 </h4>
                 <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded">
-                  {topic.days_until_forgotten}g
+                  {topic.days_until_forgotten}g kaldı
                 </span>
               </div>
               <p className="text-xs text-gray-500 mb-2">{topic.subject}</p>

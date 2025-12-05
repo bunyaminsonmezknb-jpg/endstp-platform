@@ -3,7 +3,7 @@ Student Dashboard Endpoints
 v3.1: Türkçe Tarih + Gerçekçi Projeksiyon
 """
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException
 from app.db.session import get_supabase_admin
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
@@ -18,19 +18,6 @@ TURKISH_MONTHS = {
     9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
 }
 
-
-# Timezone helper
-def get_user_date(user_timezone: str = "UTC"):
-    """
-    Kullanıcının timezone'una göre bugünün tarihini döndür
-    """
-    try:
-        from zoneinfo import ZoneInfo
-        tz = ZoneInfo(user_timezone)
-        return datetime.now(tz).date()
-    except Exception as e:
-        print(f"Timezone error: {e}, falling back to UTC")
-        return datetime.now(timezone.utc).date()
 # Sınav tarihi (Config - Gerçekte DB'den gelecek)
 EXAM_DATE = datetime(2026, 6, 15, tzinfo=timezone.utc)
 
@@ -897,33 +884,13 @@ async def analyze_student_performance(request: dict):
     
     difficulty_topics.sort(key=lambda x: x["difficulty_score"], reverse=True)
     
-# TIME ANALYZER
+    # TIME ANALYZER
     time_topics = []
     
     for topic_id, data in topic_performance.items():
         tests = data["tests"]
         
-        # Test süreleri varsa hesapla
-        test_durations = [t["test_duration_minutes"] for t in tests if t.get("test_duration_minutes")]
-        
-        if test_durations:
-            # Soru başına ortalama süre (12 soru varsayımı)
-            avg_duration_per_question = sum(test_durations) / len(test_durations) / 12
-            avg_duration_per_question = round(avg_duration_per_question, 2)
-            
-            # Hedef: 2 dk/soru (iyi), 2-3 dk (normal), 3+ dk (yavaş)
-            if avg_duration_per_question > 2.0:
-                time_topics.append({
-                    "topic_name": data["topic_name"],
-                    "subject_name": data["subject_name"],
-                    "average_interval_days": avg_duration_per_question,  # Şimdi bu "dk/soru" anlamında
-                    "total_tests": len(tests),
-                    "days_since_last_test": (now - datetime.fromisoformat(tests[0]["test_date"].replace('Z', '+00:00'))).days,
-                    "average_success": sum([t["success_rate"] for t in tests]) / len(tests),
-                    "recommendation": f"Soru başına {avg_duration_per_question} dk - {'Hızını artırmalısın!' if avg_duration_per_question > 3 else 'Biraz daha hızlı ol'}"
-                })
-        elif len(tests) >= 2:
-            # Eski mantık: Testler arası gün sayısı (fallback)
+        if len(tests) >= 2:
             intervals = []
             for i in range(len(tests) - 1):
                 t1 = datetime.fromisoformat(tests[i]["test_date"].replace('Z', '+00:00'))
@@ -938,8 +905,6 @@ async def analyze_student_performance(request: dict):
                     "subject_name": data["subject_name"],
                     "average_interval_days": round(avg_interval, 1),
                     "total_tests": len(tests),
-                    "days_since_last_test": (now - datetime.fromisoformat(tests[0]["test_date"].replace('Z', '+00:00'))).days,
-                    "average_success": sum([t["success_rate"] for t in tests]) / len(tests),
                     "recommendation": f"Bu konuya {int(avg_interval)} günde bir dönüyorsun. Daha sık tekrar et!"
                 })
     
@@ -1064,7 +1029,7 @@ class TodaysTasksResponseOld(BaseModel):
 
 
 @router.get("/student/todays-tasks", response_model=TodaysTasksResponseOld)
-async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
+async def get_todays_tasks():
     """🎯 Bugünkü Görevler - Gerçek Veri"""
     try:
         # Demo student ID (gerçekte auth'dan gelecek)
@@ -1100,7 +1065,7 @@ async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
             retention = int(latest["success_rate"])
             days_ago = (datetime.now(timezone.utc) - datetime.fromisoformat(latest["test_date"].replace('Z', '+00:00'))).days
             
-            if retention < 80 and days_ago >= 1:
+            if retention < 70 and days_ago > 3:
                 at_risk.append(TopicAtRisk(
                     topic_id=topic_id,
                     topic_name=data["topic_name"],
@@ -1136,7 +1101,7 @@ async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
         priority = priority[:3]
         
         # STREAK (günlük test girişi)
-        today = get_user_date(x_user_timezone)
+        today = datetime.now(timezone.utc).date()
         streak_days = []
         check_date = today
         
@@ -1239,12 +1204,12 @@ async def complete_task(task_id: str, manual: bool = True):
 
 
 @router.get("/student/tasks/today")
-async def get_todays_tasks_list(student_id: str, x_user_timezone: str = Header("UTC")):
+async def get_todays_tasks_list(student_id: str):
     """
     Bugünün görev listesi (5 görev)
     """
     try:
-        today = get_user_date(x_user_timezone).isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
         
         supabase = get_supabase_admin()
         
@@ -1268,62 +1233,19 @@ async def get_todays_tasks_list(student_id: str, x_user_timezone: str = Header("
         # Süre hesapla
         total_time = sum([t["estimated_time_minutes"] for t in tasks.data])
         completed_time = sum([t["estimated_time_minutes"] for t in tasks.data if t["status"] == "completed"])
-          # Topic testlerini çek
         
-        # AT RISK HESAPLAMA
-        at_risk = []
-        topic_tests = supabase.table("student_topic_tests").select(
-            "*, topics(id, name_tr, subjects(name_tr))"
-        ).eq("student_id", student_id).order("test_date", desc=True).execute()
-        
-        # Topic bazında grupla
-        topic_performance = {}
-        for test in topic_tests.data:
-            if not test.get("topics"):
-                continue
-            topic_id = test["topics"]["id"]
-            if topic_id not in topic_performance:
-                topic_performance[topic_id] = {
-                    "topic_name": test["topics"]["name_tr"],
-                    "subject_name": test["topics"]["subjects"]["name_tr"] if test["topics"].get("subjects") else "Unknown",
-                    "tests": []
-                }
-            topic_performance[topic_id]["tests"].append(test)
-        
-        # At risk konuları filtrele
-        for topic_id, data in topic_performance.items():
-            latest = data["tests"][0]
-            retention = int(latest["success_rate"])
-            days_ago = (datetime.now(timezone.utc) - datetime.fromisoformat(latest["test_date"].replace('Z', '+00:00'))).days
-            
-            if retention < 80 and days_ago >= 1:
-                at_risk.append({
-                    "topic_id": topic_id,
-                    "topic_name": data["topic_name"],
-                    "subject": data["subject_name"],
-                    "retention_rate": retention,
-                    "days_until_forgotten": max(1, 7 - days_ago),
-                    "last_studied": latest["test_date"],
-                    "difficulty_score": 70,
-                    "priority_score": 85
-                })
-        
-        at_risk.sort(key=lambda x: x["retention_rate"])
-        at_risk = at_risk[:3]      
         return {
-                    "success": True,
-                    "tasks": tasks.data,
-                    "summary": {
-                        "total_tasks": len(tasks.data),
-                        "completed_tasks": len([t for t in tasks.data if t["status"] == "completed"]),
-                        "total_time_minutes": total_time,
-                        "completed_time_minutes": completed_time,
-                        "remaining_time_minutes": total_time - completed_time
-                    },
-                    "at_risk_topics": at_risk,
-                    "total_at_risk": len(at_risk),
-                    "date": today
-                }
+            "success": True,
+            "tasks": tasks.data,
+            "summary": {
+                "total_tasks": len(tasks.data),
+                "completed_tasks": len([t for t in tasks.data if t["status"] == "completed"]),
+                "total_time_minutes": total_time,
+                "completed_time_minutes": completed_time,
+                "remaining_time_minutes": total_time - completed_time
+            },
+            "date": today
+        }
         
     except Exception as e:
         print(f"Todays tasks error: {str(e)}")
@@ -1332,46 +1254,38 @@ async def get_todays_tasks_list(student_id: str, x_user_timezone: str = Header("
 
 def create_daily_tasks(student_id: str, date: str):
     """
-    4 Motor'dan günlük görevler oluştur (gerçek topic_id'lerle)
+    4 Motor'dan günlük görevler oluştur (basit versiyon)
     """
     supabase = get_supabase_admin()
     
-    # Gerçek ID'ler
-    MATH_SUBJECT_ID = "e576c099-c3ae-4022-be5c-919929437966"
-    
+    # Mock görevler (gerçekte 4 motor'dan gelecek)
     tasks = [
         {
             "student_id": student_id,
             "task_date": date,
             "task_type": "test",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "f82f6d64-1689-41ef-aa36-3f505637854d",
             "topic_name": "Limit",
             "source_motor": "priority",
             "priority_level": 1,
             "estimated_time_minutes": 20,
-            "question_count": 12,
+            "question_count": 10,
             "status": "pending"
         },
         {
             "student_id": student_id,
             "task_date": date,
             "task_type": "test",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "4c972d83-9848-43db-87d6-5ddb3b584591",
             "topic_name": "İntegral",
             "source_motor": "repetition",
             "priority_level": 2,
             "estimated_time_minutes": 20,
-            "question_count": 12,
+            "question_count": 10,
             "status": "pending"
         },
         {
             "student_id": student_id,
             "task_date": date,
             "task_type": "study",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "c3d5aee0-2ec7-48a9-867e-cd52e75e07ff",
             "topic_name": "Türev",
             "source_motor": "weakness",
             "priority_level": 3,
@@ -1382,8 +1296,6 @@ def create_daily_tasks(student_id: str, date: str):
             "student_id": student_id,
             "task_date": date,
             "task_type": "study",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "9c8a8646-86b7-4f1c-9108-cee4d4c7e923",
             "topic_name": "Fonksiyonlar",
             "source_motor": "speed",
             "priority_level": 4,
@@ -1394,13 +1306,11 @@ def create_daily_tasks(student_id: str, date: str):
             "student_id": student_id,
             "task_date": date,
             "task_type": "test",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "f82f6d64-1689-41ef-aa36-3f505637854d",
-            "topic_name": "Limit (Tekrar)",
+            "topic_name": "Denklemler",
             "source_motor": "priority",
             "priority_level": 5,
             "estimated_time_minutes": 15,
-            "question_count": 12,
+            "question_count": 8,
             "status": "pending"
         }
     ]
@@ -1410,137 +1320,3 @@ def create_daily_tasks(student_id: str, date: str):
         supabase.table("student_tasks").insert(task).execute()
     
     return tasks
-
-
-@router.delete("/student/tasks/cleanup")
-async def cleanup_tasks(student_id: str, date: str):
-    """Belirli bir günün tüm görevlerini sil"""
-    try:
-        supabase = get_supabase_admin()
-        
-        result = supabase.table("student_tasks").delete().eq(
-            "student_id", student_id
-        ).eq("task_date", date).execute()
-        
-        return {
-            "success": True,
-            "message": f"{date} tarihli görevler silindi",
-            "deleted_count": len(result.data) if result.data else 0
-        }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-@router.post("/student/tasks/{task_id}/uncomplete")
-async def uncomplete_task(task_id: str):
-    """
-    Görevi geri al (sadece manuel tamamlamalar için)
-    """
-    try:
-        supabase = get_supabase_admin()
-        
-        # Görevi kontrol et
-        task = supabase.table("student_tasks").select("*").eq("id", task_id).execute()
-        
-        if not task.data:
-            return {"success": False, "error": "Görev bulunamadı"}
-        
-        task_data = task.data[0]
-        
-        # Sadece manuel tamamlamalara izin ver
-        if not task_data.get("manual_completion", False):
-            return {
-                "success": False,
-                "error": "Bu görev otomatik tamamlanmış, geri alınamaz!"
-            }
-        
-        # Geri al
-        update_data = {
-            "status": "pending",
-            "completed_at": None,
-            "manual_completion": False
-        }
-        
-        result = supabase.table("student_tasks").update(update_data).eq("id", task_id).execute()
-        
-        return {
-            "success": True,
-            "task": result.data[0],
-            "message": "Görev geri alındı"
-        }
-        
-    except Exception as e:
-        print(f"Task uncomplete error: {str(e)}")
-        return {"success": False, "error": str(e)}
-
-
-@router.get("/student/weekly-subjects")
-async def get_weekly_subjects(student_id: str):
-    """
-    Son 7 günün ders bazlı performansı
-    """
-    try:
-        supabase = get_supabase_admin()
-        
-        # Son 7 günün testlerini çek
-        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-        
-        tests = supabase.table("student_topic_tests").select(
-            "*, topics(name_tr, subjects(id, name_tr))"
-        ).eq("student_id", student_id).gte("test_date", week_ago.isoformat()).execute()
-        
-        if not tests.data:
-            return {
-                "success": True,
-                "subjects": [],
-                "message": "Son 7 günde test yok"
-            }
-        
-        # Ders bazında grupla
-        subject_stats = {}
-        
-        for test in tests.data:
-            if not test.get("topics") or not test["topics"].get("subjects"):
-                continue
-                
-            subject_id = test["topics"]["subjects"]["id"]
-            subject_name = test["topics"]["subjects"]["name_tr"]
-            
-            if subject_id not in subject_stats:
-                subject_stats[subject_id] = {
-                    "name": subject_name,
-                    "total_tests": 0,
-                    "total_success": 0
-                }
-            
-            subject_stats[subject_id]["total_tests"] += 1
-            subject_stats[subject_id]["total_success"] += test["success_rate"]
-        
-        # Ortalama hesapla
-        subjects = []
-        for subject_id, stats in subject_stats.items():
-            avg_success = int(stats["total_success"] / stats["total_tests"])
-            subjects.append({
-                "name": stats["name"],
-                "avg_success": avg_success,
-                "total_tests": stats["total_tests"]
-            })
-        
-        # Başarıya göre sırala
-        subjects.sort(key=lambda x: x["avg_success"])
-        
-        # En kötü 2, en iyi 2
-        worst = subjects[:2] if len(subjects) >= 2 else subjects
-        best = subjects[-2:] if len(subjects) >= 2 else []
-        best.reverse()
-        
-        return {
-            "success": True,
-            "worst_subjects": worst,
-            "best_subjects": best,
-            "all_subjects": subjects
-        }
-        
-    except Exception as e:
-        print(f"Weekly subjects error: {str(e)}")
-        return {"success": False, "error": str(e)}

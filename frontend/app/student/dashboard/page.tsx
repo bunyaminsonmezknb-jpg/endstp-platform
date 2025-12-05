@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudentDashboard } from '@/lib/store/studentDashboardStore';
+import { getUserTimezone } from '@/lib/utils/timezone';
 import DashboardHeader from './components/DashboardHeader';
 import CriticalAlert from './components/CriticalAlert';
 import HeroStats from './components/HeroStats';
@@ -27,8 +28,20 @@ export default function StudentDashboard() {
   const router = useRouter();
   const { dashboardData, isLoading, error, fetchDashboardData } = useStudentDashboard();
   const [activeTab, setActiveTab] = useState<'overview' | 'motors' | 'tasks'>('overview');
-
-  useEffect(() => {
+  const [tasksSummary, setTasksSummary] = useState({
+    total_tasks: 5,
+    completed_tasks: 0,
+    total_time_minutes: 0,
+    completed_time_minutes: 0,
+    remaining_time_minutes: 0
+  });
+  const [tasksList, setTasksList] = useState([]);
+ const [weeklySubjects, setWeeklySubjects] = useState({
+  worst_subjects: [],
+  best_subjects: [],
+  all_subjects: []
+});
+ useEffect(() => {
     const userStr = localStorage.getItem('user');
     const accessToken = localStorage.getItem('access_token');
     
@@ -37,10 +50,46 @@ export default function StudentDashboard() {
       return;
     }
 
-    const user = JSON.parse(userStr);
-    fetchDashboardData(user.id);
-  }, [router]);
+// Initialize timezone
+const timezone = getUserTimezone();
+console.log('🌍 User timezone:', timezone);
 
+const user = JSON.parse(userStr);
+fetchDashboardData(user.id);
+  }, [router]);
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/v1/student/tasks/today?student_id=53a971d3-7492-4670-a31d-ca8422d0781b', {
+          headers: { 'X-User-Timezone': getUserTimezone() }
+        });
+        const data = await res.json();
+        if (data.success && data.summary) {
+          setTasksSummary(data.summary);
+          setTasksList(data.tasks || []);
+        }
+      } catch (err) {
+        console.error('Tasks summary fetch error:', err);
+      }
+    };
+    fetchTasks();
+  }, []);
+  useEffect(() => {
+    const fetchWeeklySubjects = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/v1/student/weekly-subjects?student_id=53a971d3-7492-4670-a31d-ca8422d0781b', {
+          headers: { 'X-User-Timezone': getUserTimezone() }
+        });
+        const data = await res.json();
+        if (data.success) {
+          setWeeklySubjects(data);
+        }
+      } catch (err) {
+        console.error('Weekly subjects fetch error:', err);
+      }
+    };
+    fetchWeeklySubjects();
+  }, []);
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-200 via-purple-100 to-blue-200 flex items-center justify-center">
@@ -151,12 +200,18 @@ export default function StudentDashboard() {
 
             {/* BUGÜNKÜ DURUM (3'lü Kartlar) */}
             <HeroStats
-              dailyGoal={dashboardData.dailyGoal}
+              dailyGoal={{
+                current: tasksSummary.completed_tasks,
+                target: tasksSummary.total_tasks
+              }}
               weeklySuccess={dashboardData.weeklySuccess}
               weeklyTarget={dashboardData.weeklyTarget}
-              studyTimeToday={dashboardData.studyTimeToday}
+              studyTimeToday={tasksSummary.completed_time_minutes}
               weeklyQuestions={dashboardData.weeklyQuestions}
               weeklyIncrease={dashboardData.weeklyIncrease}
+              tasksList={tasksList} // ✅ BUNU EKLE
+              weeklySubjects={weeklySubjects} // ✅ BUNU EKLE
+
             />
 
             {/* SMART ACTION CARDS (4 Motor Önerisi) */}

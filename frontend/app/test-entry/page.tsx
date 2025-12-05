@@ -36,6 +36,7 @@ export default function TestEntryPage() {
   const [correctCount, setCorrectCount] = useState<string>('');
   const [wrongCount, setWrongCount] = useState<string>('');
   const [emptyCount, setEmptyCount] = useState<string>('');
+  const [testDuration, setTestDuration] = useState<string>(''); // ✅ EKLE - Test süresi (dakika)
 
   // Hesaplanan değerler
   const correct = parseInt(correctCount) || 0;
@@ -168,6 +169,7 @@ export default function TestEntryPage() {
           empty_count: empty,
           net_score: parseFloat(net.toFixed(2)),
           success_rate: parseFloat(successRate.toFixed(2)),
+          test_duration_minutes: testDuration ? parseInt(testDuration) : undefined, // ✅ EKLE - Test süresi
         }),
       });
 
@@ -391,7 +393,28 @@ export default function TestEntryPage() {
               />
             </div>
           </div>
-
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              ⏱️ Test Süresi (Opsiyonel)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min="1"
+                max="120"
+                value={testDuration}
+                onChange={(e) => setTestDuration(e.target.value)}
+                className="w-32 px-4 py-3 border-2 border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-xl font-bold"
+                placeholder="0"
+                disabled={loading}
+              />
+              <span className="text-gray-600 font-semibold">dakika</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              💡 12 soruyu kaç dakikada çözdüğünüzü girin. Hız analizi için kullanılacak (isteğe bağlı)
+            </p>
+          </div>
+          
           {/* ✅ HESAPLANAN DEĞERLER - EditTestModal Tarzı */}
           <div className={`rounded-2xl p-6 mb-6 border-2 ${
             isValidTotal() 

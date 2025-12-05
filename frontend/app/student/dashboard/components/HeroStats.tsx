@@ -12,6 +12,12 @@ interface HeroStatsProps {
   studyTimeToday: number;
   weeklyQuestions: number;
   weeklyIncrease: number;
+  tasksList?: any[];
+  weeklySubjects?: {  // ✅ YENİ
+    worst_subjects: any[];
+    best_subjects: any[];
+    all_subjects: any[];
+  };
   projection?: {
     status: string;
     totalTopics: number;
@@ -35,10 +41,21 @@ export default function HeroStats({
   studyTimeToday, 
   weeklyQuestions,
   weeklyIncrease,
+  tasksList = [],
+  weeklySubjects = { worst_subjects: [], best_subjects: [], all_subjects: [] }, // ✅ YENİ
   projection
 }: HeroStatsProps) {
   const [flippedCard, setFlippedCard] = useState<string | null>(null);
-
+  const formatTime = (minutes: number): string => {
+    if (minutes === 0) return '0 dk';
+    if (minutes < 60) return `${minutes} dk`;
+    
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    
+    if (mins === 0) return `${hours} sa`;
+    return `${hours} sa ${mins} dk`;
+  };
   const dailyProgress = (dailyGoal.current / dailyGoal.target) * 100;
   const weeklyProgress = (weeklySuccess / weeklyTarget) * 100;
 
@@ -70,7 +87,17 @@ export default function HeroStats({
   };
 
   const dynamicGoal = calculateDynamicGoal();
+  const pendingTasks = tasksList.filter(t => t.status === 'pending');
+  const completedTasks = tasksList.filter(t => t.status === 'completed');
 
+    // Test ve study süreleri
+  const testTime = completedTasks
+    .filter(t => t.task_type === 'test')
+    .reduce((sum, t) => sum + t.estimated_time_minutes, 0);
+  
+  const studyTime = completedTasks
+    .filter(t => t.task_type === 'study')
+    .reduce((sum, t) => sum + t.estimated_time_minutes, 0);
   return (
     <div className="mb-6">
       <div className="bg-white rounded-3xl p-8 shadow-lg">
@@ -128,19 +155,26 @@ export default function HeroStats({
                   <div className="text-3xl mb-2">📋</div>
                   <div className="text-lg font-bold text-gray-800">Kalan {dailyGoal.target - dailyGoal.current} Görev</div>
                 </div>
-                <div className="space-y-2 text-sm">
-                  <div className="bg-white rounded-lg p-2 flex items-center gap-2">
-                    <span>🎥</span>
-                    <span>2 Video (Fizik)</span>
-                  </div>
-                  <div className="bg-white rounded-lg p-2 flex items-center gap-2">
-                    <span>📝</span>
-                    <span>40 Soru (Matematik)</span>
-                  </div>
-                  <div className="bg-white rounded-lg p-2 flex items-center gap-2">
-                    <span>📊</span>
-                    <span>1 Deneme Analizi</span>
-                  </div>
+                <div className="space-y-2 text-sm max-h-40 overflow-y-auto">
+                  {pendingTasks.length > 0 ? (
+                    pendingTasks.slice(0, 4).map((task) => (
+                      <div key={task.id} className="bg-white rounded-lg p-2 flex items-center gap-2">
+                        <span>{task.task_type === 'test' ? '📝' : '📚'}</span>
+                        <span className="flex-1 text-xs">{task.topic_name}</span>
+                        <span className="text-xs font-semibold text-gray-600">{task.estimated_time_minutes} dk</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <span className="text-2xl">🎉</span>
+                      <p className="text-xs text-green-700 mt-1">Tüm görevler tamamlandı!</p>
+                    </div>
+                  )}
+                  {pendingTasks.length > 4 && (
+                    <div className="text-center text-xs text-gray-500 pt-1">
+                      +{pendingTasks.length - 4} görev daha
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -198,15 +232,37 @@ export default function HeroStats({
                   <div className="text-lg font-bold text-gray-800">Suçlu Kim?</div>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <div className="bg-red-100 rounded-lg p-2">
-                    <div className="font-bold text-red-700 mb-1">📉 Ortalamayı Düşürenler:</div>
-                    <div className="text-gray-700">• Kimya (%40)</div>
-                  </div>
-                  <div className="bg-green-100 rounded-lg p-2">
-                    <div className="font-bold text-green-700 mb-1">📈 Sırtlayanlar:</div>
-                    <div className="text-gray-700">• Tarih (%90)</div>
-                    <div className="text-gray-700">• Edebiyat (%85)</div>
-                  </div>
+                  {/* Ortalamayı Düşürenler */}
+                  {weeklySubjects.worst_subjects.length > 0 ? (
+                    <div className="bg-red-100 rounded-lg p-2">
+                      <div className="font-bold text-red-700 mb-1">📉 Ortalamayı Düşürenler:</div>
+                      {weeklySubjects.worst_subjects.map((subject, idx) => (
+                        <div key={idx} className="text-gray-700 text-xs">
+                          • {subject.name} (%{subject.avg_success}) - {subject.total_tests} test
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-100 rounded-lg p-2">
+                      <div className="text-gray-600 text-xs text-center">Henüz yeterli veri yok</div>
+                    </div>
+                  )}
+
+                  {/* Sırtlayanlar */}
+                  {weeklySubjects.best_subjects.length > 0 ? (
+                    <div className="bg-green-100 rounded-lg p-2">
+                      <div className="font-bold text-green-700 mb-1">📈 Sırtlayanlar:</div>
+                      {weeklySubjects.best_subjects.map((subject, idx) => (
+                        <div key={idx} className="text-gray-700 text-xs">
+                          • {subject.name} (%{subject.avg_success}) - {subject.total_tests} test
+                        </div>
+                      ))}
+                    </div>
+                  ) : weeklySubjects.worst_subjects.length > 0 ? (
+                    <div className="bg-blue-100 rounded-lg p-2">
+                      <div className="text-blue-700 text-xs text-center">Tüm dersler aynı seviyede</div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -232,9 +288,9 @@ export default function HeroStats({
               >
                 <div className="text-center mb-4">
                   <div className="text-5xl mb-2">⏱️</div>
-                  <div className="text-4xl font-bold text-gray-800">
-                    {(studyTimeToday / 60).toFixed(1)} sa
-                  </div>
+                <div className="text-4xl font-bold text-gray-800">
+                  {formatTime(studyTimeToday)}
+                </div>
                   <div className="text-sm text-gray-600 mt-1">Bugün Çalışma Süresi</div>
                 </div>
                 <div className="w-full bg-white/50 rounded-full h-3 overflow-hidden">
@@ -263,22 +319,22 @@ export default function HeroStats({
                 <div className="space-y-2 text-sm">
                   <div className="bg-white rounded-lg p-2 flex justify-between items-center">
                     <span className="flex items-center gap-2">
-                      <span>🎥</span>
-                      <span>Video</span>
-                    </span>
-                    <span className="font-bold">1.5 sa</span>
-                  </div>
-                  <div className="bg-white rounded-lg p-2 flex justify-between items-center">
-                    <span className="flex items-center gap-2">
                       <span>📝</span>
                       <span>Test</span>
                     </span>
-                    <span className="font-bold">1 sa</span>
+                    <span className="font-bold">{formatTime(testTime)}</span>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 flex justify-between items-center">
+                    <span className="flex items-center gap-2">
+                      <span>📚</span>
+                      <span>Çalışma</span>
+                    </span>
+                    <span className="font-bold">{formatTime(studyTime)}</span>
                   </div>
                 </div>
-                <div className="mt-3 bg-orange-100 rounded-lg p-2 text-center">
-                  <div className="text-xs text-orange-700 font-semibold">
-                    💡 Test süreni artırmalısın!
+                <div className="mt-3 bg-blue-100 rounded-lg p-2 text-center">
+                  <div className="text-xs text-blue-700 font-semibold">
+                    {testTime > studyTime ? '📝 Test odaklı gidiyorsun!' : '📚 Çalışma odaklı gidiyorsun!'}
                   </div>
                 </div>
               </div>

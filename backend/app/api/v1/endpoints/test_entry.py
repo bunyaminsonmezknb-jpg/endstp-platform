@@ -6,7 +6,7 @@ Test Entry Endpoints
 import os
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header, status
@@ -14,22 +14,17 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Ortam değişkenlerini yükle (Garanti olsun)
 load_dotenv()
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # ============================================
-# SERVICE ROLE CLIENT OLUŞTURUCU (Yerel ve Güvenli)
+# SERVICE ROLE CLIENT
 # ============================================
 def get_force_admin_client() -> Client:
-    """
-    Dışarıdan import edilen session'a güvenmek yerine,
-    Admin yetkisini doğrudan burada oluşturuyoruz.
-    """
+    """Admin yetkili client"""
     url = os.getenv("SUPABASE_URL")
-    # BURASI KRİTİK: Service Key'i doğrudan çekiyoruz
     key = os.getenv("SUPABASE_SERVICE_KEY")
     
     if not url or not key:
@@ -49,12 +44,13 @@ class TestResultSubmit(BaseModel):
     student_id: str
     subject_id: str
     topic_id: str
-    test_date: str  # ISO format: "2025-11-24T14:30:00"
+    test_date: str
     correct_count: int
     wrong_count: int
     empty_count: int
     net_score: float
     success_rate: float
+    test_duration_minutes: Optional[int] = None  # Test süresi (dakika) - opsiyonel
 
 
 # ============================================
@@ -63,11 +59,7 @@ class TestResultSubmit(BaseModel):
 
 @router.get("/subjects")
 async def get_subjects():
-    """
-    Tüm dersleri listele
-    Frontend dropdown için
-    """
-    # Admin yetkisiyle bağlan
+    """Tüm dersleri listele"""
     supabase = get_force_admin_client()
     
     try:
@@ -87,11 +79,7 @@ async def get_subjects():
 
 @router.get("/subjects/{subject_id}/topics")
 async def get_topics_by_subject(subject_id: str):
-    """
-    Bir derse ait konuları listele
-    Frontend dropdown için
-    """
-    # Admin yetkisiyle bağlan
+    """Bir derse ait konuları listele"""
     supabase = get_force_admin_client()
     
     try:
@@ -106,6 +94,58 @@ async def get_topics_by_subject(subject_id: str):
 
 
 # ============================================
+# AUTO-COMPLETE TASK HELPER
+# ============================================
+
+def auto_complete_task_if_exists(supabase: Client, student_id: str, topic_id: str, test_result_id: str):
+    """
+    Bugünkü görevlerde bu konu varsa otomatik tamamla
+    """
+    try:
+        today = datetime.now(timezone.utc).date().isoformat()
+        
+        # Bugünkü görevlerde bu topic var mı kontrol et (pending durumda)
+        tasks = supabase.table("student_tasks").select("*").eq(
+            "student_id", student_id
+        ).eq(
+            "task_date", today
+        ).eq(
+            "topic_id", topic_id
+        ).eq(
+            "status", "pending"
+        ).execute()
+        
+        if tasks.data and len(tasks.data) > 0:
+            # İlk eşleşen görevi otomatik tamamla
+            task = tasks.data[0]
+            
+            update_data = {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "manual_completion": False,  # Otomatik tamamlama
+                "test_result_id": test_result_id
+            }
+            
+            supabase.table("student_tasks").update(update_data).eq("id", task["id"]).execute()
+            
+            logger.info(f"✅ Auto-completed task {task['id']} for topic {topic_id}")
+            
+            return {
+                "auto_completed": True,
+                "task_id": task["id"],
+                "task_name": task["topic_name"]
+            }
+        else:
+            logger.info(f"ℹ️ No pending task found for topic {topic_id} today")
+            return {"auto_completed": False}
+            
+    except Exception as e:
+        logger.error(f"Auto-complete task error: {str(e)}")
+        # Hata olsa bile test kaydı başarılı olduğu için görev tamamlama hatası dönmemeliyiz
+        return {"auto_completed": False, "error": str(e)}
+
+
+# ============================================
 # POST /api/v1/test-results
 # ============================================
 
@@ -115,19 +155,14 @@ async def submit_test_result(
     authorization: Optional[str] = Header(None)
 ):
     """
-    Test sonucu kaydet
+    Test sonucu kaydet + Otomatik görev tamamlama
     """
-    # RLS Bypass için Service Role Key kullanan yerel client'ı çağır
     supabase = get_force_admin_client()
     
     try:
-        # Debug: Hangi tabloya yazmaya çalıştığımızı görelim
-        print(f"DEBUG: 'student_topic_tests' tablosuna yazılıyor...")
+        logger.info(f"📝 Test girişi başlıyor: student={test_data.student_id}, topic={test_data.topic_id}")
         
-        # Total questions check (Opsiyonel validasyon)
-        total_questions = test_data.correct_count + test_data.wrong_count + test_data.empty_count
-        
-        # Insert test result (Senin yapın birebir korundu)
+        # Test record hazırla
         test_record = {
             "student_id": test_data.student_id,
             "subject_id": test_data.subject_id,
@@ -138,10 +173,10 @@ async def submit_test_result(
             "empty_count": test_data.empty_count,
             "net_score": test_data.net_score,
             "success_rate": test_data.success_rate,
-            # Sistem alanları
             "is_processed": False,
             "processing_status": "pending",
             "test_source": "web_form",
+            "test_duration_minutes": test_data.test_duration_minutes,
             "question_type": "multiple_choice",
             "created_via": "web_form",
             "api_version": "v1",
@@ -149,34 +184,51 @@ async def submit_test_result(
             "created_at": datetime.utcnow().isoformat()
         }
         
-        # Yazma İşlemi
+        # Test'i kaydet
         result = supabase.table("student_topic_tests").insert(test_record).execute()
         
-        # Supabase bazen boş data dönebilir ama hata vermezse başarılıdır.
-        # Yine de kontrol edelim.
         if not result.data:
-            # Data boşsa ama hata yoksa, insert başarılı olabilir ama return policy kapalıdır.
-            # RLS insert'e izin verir ama select'e izin vermezse data boş döner.
-            # Admin olduğumuz için data dönmeli. Dönmüyorsa bir gariplik vardır.
-            logger.warning("Insert yapıldı ama data boş döndü.")
-            
-            # ID'yi manuel alamayabiliriz bu durumda ama işlem başarılı sayılabilir.
+            logger.warning("⚠️ Insert yapıldı ama data boş döndü.")
             return {
                 "success": True,
                 "message": "Test kaydedildi (Data dönüşü yok)",
-                "net_score": test_data.net_score
+                "net_score": test_data.net_score,
+                "task_auto_completed": False
             }
         
-        return {
+        # Test başarıyla kaydedildi, şimdi otomatik görev tamamlama
+        test_id = result.data[0].get("id")
+        logger.info(f"✅ Test kaydedildi: test_id={test_id}")
+        
+        # Otomatik görev tamamlama dene
+        task_result = auto_complete_task_if_exists(
+            supabase=supabase,
+            student_id=test_data.student_id,
+            topic_id=test_data.topic_id,
+            test_result_id=test_id
+        )
+        
+        # Response hazırla
+        response = {
             "success": True,
             "message": "Test başarıyla kaydedildi",
-            "test_id": result.data[0].get("id"),
-            "net_score": test_data.net_score
+            "test_id": test_id,
+            "net_score": test_data.net_score,
+            "task_auto_completed": task_result.get("auto_completed", False)
         }
         
+        # Eğer görev otomatik tamamlandıysa bilgi ekle
+        if task_result.get("auto_completed"):
+            response["completed_task"] = {
+                "task_id": task_result.get("task_id"),
+                "task_name": task_result.get("task_name")
+            }
+            response["message"] += " ve görev otomatik tamamlandı! 🎉"
+        
+        return response
+        
     except Exception as e:
-        logger.error(f"Test submit error: {str(e)}")
-        print(f"CRITICAL ERROR: {str(e)}") # Konsolda kırmızı alarm
+        logger.error(f"❌ Test submit error: {str(e)}")
         raise HTTPException(
             status_code=500, 
             detail=f"Veritabanı hatası: {str(e)}"
