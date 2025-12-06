@@ -162,7 +162,7 @@ export default function FeedbackButtons({
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Lütfen bize bildirin ki geliştirelim... (opsiyonel)"
-                className="w-full border border-gray-300 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-lg p-3 text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
                 rows={4}
                 maxLength={500}
               />
