@@ -1,5 +1,5 @@
 'use client';
-
+import FeedbackWidget from '@/app/components/FeedbackWidget';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudentDashboard } from '@/lib/store/studentDashboardStore';
@@ -263,10 +263,8 @@ fetchDashboardData(user.id);
           </>
         )}
 
-        {/* CHAT BUTONU */}
-        <button className="fixed bottom-5 right-5 w-16 h-16 bg-gradient-to-br from-purple-600 to-purple-800 rounded-full flex items-center justify-center text-white text-3xl shadow-2xl hover:scale-110 transition-transform">
-          💬
-        </button>
+{/* FEEDBACK WIDGET */}
+        <FeedbackWidget />
       </div>
     </div>
   );
