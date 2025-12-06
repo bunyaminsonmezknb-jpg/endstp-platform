@@ -916,7 +916,7 @@ async def analyze_student_performance(request: dict):
                 time_topics.append({
                     "topic_name": data["topic_name"],
                     "subject_name": data["subject_name"],
-                    "average_interval_days": avg_duration_per_question,  # Şimdi bu "dk/soru" anlamında
+                    "average_interval_days": avg_duration_per_question,
                     "total_tests": len(tests),
                     "days_since_last_test": (now - datetime.fromisoformat(tests[0]["test_date"].replace('Z', '+00:00'))).days,
                     "average_success": sum([t["success_rate"] for t in tests]) / len(tests),
@@ -952,6 +952,8 @@ async def analyze_student_performance(request: dict):
         tests = data["tests"]
         latest_test = tests[0]
         
+
+
         remembering_rate = calculate_remembering_rate(tests)
         
         priority_score = 0
@@ -1065,20 +1067,48 @@ class TodaysTasksResponseOld(BaseModel):
 
 @router.get("/student/todays-tasks", response_model=TodaysTasksResponseOld)
 async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
-    """🎯 Bugünkü Görevler - Gerçek Veri"""
+    """
+    🎯 Bugünkü Görevler - Gerçek Motor Analizi
+    
+    1. Bugünün görevlerini kontrol et (student_tasks)
+    2. Yoksa create_daily_tasks() ile oluştur
+    3. Motor analizini çalıştır (at_risk, priority)
+    4. Tüm veriyi döndür
+    """
     try:
         # Demo student ID (gerçekte auth'dan gelecek)
         student_id = "53a971d3-7492-4670-a31d-ca8422d0781b"
+        today = get_user_date(x_user_timezone)
         
         supabase = get_supabase_admin()
         
-        # Tüm testleri çek
+        print(f"🎯 todays-tasks ÇAĞRILDI: student={student_id}, date={today}")
+        
+        # 1️⃣ Bugünün görevlerini kontrol et
+        existing_tasks = supabase.table("student_tasks").select("*").eq(
+            "student_id", student_id
+        ).eq("task_date", today.isoformat()).execute()
+        
+        print(f"📋 Mevcut görev sayısı: {len(existing_tasks.data) if existing_tasks.data else 0}")
+        
+        # 2️⃣ Görev yoksa oluştur
+        if not existing_tasks.data or len(existing_tasks.data) == 0:
+            print(f"⚡ Yeni görevler oluşturuluyor...")
+            create_daily_tasks(student_id, today.isoformat())
+            
+            # Tekrar çek
+            existing_tasks = supabase.table("student_tasks").select("*").eq(
+                "student_id", student_id
+            ).eq("task_date", today.isoformat()).execute()
+        
+        # 3️⃣ Tüm testleri çek (motor analizi için)
         all_tests = supabase.table("student_topic_tests").select(
             "*, topics(name_tr, subjects(name_tr))"
         ).eq("student_id", student_id).order("test_date", desc=True).execute()
         
         if not all_tests.data:
             # Veri yoksa mock data döndür
+            print(f"⚠️ Test verisi yok, mock döndürülüyor")
             return get_mock_todays_tasks()
         
         # Topic bazında grupla
@@ -1093,14 +1123,14 @@ async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
                 }
             topic_performance[topic_id]["tests"].append(test)
         
-        # AT RISK TOPICS (retention rate düşük)
+        # 4️⃣ AT RISK TOPICS (motor analizi)
         at_risk = []
         for topic_id, data in topic_performance.items():
             latest = data["tests"][0]
             retention = int(latest["success_rate"])
             days_ago = (datetime.now(timezone.utc) - datetime.fromisoformat(latest["test_date"].replace('Z', '+00:00'))).days
             
-            if retention < 80 and days_ago >= 1:
+            if retention < 75 and days_ago >= 0:  # ✅ Gevşetilmiş eşik
                 at_risk.append(TopicAtRisk(
                     topic_id=topic_id,
                     topic_name=data["topic_name"],
@@ -1115,12 +1145,14 @@ async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
         at_risk.sort(key=lambda x: x.retention_rate)
         at_risk = at_risk[:3]
         
-        # PRIORITY TOPICS (success rate düşük)
+        print(f"🔥 At Risk Topics: {len(at_risk)}")
+        
+        # 5️⃣ PRIORITY TOPICS (motor analizi)
         priority = []
         for topic_id, data in topic_performance.items():
             avg_success = sum([t["success_rate"] for t in data["tests"][:3]]) / min(3, len(data["tests"]))
             
-            if avg_success < 75:
+            if avg_success < 75:  # ✅ Gevşetilmiş eşik
                 priority.append(PriorityTopic(
                     topic_id=topic_id,
                     topic_name=data["topic_name"],
@@ -1135,8 +1167,9 @@ async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
         priority.sort(key=lambda x: x.priority_score, reverse=True)
         priority = priority[:3]
         
-        # STREAK (günlük test girişi)
-        today = get_user_date(x_user_timezone)
+        print(f"⚡ Priority Topics: {len(priority)}")
+        
+        # 6️⃣ STREAK Hesaplama
         streak_days = []
         check_date = today
         
@@ -1149,8 +1182,27 @@ async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
             else:
                 break
         
-        current_streak = len(streak_days)
+        streak = StudyStreak(
+            current_streak=len(streak_days),
+            longest_streak=len(streak_days),
+            streak_status="active" if today in streak_days else "broken",
+            last_study_date=streak_days[0].isoformat() if streak_days else today.isoformat(),
+            next_milestone=7 if len(streak_days) < 7 else 30 if len(streak_days) < 30 else 60
+        )
         
+        # 7️⃣ TIME STATS (tamamlanan görevlerden)
+        completed_today = [t for t in existing_tasks.data if t.get("status") == "completed"]
+        total_time = sum([t.get("estimated_time_minutes", 0) for t in completed_today])
+        
+        time_stats = TimeStats(
+            total_study_time_today=total_time,
+            total_study_time_week=0,
+            avg_daily_time=0,
+            target_daily_time=120,
+            time_efficiency=min(100, int((total_time / 120) * 100))
+        )
+        
+        # 8️⃣ RETURN
         return TodaysTasksResponseOld(
             success=True,
             data=TodaysTasksDataOld(
@@ -1158,49 +1210,17 @@ async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
                 total_at_risk=len(at_risk),
                 priority_topics=priority,
                 total_priority=len(priority),
-                streak=StudyStreak(
-                    current_streak=current_streak,
-                    longest_streak=12,
-                    streak_status="active" if current_streak > 0 else "broken",
-                    last_study_date=str(streak_days[0]) if streak_days else "",
-                    next_milestone=7
-                ),
-                time_stats=TimeStats(
-                    total_study_time_today=45,
-                    total_study_time_week=380,
-                    avg_daily_time=54,
-                    target_daily_time=120,
-                    time_efficiency=75
-                ),
+                streak=streak,
+                time_stats=time_stats,
                 generated_at=datetime.now(timezone.utc).isoformat(),
                 student_id=student_id
-            ),
-            message="Gerçek veri"
+            )
         )
-        
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return get_mock_todays_tasks()
-
-
-def get_mock_todays_tasks():
-    """Fallback mock data"""
-    return TodaysTasksResponseOld(
-        success=True,
-        data=TodaysTasksDataOld(
-            at_risk_topics=[],
-            total_at_risk=0,
-            priority_topics=[],
-            total_priority=0,
-            streak=StudyStreak(current_streak=0, longest_streak=0, streak_status="broken", last_study_date="", next_milestone=7),
-            time_stats=TimeStats(total_study_time_today=0, total_study_time_week=0, avg_daily_time=0, target_daily_time=120, time_efficiency=0),
-            generated_at=datetime.now(timezone.utc).isoformat(),
-            student_id="demo"
-        ),
-        message="Mock data (no tests)"
-    )# ============================================
-# 🎯 GÖREV TAMAMLAMA
-# ============================================
+        print(f"❌ HATA: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/student/tasks/{task_id}/complete")
 async def complete_task(task_id: str, manual: bool = True):
@@ -1333,25 +1353,20 @@ async def get_todays_tasks_list(student_id: str, x_user_timezone: str = Header("
 def create_daily_tasks(student_id: str, date: str):
     """
     🎯 4 Motor'dan Günlük Görevler Oluştur (Gerçek Analiz)
-    
-    Her gün 5 görev:
-    - BS-Model (Tekrar): 2 görev
-    - Priority Engine: 1 görev
-    - Difficulty Engine: 1 görev
-    - Time Analyzer: 1 görev
     """
     supabase = get_supabase_admin()
     
     print(f"🚀 create_daily_tasks ÇAĞRILDI: student={student_id}, date={date}")
+    
     # Öğrencinin tüm testlerini çek
     all_tests = supabase.table("student_topic_tests").select(
         "*, topics(id, name_tr, difficulty_level, subjects(id, name_tr))"
     ).eq("student_id", student_id).order("test_date", desc=True).execute()
+    
     print(f"📊 Test sayısı: {len(all_tests.data) if all_tests.data else 0}")
     
     if not all_tests.data or len(all_tests.data) < 3:
-        # Yeterli veri yok, mock görev döndür
-    print(f"⚠️ FALLBACK kullanılıyor!")
+        print(f"⚠️ FALLBACK: Test sayısı yetersiz")
         return create_fallback_tasks(student_id, date)
     
     # Topic bazında performans analizi
@@ -1373,7 +1388,9 @@ def create_daily_tasks(student_id: str, date: str):
         
         topic_performance[topic_id]["tests"].append(test)
     
-    # 1️⃣ BS-MODEL: Tekrar Zamanı Gelmiş Konular (2 görev)
+    print(f"📌 Topic sayısı: {len(topic_performance)}")
+    
+    # 1️⃣ BS-MODEL: Eşik gevşetildi (75%, 0+ gün)
     bs_candidates = []
     for topic_id, data in topic_performance.items():
         tests = data["tests"]
@@ -1383,7 +1400,7 @@ def create_daily_tasks(student_id: str, date: str):
         
         remembering_rate = calculate_remembering_rate(tests)
         
-        if remembering_rate < 70 and days_since >= 1:
+        if remembering_rate < 75 and days_since >= 0:
             urgency = 100 - remembering_rate + (days_since * 5)
             bs_candidates.append({
                 "topic_id": topic_id,
@@ -1395,8 +1412,9 @@ def create_daily_tasks(student_id: str, date: str):
     
     bs_candidates.sort(key=lambda x: x["urgency_score"], reverse=True)
     bs_tasks = bs_candidates[:2]
+    print(f"🔥 BS candidates: {len(bs_candidates)}, seçilen: {len(bs_tasks)}")
     
-    # 2️⃣ PRIORITY ENGINE: En Yüksek Öncelik (1 görev)
+    # 2️⃣ PRIORITY ENGINE
     priority_candidates = []
     for topic_id, data in topic_performance.items():
         tests = data["tests"]
@@ -1417,7 +1435,6 @@ def create_daily_tasks(student_id: str, date: str):
         
         priority_score = min(100, priority_score)
         
-        # BS-Model'de zaten seçilenleri atla
         if topic_id not in [t["topic_id"] for t in bs_tasks]:
             priority_candidates.append({
                 "topic_id": topic_id,
@@ -1428,15 +1445,15 @@ def create_daily_tasks(student_id: str, date: str):
     
     priority_candidates.sort(key=lambda x: x["priority_score"], reverse=True)
     priority_task = priority_candidates[:1]
+    print(f"⚡ Priority candidates: {len(priority_candidates)}, seçilen: {len(priority_task)}")
     
-    # 3️⃣ DIFFICULTY ENGINE: En Zor Konu (1 görev)
+    # 3️⃣ DIFFICULTY ENGINE: Eşik gevşetildi (75%)
     difficulty_candidates = []
     for topic_id, data in topic_performance.items():
         tests = data["tests"]
         avg_success = sum([t["success_rate"] for t in tests]) / len(tests)
         
-        if avg_success < 70:
-            # Zaten seçilenleri atla
+        if avg_success < 75:
             if topic_id not in [t["topic_id"] for t in bs_tasks] and \
                topic_id not in [t["topic_id"] for t in priority_task]:
                 difficulty_candidates.append({
@@ -1448,8 +1465,9 @@ def create_daily_tasks(student_id: str, date: str):
     
     difficulty_candidates.sort(key=lambda x: x["avg_success"])
     difficulty_task = difficulty_candidates[:1]
+    print(f"💪 Difficulty candidates: {len(difficulty_candidates)}, seçilen: {len(difficulty_task)}")
     
-    # 4️⃣ TIME ANALYZER: 30+ Gün veya Yavaş (1 görev)
+    # 4️⃣ TIME ANALYZER: Eşik gevşetildi (14 gün)
     time_candidates = []
     for topic_id, data in topic_performance.items():
         tests = data["tests"]
@@ -1457,8 +1475,7 @@ def create_daily_tasks(student_id: str, date: str):
         test_date = datetime.fromisoformat(latest_test["test_date"].replace('Z', '+00:00'))
         days_since = (now - test_date).days
         
-        if days_since > 30:
-            # Zaten seçilenleri atla
+        if days_since > 14:
             if topic_id not in [t["topic_id"] for t in bs_tasks] and \
                topic_id not in [t["topic_id"] for t in priority_task] and \
                topic_id not in [t["topic_id"] for t in difficulty_task]:
@@ -1471,12 +1488,12 @@ def create_daily_tasks(student_id: str, date: str):
     
     time_candidates.sort(key=lambda x: x["days_since"], reverse=True)
     time_task = time_candidates[:1]
+    print(f"⏰ Time candidates: {len(time_candidates)}, seçilen: {len(time_task)}")
     
     # Görevleri oluştur
     tasks = []
     priority_level = 1
     
-    # BS-Model görevleri (2 adet)
     for task_data in bs_tasks:
         tasks.append({
             "student_id": student_id,
@@ -1493,7 +1510,6 @@ def create_daily_tasks(student_id: str, date: str):
         })
         priority_level += 1
     
-    # Priority görev (1 adet)
     if priority_task:
         task_data = priority_task[0]
         tasks.append({
@@ -1511,7 +1527,6 @@ def create_daily_tasks(student_id: str, date: str):
         })
         priority_level += 1
     
-    # Difficulty görev (1 adet)
     if difficulty_task:
         task_data = difficulty_task[0]
         tasks.append({
@@ -1528,7 +1543,6 @@ def create_daily_tasks(student_id: str, date: str):
         })
         priority_level += 1
     
-    # Time görev (1 adet)
     if time_task:
         task_data = time_task[0]
         tasks.append({
@@ -1544,89 +1558,46 @@ def create_daily_tasks(student_id: str, date: str):
             "status": "pending"
         })
     
-    # 5'ten az görev varsa fallback kullan
-    if len(tasks) < 5:
-        return create_fallback_tasks(student_id, date)
+    print(f"📦 Toplam analitik görev: {len(tasks)}")
     
-    # Database'e kaydet
+    # ✅ DÜZELTME: Eksikleri fallback ile tamamla
+    if len(tasks) < 5:
+        print(f"⚠️ Analitik görevler {len(tasks)}/5, fallback ile tamamlanıyor")
+        fallback_list = generate_fallback_task_list(student_id, date)
+        
+        used_topic_ids = [t["topic_id"] for t in tasks]
+        for fb in fallback_list:
+            if len(tasks) >= 5:
+                break
+            if fb["topic_id"] not in used_topic_ids:
+                fb["priority_level"] = len(tasks) + 1
+                tasks.append(fb)
+                used_topic_ids.append(fb["topic_id"])
+    
     for task in tasks:
         supabase.table("student_tasks").insert(task).execute()
     
+    print(f"✅ {len(tasks)} görev DB'ye kaydedildi")
     return tasks
 
 
-def create_fallback_tasks(student_id: str, date: str):
-    """
-    Yeterli veri yoksa fallback görevler (eski mock mantık)
-    """
-    supabase = get_supabase_admin()
+def generate_fallback_task_list(student_id: str, date: str):
+    """Fallback görev listesi üret"""
     MATH_SUBJECT_ID = "e576c099-c3ae-4022-be5c-919929437966"
     
-    tasks = [
-        {
-            "student_id": student_id,
-            "task_date": date,
-            "task_type": "test",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "f82f6d64-1689-41ef-aa36-3f505637854d",
-            "topic_name": "Limit",
-            "source_motor": "fallback",
-            "priority_level": 1,
-            "estimated_time_minutes": 20,
-            "question_count": 12,
-            "status": "pending"
-        },
-        {
-            "student_id": student_id,
-            "task_date": date,
-            "task_type": "test",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "4c972d83-9848-43db-87d6-5ddb3b584591",
-            "topic_name": "İntegral",
-            "source_motor": "fallback",
-            "priority_level": 2,
-            "estimated_time_minutes": 20,
-            "question_count": 12,
-            "status": "pending"
-        },
-        {
-            "student_id": student_id,
-            "task_date": date,
-            "task_type": "study",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "c3d5aee0-2ec7-48a9-867e-cd52e75e07ff",
-            "topic_name": "Türev",
-            "source_motor": "fallback",
-            "priority_level": 3,
-            "estimated_time_minutes": 30,
-            "status": "pending"
-        },
-        {
-            "student_id": student_id,
-            "task_date": date,
-            "task_type": "study",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "9c8a8646-86b7-4f1c-9108-cee4d4c7e923",
-            "topic_name": "Fonksiyonlar",
-            "source_motor": "fallback",
-            "priority_level": 4,
-            "estimated_time_minutes": 25,
-            "status": "pending"
-        },
-        {
-            "student_id": student_id,
-            "task_date": date,
-            "task_type": "test",
-            "subject_id": MATH_SUBJECT_ID,
-            "topic_id": "f82f6d64-1689-41ef-aa36-3f505637854d",
-            "topic_name": "Limit (Tekrar)",
-            "source_motor": "fallback",
-            "priority_level": 5,
-            "estimated_time_minutes": 15,
-            "question_count": 12,
-            "status": "pending"
-        }
+    return [
+        {"student_id": student_id, "task_date": date, "task_type": "test", "subject_id": MATH_SUBJECT_ID, "topic_id": "f82f6d64-1689-41ef-aa36-3f505637854d", "topic_name": "Limit", "source_motor": "fallback", "priority_level": 1, "estimated_time_minutes": 20, "question_count": 12, "status": "pending"},
+        {"student_id": student_id, "task_date": date, "task_type": "test", "subject_id": MATH_SUBJECT_ID, "topic_id": "4c972d83-9848-43db-87d6-5ddb3b584591", "topic_name": "İntegral", "source_motor": "fallback", "priority_level": 2, "estimated_time_minutes": 20, "question_count": 12, "status": "pending"},
+        {"student_id": student_id, "task_date": date, "task_type": "study", "subject_id": MATH_SUBJECT_ID, "topic_id": "c3d5aee0-2ec7-48a9-867e-cd52e75e07ff", "topic_name": "Türev", "source_motor": "fallback", "priority_level": 3, "estimated_time_minutes": 30, "status": "pending"},
+        {"student_id": student_id, "task_date": date, "task_type": "study", "subject_id": MATH_SUBJECT_ID, "topic_id": "9c8a8646-86b7-4f1c-9108-cee4d4c7e923", "topic_name": "Fonksiyonlar", "source_motor": "fallback", "priority_level": 4, "estimated_time_minutes": 25, "status": "pending"},
+        {"student_id": student_id, "task_date": date, "task_type": "test", "subject_id": MATH_SUBJECT_ID, "topic_id": "f82f6d64-1689-41ef-aa36-3f505637854d", "topic_name": "Limit (Tekrar)", "source_motor": "fallback", "priority_level": 5, "estimated_time_minutes": 15, "question_count": 12, "status": "pending"}
     ]
+
+
+def create_fallback_tasks(student_id: str, date: str):
+    """Eski uyumluluk için"""
+    supabase = get_supabase_admin()
+    tasks = generate_fallback_task_list(student_id, date)
     
     for task in tasks:
         supabase.table("student_tasks").insert(task).execute()
