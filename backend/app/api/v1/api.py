@@ -1,10 +1,9 @@
 """
 API Router v1
 """
-from app.api.v1.endpoints import feedback
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, student, admin_osym, admin_exams, test_entry
-from app.api.v1.endpoints import student_todays_tasks
+from app.api.v1.endpoints import auth, admin_osym, admin_exams, test_entry, feedback
+from app.api.v1.endpoints.student import router as student_router
 
 api_router = APIRouter()
 
@@ -12,16 +11,14 @@ api_router = APIRouter()
 api_router.include_router(auth.router, tags=["auth"])
 
 # Student
-api_router.include_router(student.router, tags=["student"])
+api_router.include_router(student_router, tags=["student"])
 
-# Test Entry (YENİ!)
+# Test Entry
 api_router.include_router(test_entry.router, tags=["test-entry"])
 
 # Admin
 api_router.include_router(admin_osym.router, prefix="/admin", tags=["admin-osym"])
 api_router.include_router(admin_exams.router, prefix="/admin", tags=["admin-exams"])
+
+# Feedback
 api_router.include_router(feedback.router, tags=["feedback"])
-api_router.include_router(
-    student_todays_tasks.router,
-    tags=["student"]
-)
