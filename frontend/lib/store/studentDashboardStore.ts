@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import { API_BASE_URL, API_ENDPOINTS, STORAGE_KEYS, DEFAULTS } from '../constants';
-import { parseTopicStatus, safeNumber } from '../utils/type-guards';
-import type { ValidTopicStatus } from '../constants';
+import { api } from '@/lib/api/client';
 
 interface ApiTopic {
   id: string;
@@ -30,14 +28,14 @@ export interface Topic {
   name: string;
   subject: string;
   rememberingRate: number;
-  status: ValidTopicStatus;
+  status: 'CRITICAL' | 'WARNING' | 'GOOD' | 'FROZEN';
   statusText: string;
   emoji: string;
-  daysSinceLastTest: number;
-  totalTests: number;
-  latestNet: number;
-  latestSuccessRate: number;
-  nextReview: {
+  daysSinceLastTest?: number;
+  totalTests?: number;
+  latestNet?: number;
+  latestSuccessRate?: number;
+  nextReview?: {
     daysRemaining: number;
     urgency: string;
   };
@@ -60,13 +58,13 @@ export interface DashboardData {
   weeklyQuestions: number;
   weeklyIncrease: number;
   topics: Topic[];
-  criticalAlert: {
+  criticalAlert?: {
     show: boolean;
     topicName: string;
     daysAgo: number;
     forgetRisk: number;
-  } | null;
-  projection: {
+  };
+  projection?: {
     totalTopics: number;
     completedTopics: number;
     estimatedDays: number;
@@ -74,76 +72,13 @@ export interface DashboardData {
   };
 }
 
-interface ApiResponse {
-  student_name: string;
-  streak: number;
-  daily_goal: {
-    current: number;
-    target: number;
-  };
-  weekly_success: number;
-  weekly_target: number;
-  study_time_today: number;
-  weekly_questions: number;
-  weekly_increase: number;
-  topics: ApiTopic[];
-  critical_alert: {
-    show: boolean;
-    topicName: string;
-    daysAgo: number;
-    forgetRisk: number;
-  } | null;
-  projection: {
-    total_topics: number;
-    completed_topics: number;
-    estimated_days: number;
-    estimated_date: string;
-  };
-}
-
-function transformApiResponse(apiData: ApiResponse): DashboardData {
-  return {
-    studentName: apiData.student_name,
-    streak: safeNumber(apiData.streak, 0),
-    dailyGoal: apiData.daily_goal,
-    weeklySuccess: safeNumber(apiData.weekly_success, 0),
-    weeklyTarget: safeNumber(apiData.weekly_target, 85),
-    studyTimeToday: safeNumber(apiData.study_time_today, 0),
-    weeklyQuestions: safeNumber(apiData.weekly_questions, 0),
-    weeklyIncrease: safeNumber(apiData.weekly_increase, 0),
-    topics: apiData.topics.map((topic): Topic => ({
-      id: topic.id,
-      name: topic.name,
-      subject: topic.subject,
-      rememberingRate: safeNumber(topic.rememberingRate, DEFAULTS.REMEMBERING_RATE),
-      status: parseTopicStatus(topic.status),
-      statusText: topic.statusText,
-      emoji: topic.emoji,
-      daysSinceLastTest: safeNumber(topic.days_since_last_test, DEFAULTS.DAYS_SINCE_LAST_TEST),
-      totalTests: safeNumber(topic.total_tests, DEFAULTS.TOTAL_TESTS),
-      latestNet: safeNumber(topic.latest_net, DEFAULTS.LATEST_NET),
-      latestSuccessRate: safeNumber(topic.latest_success_rate, 0),
-      nextReview: {
-        daysRemaining: topic.next_review?.days_remaining ?? 0,
-        urgency: topic.next_review?.urgency ?? 'UNKNOWN',
-      },
-      achievementBadge: topic.achievementBadge,
-    })),
-    criticalAlert: apiData.critical_alert,
-    projection: {
-      totalTopics: apiData.projection.total_topics,
-      completedTopics: apiData.projection.completed_topics,
-      estimatedDays: apiData.projection.estimated_days,
-      estimatedDate: apiData.projection.estimated_date,
-    },
-  };
-}
-
 interface StudentDashboardStore {
   dashboardData: DashboardData | null;
   isLoading: boolean;
   error: string | null;
-  fetchDashboardData: (studentId: string) => Promise<void>;
+  fetchDashboardData: (studentId?: string) => Promise<void>;
+  setDashboardData: (data: DashboardData) => void;
+  updateTopicStatus: (topicId: string, newRememberingRate: number) => void;
 }
 
 export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
@@ -151,38 +86,68 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
   isLoading: false,
   error: null,
 
-  fetchDashboardData: async (studentId: string) => {
+  fetchDashboardData: async (studentId?: string) => {
     set({ isLoading: true, error: null });
-
+    
     try {
-      const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      // Yeni endpoint: /student/dashboard (token'dan ID alır)
+      const response = await api.get<any>('/student/dashboard');
       
-      if (!accessToken) {
-        throw new Error('Oturum bulunamadı');
-      }
+      // Transform API response
+      const dashboardData: DashboardData = {
+        studentName: response.student_name || 'Öğrenci',
+        streak: response.streak || 0,
+        dailyGoal: response.daily_goal || { current: 0, target: 5 },
+        weeklySuccess: response.weekly_success || 0,
+        weeklyTarget: response.weekly_target || 85,
+        studyTimeToday: response.study_time_today || 0,
+        weeklyQuestions: response.weekly_questions || 0,
+        weeklyIncrease: response.weekly_increase || 0,
+        topics: (response.topics || []).map((topic: ApiTopic) => ({
+          id: topic.id,
+          name: topic.name,
+          subject: topic.subject,
+          rememberingRate: topic.rememberingRate,
+          status: topic.status.toUpperCase() as any,
+          statusText: topic.statusText,
+          emoji: topic.emoji,
+          daysSinceLastTest: topic.days_since_last_test,
+          totalTests: topic.total_tests,
+          latestNet: topic.latest_net,
+          latestSuccessRate: topic.latest_success_rate,
+          nextReview: topic.next_review,
+          achievementBadge: topic.achievementBadge,
+        })),
+        criticalAlert: response.critical_alert,
+        projection: response.projection,
+      };
 
-      const url = `${API_BASE_URL}${API_ENDPOINTS.STUDENT_DASHBOARD(studentId)}`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`API Hatası: ${response.status}`);
-      }
-
-      const apiData: ApiResponse = await response.json();
-      const transformedData = transformApiResponse(apiData);
-
-      set({ dashboardData: transformedData, isLoading: false });
+      set({ dashboardData, isLoading: false });
     } catch (err: any) {
       set({ 
-        error: err.message || 'Veri yüklenirken hata oluştu', 
+        error: err.message || 'Dashboard yüklenemedi', 
         isLoading: false 
       });
     }
   },
+
+  setDashboardData: (data: DashboardData) => set({ dashboardData: data }),
+
+  updateTopicStatus: (topicId: string, newRememberingRate: number) =>
+    set((state) => {
+      if (!state.dashboardData) return state;
+
+      const updatedTopics = state.dashboardData.topics.map((topic) =>
+        topic.id === topicId
+          ? { ...topic, rememberingRate: newRememberingRate }
+          : topic
+      );
+
+      return {
+        dashboardData: {
+          ...state.dashboardData,
+          topics: updatedTopics,
+        },
+      };
+    }),
 }));

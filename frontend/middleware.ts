@@ -7,15 +7,15 @@ export async function middleware(req: NextRequest) {
   // Protected routes
   const protectedRoutes = ['/student', '/test-entry', '/admin', '/reports'];
   const isProtectedRoute = protectedRoutes.some(route => req.nextUrl.pathname.startsWith(route));
-  const isLoginPage = req.nextUrl.pathname === '/login';
+  const isAuthPage = req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/register';
 
   // Protected route'a token olmadan girilmeye çalışılıyor
   if (isProtectedRoute && !token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
-  // Token varken login sayfasına girilmeye çalışılıyor
-  if (isLoginPage && token) {
+  // Token varken login/register sayfasına girilmeye çalışılıyor
+  if (isAuthPage && token) {
     return NextResponse.redirect(new URL('/student/dashboard', req.url));
   }
 
@@ -28,6 +28,7 @@ export const config = {
     '/test-entry/:path*', 
     '/admin/:path*', 
     '/reports/:path*', 
-    '/login'
+    '/login',
+    '/register'  // ← TEK YENİ SATIR!
   ],
 }

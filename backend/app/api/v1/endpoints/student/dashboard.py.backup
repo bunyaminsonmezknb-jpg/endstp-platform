@@ -5,11 +5,10 @@ Student Dashboard & Profile Endpoints
 - Tests list
 - Weekly subjects
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 from app.db.session import get_supabase_admin
-from app.core.auth import get_current_user
 from .utils import calculate_remembering_rate, format_turkish_date, calculate_next_review_date, calculate_status, get_mock_topics, calculate_realistic_projection, EXAM_DATE
 
 router = APIRouter()
@@ -23,9 +22,8 @@ def get_mock_dashboard():
         "topics": []
     }
 
-@router.get("/dashboard")
-async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
-    student_id = current_user["id"]
+@router.get("/student/{student_id}/dashboard")
+async def get_student_dashboard(student_id: str):
     """Öğrenci dashboard verisi"""
     
     supabase = get_supabase_admin()
@@ -180,14 +178,13 @@ def get_mock_dashboard():
     }
 
 
-@router.get("/profile")
-async def get_student_profile(current_user: dict = Depends(get_current_user)):
+@router.get("/student/{student_id}/profile")
+async def get_student_profile(student_id: str):
     return {"id": student_id, "name": "Demo Öğrenci", "email": "demo@endstp.com", "class": "11. Sınıf"}
 
 
-@router.get("/tests")
-async def get_student_tests(current_user: dict = Depends(get_current_user)):
-    student_id = current_user["id"]
+@router.get("/student/{student_id}/tests")
+async def get_student_tests(student_id: str):
     """
     Öğrencinin tüm test geçmişini getir
     """

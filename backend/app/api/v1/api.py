@@ -11,7 +11,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router, tags=["auth"])
 
 # Student
-api_router.include_router(student_router, tags=["student"])
+api_router.include_router(student_router, prefix="/student", tags=["student"])
 
 # Test Entry
 api_router.include_router(test_entry.router, tags=["test-entry"])
