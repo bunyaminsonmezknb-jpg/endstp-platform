@@ -5,10 +5,11 @@ Student Tasks Endpoints
 - Task cleanup
 - create_daily_tasks function
 """
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends  # ← Depends ekle
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 from app.db.session import get_supabase_admin
+from app.core.auth import get_current_user  # ← YENİ SATIR
 from pydantic import BaseModel
 import uuid
 from .utils import get_user_date, calculate_remembering_rate, EXAM_DATE
@@ -70,11 +71,10 @@ class TodaysTasksResponseOld(BaseModel):
 
 
 @router.get("/student/todays-tasks", response_model=TodaysTasksResponseOld)
-async def get_todays_tasks(x_user_timezone: str = Header("UTC")):
+async def get_todays_tasks(current_user: dict = Depends(get_current_user), x_user_timezone: str = Header("UTC")):
     """🎯 Bugünkü Görevler - Gerçek Veri"""
     try:
-        # Demo student ID (gerçekte auth'dan gelecek)
-        student_id = "53a971d3-7492-4670-a31d-ca8422d0781b"
+        student_id = current_user["id"]
         
         supabase = get_supabase_admin()
         
@@ -209,7 +209,7 @@ def get_mock_todays_tasks():
 # ============================================
 
 @router.post("/student/tasks/{task_id}/complete")
-async def complete_task(task_id: str, manual: bool = True):
+async def complete_task(task_id: str, current_user: dict = Depends(get_current_user), manual: bool = True):
     """
     Görevi tamamla
     manual=True → Öğrenci manuel tik attı
@@ -245,7 +245,8 @@ async def complete_task(task_id: str, manual: bool = True):
 
 
 @router.get("/student/tasks/today")
-async def get_todays_tasks_list(student_id: str, x_user_timezone: str = Header("UTC")):
+async def get_todays_tasks_list(current_user: dict = Depends(get_current_user), x_user_timezone: str = Header("UTC")):
+    student_id = current_user["id"]
     """
     Bugünün görev listesi (5 görev)
     """
@@ -419,7 +420,8 @@ def create_daily_tasks(student_id: str, date: str):
 
 
 @router.delete("/student/tasks/cleanup")
-async def cleanup_tasks(student_id: str, date: str):
+async def cleanup_tasks(date: str, current_user: dict = Depends(get_current_user)):
+    student_id = current_user["id"]
     """Belirli bir günün tüm görevlerini sil"""
     try:
         supabase = get_supabase_admin()
@@ -438,7 +440,7 @@ async def cleanup_tasks(student_id: str, date: str):
 
 
 @router.post("/student/tasks/{task_id}/uncomplete")
-async def uncomplete_task(task_id: str):
+async def uncomplete_task(task_id: str, current_user: dict = Depends(get_current_user)):
     """
     Görevi geri al (sadece manuel tamamlamalar için)
     """

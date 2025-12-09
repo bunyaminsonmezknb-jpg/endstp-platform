@@ -9,7 +9,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header, status
+from fastapi import APIRouter, HTTPException, Header, status, Depends
+from app.core.auth import get_current_user
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -58,7 +59,7 @@ class TestResultSubmit(BaseModel):
 # ============================================
 
 @router.get("/subjects")
-async def get_subjects():
+async def get_subjects(current_user: dict = Depends(get_current_user)):
     """Tüm dersleri listele"""
     supabase = get_force_admin_client()
     
@@ -78,7 +79,7 @@ async def get_subjects():
 # ============================================
 
 @router.get("/subjects/{subject_id}/topics")
-async def get_topics_by_subject(subject_id: str):
+async def get_topics_by_subject(subject_id: str, current_user: dict = Depends(get_current_user)):
     """Bir derse ait konuları listele"""
     supabase = get_force_admin_client()
     
@@ -152,7 +153,7 @@ def auto_complete_task_if_exists(supabase: Client, student_id: str, topic_id: st
 @router.post("/test-results")
 async def submit_test_result(
     test_data: TestResultSubmit,
-    authorization: Optional[str] = Header(None)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Test sonucu kaydet + Otomatik görev tamamlama

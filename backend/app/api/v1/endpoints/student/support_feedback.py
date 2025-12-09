@@ -4,7 +4,8 @@ Student Feedback Endpoints
 - My feedbacks
 - Admin stats & list
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.core.auth import get_current_user
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -42,7 +43,7 @@ class SupportFeedbackResponse(BaseModel):
 # ============================================
 
 @router.post("/support-feedback/submit")
-async def submit_support_feedback(feedback: SupportFeedbackSubmit):
+async def submit_support_feedback(feedback: SupportFeedbackSubmit, current_user: dict = Depends(get_current_user)):
     """🎯 Kullanıcı support feedback gönderir"""
     try:
         supabase = get_supabase_admin()
@@ -73,7 +74,7 @@ async def submit_support_feedback(feedback: SupportFeedbackSubmit):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/support-feedback/my-feedbacks")
-async def get_my_support_feedbacks(limit: int = 20):
+async def get_my_support_feedbacks(current_user: dict = Depends(get_current_user), limit: int = 20):
     """Kullanıcının kendi support feedback'lerini getirir"""
     try:
         supabase = get_supabase_admin()
@@ -92,7 +93,7 @@ async def get_my_support_feedbacks(limit: int = 20):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/support-feedback/admin/stats")
-async def get_support_feedback_stats():
+async def get_support_feedback_stats(current_user: dict = Depends(get_current_user)):
     """📊 Admin: Feedback istatistikleri"""
     try:
         supabase = get_supabase_admin()
@@ -132,6 +133,7 @@ async def get_support_feedback_stats():
 
 @router.get("/support-feedback/admin/list")
 async def get_all_support_feedbacks(
+    current_user: dict = Depends(get_current_user),
     status: Optional[str] = None,
     limit: int = 50
 ):

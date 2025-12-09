@@ -3,7 +3,9 @@ Feedback API Endpoints
 Öğrencilerin dashboard component'lerine geri bildirim vermesi için
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.core.auth import get_current_user
+from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
@@ -13,75 +15,59 @@ from app.db.session import get_supabase_admin
 router = APIRouter()
 
 
+class FeedbackSubmit(BaseModel):
+    component_type: str
+    component_id: Optional[str] = None
+    feedback_type: str  # 'like', 'dislike', 'rating'
+    rating: Optional[int] = None
+    comment: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
+
+
 @router.post("/feedback/submit", response_model=dict)
-async def submit_feedback(request: dict):
+async def submit_feedback(
+    feedback: FeedbackSubmit,
+    current_user: dict = Depends(get_current_user)
+):
     """
     Öğrenci feedback'i gönderir
-    
-    Request body:
-    {
-        "student_id": "uuid",
-        "component_type": "motor_analysis",
-        "component_id": "optional",
-        "feedback_type": "like",
-        "rating": 5,
-        "comment": "optional",
-        "metadata": {}
-    }
     """
     try:
         supabase = get_supabase_admin()
-        
-        # Request'ten verileri al
-        student_id = request.get("student_id")
-        component_type = request.get("component_type")
-        component_id = request.get("component_id")
-        feedback_type = request.get("feedback_type")
-        rating = request.get("rating")
-        comment = request.get("comment")
-        metadata = request.get("metadata", {})
+        student_id = current_user["id"]
         
         # Validation
-        if not student_id:
-            raise HTTPException(status_code=400, detail="student_id gerekli")
-        
-        if not component_type:
-            raise HTTPException(status_code=400, detail="component_type gerekli")
-        
         valid_types = ['motor_analysis', 'action_card', 'critical_alert', 'goal_card', 'projection_card']
-        if component_type not in valid_types:
+        if feedback.component_type not in valid_types:
             raise HTTPException(
                 status_code=400, 
                 detail=f"component_type must be one of {valid_types}"
             )
         
-        if not feedback_type:
-            raise HTTPException(status_code=400, detail="feedback_type gerekli")
-        
         valid_feedback_types = ['like', 'dislike', 'rating']
-        if feedback_type not in valid_feedback_types:
+        if feedback.feedback_type not in valid_feedback_types:
             raise HTTPException(
                 status_code=400,
                 detail=f"feedback_type must be one of {valid_feedback_types}"
             )
         
         # Rating validation
-        if feedback_type == 'rating':
-            if rating is None:
+        if feedback.feedback_type == 'rating':
+            if feedback.rating is None:
                 raise HTTPException(status_code=400, detail="rating gerekli when feedback_type is 'rating'")
-            if not (1 <= rating <= 5):
+            if not (1 <= feedback.rating <= 5):
                 raise HTTPException(status_code=400, detail="rating must be between 1 and 5")
         
         # Feedback verisini hazırla
         feedback_data = {
-            "id": str(uuid.uuid4()),  # UUID oluştur
+            "id": str(uuid.uuid4()),
             "student_id": student_id,
-            "component_type": component_type,
-            "component_id": component_id,
-            "feedback_type": feedback_type,
-            "rating": rating,
-            "comment": comment,
-            "metadata": metadata or {},
+            "component_type": feedback.component_type,
+            "component_id": feedback.component_id,
+            "feedback_type": feedback.feedback_type,
+            "rating": feedback.rating,
+            "comment": feedback.comment,
+            "metadata": feedback.metadata or {},
             "created_at": datetime.utcnow().isoformat()
         }
         
@@ -106,7 +92,7 @@ async def submit_feedback(request: dict):
 
 @router.get("/feedback/my-feedbacks")
 async def get_my_feedbacks(
-    student_id: str,
+    current_user: dict = Depends(get_current_user),
     component_type: Optional[str] = None,
     limit: int = 50
 ):
@@ -115,6 +101,7 @@ async def get_my_feedbacks(
     """
     try:
         supabase = get_supabase_admin()
+        student_id = current_user["id"]
         
         query = supabase.table("user_feedback").select("*").eq(
             "student_id", student_id
@@ -135,6 +122,7 @@ async def get_my_feedbacks(
 @router.get("/feedback/stats/{component_type}")
 async def get_feedback_stats(
     component_type: str,
+    current_user: dict = Depends(get_current_user),
     component_id: Optional[str] = None
 ):
     """

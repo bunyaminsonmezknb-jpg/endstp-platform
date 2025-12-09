@@ -193,7 +193,7 @@ fetchDashboardData(user.id);
             {/* ÜST ALAN: Projection + University Goal (2'li) */}
             {dashboardData.projection && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-                <ProjectionCard projection={dashboardData.projection} />
+                <ProjectionCard />
                 <UniversityGoalCard />
               </div>
             )}
@@ -218,14 +218,20 @@ fetchDashboardData(user.id);
             <SmartActionCards />
 
             {/* BİLGİ SAĞLIĞI BAR */}
-            <HealthStatusBar
-              totalTopics={30}
-              healthyTopics={18}
-              warningTopics={5}
-              frozenTopics={4}
-              criticalTopics={3}
-              currentlyShown={dashboardData.topics.length}
-            />
+            {dashboardData.topics.length > 0 ? (
+              <HealthStatusBar
+                totalTopics={dashboardData.topics.length}
+                healthyTopics={dashboardData.topics.filter(t => t.status === 'excellent' || t.status === 'good').length}
+                warningTopics={dashboardData.topics.filter(t => t.status === 'warning').length}
+                frozenTopics={dashboardData.topics.filter(t => t.status === 'frozen').length}
+                criticalTopics={dashboardData.topics.filter(t => t.status === 'critical').length}
+                currentlyShown={dashboardData.topics.length}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl p-6 shadow-lg mb-6 text-center">
+                <p className="text-gray-500 text-lg">📝 Henüz test eklenmedi. İlk testinizi ekleyerek başlayın!</p>
+              </div>
+            )}
 
             {/* TOPIC HEALTH BARS */}
             <TopicHealthBar topics={dashboardData.topics} />

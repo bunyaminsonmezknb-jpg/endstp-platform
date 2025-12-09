@@ -2,7 +2,8 @@
 Todays Tasks Endpoint - Standalone
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.core.auth import get_current_user
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -74,7 +75,7 @@ class TodaysTasksResponseOld(BaseModel):
 # ============================================
 
 @router.get("/student/todays-tasks", response_model=TodaysTasksResponseOld)
-async def get_todays_tasks():
+async def get_todays_tasks(current_user: dict = Depends(get_current_user)):
     """
     🎯 Bugünkü Görevler (3 Kart)
     

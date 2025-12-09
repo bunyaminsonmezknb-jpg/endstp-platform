@@ -4,21 +4,22 @@ Student Analytics Endpoints
 - Goal (hedef belirleme)
 - Analyze (4 Motor: BS-Model, Priority, Difficulty, Time)
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 from app.db.session import get_supabase_admin
+from app.core.auth import get_current_user  # ← EKLE
 from pydantic import BaseModel
 from .utils import calculate_remembering_rate, format_turkish_date, calculate_next_review_date, EXAM_DATE
 
 router = APIRouter()
 
 @router.post("/student/projection")
-async def get_student_projection(request: dict):
+async def get_student_projection(current_user: dict = Depends(get_current_user)):
     """
     Öğrenci ilerleme projeksiyonu
     """
-    student_id = request.get("student_id")
+    student_id = current_user["id"]
     
     if not student_id:
         return {"error": "student_id gerekli"}
@@ -123,11 +124,11 @@ async def get_student_projection(request: dict):
         print(f"Projection error: {str(e)}")
         return {"error": str(e)}
 @router.post("/student/goal")
-async def get_university_goal(request: dict):
+async def set_student_goal(current_user: dict = Depends(get_current_user)):
     """
     Üniversite hedefi ilerlemesi (MVP - 12. sınıf için)
     """
-    student_id = request.get("student_id")
+    student_id = current_user["id"]
     
     if not student_id:
         return {"error": "student_id gerekli"}
@@ -318,15 +319,12 @@ async def get_university_goal(request: dict):
         return {"error": str(e)}
 
 @router.post("/student/analyze")
-async def analyze_student_performance(request: dict):
+async def analyze_student_performance(current_user: dict = Depends(get_current_user)):
     """
     4 Motor Analizi
     BS-Model, Difficulty Engine, Time Analyzer, Priority Engine
     """
-    student_id = request.get("student_id")
-    
-    if not student_id:
-        return {"error": "student_id gerekli"}
+    student_id = current_user["id"]
     
     supabase = get_supabase_admin()
     

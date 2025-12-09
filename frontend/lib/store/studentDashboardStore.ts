@@ -28,7 +28,7 @@ export interface Topic {
   name: string;
   subject: string;
   rememberingRate: number;
-  status: 'CRITICAL' | 'WARNING' | 'GOOD' | 'FROZEN';
+  status: 'excellent' | 'good' | 'warning' | 'frozen' | 'critical';
   statusText: string;
   emoji: string;
   daysSinceLastTest?: number;
@@ -65,11 +65,16 @@ export interface DashboardData {
     forgetRisk: number;
   };
   projection?: {
-    totalTopics: number;
-    completedTopics: number;
-    estimatedDays: number;
-    estimatedDate: string;
-  };
+    status: string;
+    total_topics: number;
+    completed_topics: number;
+    remaining_topics: number;
+    estimated_days: number;
+    estimated_date: string;
+    velocity: string;
+    warning_level: string;
+    message: string;
+  } | null;
 }
 
 interface StudentDashboardStore {

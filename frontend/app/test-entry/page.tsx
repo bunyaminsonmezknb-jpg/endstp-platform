@@ -1,7 +1,7 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api/client';
 
 interface Subject {
   id: string;
@@ -68,9 +68,10 @@ export default function TestEntryPage() {
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/subjects');
-        const data = await response.json();
-        setSubjects(data);
+const response = await api.get('/subjects') as any;
+console.log('🔍 Subjects response:', response);
+console.log('🔍 response.data:', response.data);
+setSubjects(response.data || response); // Backend direkt array dönüyor olabilir
       } catch (err) {
         console.error('Subjects fetch error:', err);
         setError('Dersler yüklenemedi');
@@ -94,9 +95,8 @@ export default function TestEntryPage() {
     const fetchTopics = async () => {
       setLoadingTopics(true);
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/subjects/${selectedSubject}/topics`);
-        const data = await response.json();
-        setTopics(data);
+const response = await api.get(`/subjects/${selectedSubject}/topics`) as any;
+setTopics(response.data || response);
       } catch (err) {
         console.error('Topics fetch error:', err);
         setError('Konular yüklenemedi');
@@ -301,7 +301,7 @@ export default function TestEntryPage() {
                 disabled={loading}
               >
                 <option value="">Ders seçin...</option>
-                {subjects.map((subject) => (
+                {subjects?.map((subject) => (
                   <option key={subject.id} value={subject.id}>
                     {subject.icon} {subject.name_tr}
                   </option>
@@ -329,7 +329,7 @@ export default function TestEntryPage() {
                   disabled={loading}
                 >
                   <option value="">Konu seçin...</option>
-                  {topics.map((topic) => (
+                  {topics?.map((topic) => (
                     <option key={topic.id} value={topic.id}>
                       {topic.name_tr}
                       {topic.difficulty_level && ` (⭐${topic.difficulty_level})`}

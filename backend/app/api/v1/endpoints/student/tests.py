@@ -3,14 +3,15 @@ Student Tests Endpoints
 - Update test
 - Delete test
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.core.auth import get_current_user
 from app.db.session import get_supabase_admin
 from datetime import datetime, timezone
 
 router = APIRouter()
 
 @router.put("/tests/{test_id}")
-async def update_test(test_id: str, test_data: dict):
+async def update_test(test_id: str, test_data: dict, current_user: dict = Depends(get_current_user)):
     """
     Testi güncelle
     """
@@ -47,7 +48,7 @@ async def update_test(test_id: str, test_data: dict):
     return {"success": True, "test": response.data[0]}
 
 @router.delete("/tests/{test_id}")
-async def delete_test(test_id: str):
+async def delete_test(test_id: str, current_user: dict = Depends(get_current_user)):
     """
     Testi sil
     """

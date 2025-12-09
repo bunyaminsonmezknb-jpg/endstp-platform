@@ -102,11 +102,7 @@ async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
     
     topics_list.sort(key=lambda x: x["rememberingRate"])
     
-    if len(topics_list) < 5:
-        mock_topics = get_mock_topics()
-        needed = 5 - len(topics_list)
-        topics_list.extend(mock_topics[:needed])
-    
+ 
     top_topics = topics_list[:5]
     
     projection = calculate_realistic_projection(all_tests.data, topic_performance)
@@ -154,7 +150,7 @@ async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
 
 
 def get_mock_dashboard():
-    """Mock dashboard"""
+    """Mock dashboard - Test yoksa boş döner"""
     return {
         "student_name": "Demo Öğrenci",
         "streak": 0,
@@ -164,19 +160,9 @@ def get_mock_dashboard():
         "study_time_today": 0,
         "weekly_questions": 0,
         "weekly_increase": 0,
-        "topics": get_mock_topics()[:5],
-        "critical_alert": {"show": True, "topicName": "İlk Testinizi Ekleyin", "daysAgo": 0, "forgetRisk": 0},
-        "projection": {
-            "status": "no_data",
-            "total_topics": 0,
-            "completed_topics": 0,
-            "remaining_topics": 0,
-            "estimated_days": 0,
-            "estimated_date": "Veri yetersiz",
-            "velocity": "0 konu/gün",
-            "warning_level": "info",
-            "message": "Test ekledikçe hesaplanacak"
-        }
+        "topics": [],  # ← BOŞ ARRAY
+        "critical_alert": None,  # ← NULL
+        "projection": None  # ← NULL
     }
 
 
