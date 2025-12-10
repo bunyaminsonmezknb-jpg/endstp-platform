@@ -70,7 +70,7 @@ class TodaysTasksResponseOld(BaseModel):
     message: Optional[str] = None
 
 
-@router.get("/student/todays-tasks", response_model=TodaysTasksResponseOld)
+@router.get("/todays-tasks", response_model=TodaysTasksResponseOld)
 async def get_todays_tasks(current_user: dict = Depends(get_current_user), x_user_timezone: str = Header("UTC")):
     """🎯 Bugünkü Görevler - Gerçek Veri"""
     try:
@@ -84,8 +84,33 @@ async def get_todays_tasks(current_user: dict = Depends(get_current_user), x_use
         ).eq("student_id", student_id).order("test_date", desc=True).execute()
         
         if not all_tests.data:
-            # Veri yoksa mock data döndür
-            return get_mock_todays_tasks()
+            # Veri yoksa boş liste döndür
+            return TodaysTasksResponseOld(
+                success=True,
+                data=TodaysTasksDataOld(
+                    at_risk_topics=[],
+                    total_at_risk=0,
+                    priority_topics=[],
+                    total_priority=0,
+                    streak=StudyStreak(
+                        current_streak=0,
+                        longest_streak=0,
+                        streak_status="inactive",
+                        last_study_date="",
+                        next_milestone=7
+                    ),
+                    time_stats=TimeStats(
+                        total_study_time_today=0,
+                        total_study_time_week=0,
+                        avg_daily_time=0,
+                        target_daily_time=120,
+                        time_efficiency=0
+                    ),
+                    generated_at=datetime.now(timezone.utc).isoformat(),
+                    student_id=student_id
+                ),
+                message="Henüz test eklenmedi"
+            )
         
         # Topic bazında grupla
         topic_performance = {}
@@ -208,7 +233,7 @@ def get_mock_todays_tasks():
 # 🎯 GÖREV TAMAMLAMA
 # ============================================
 
-@router.post("/student/tasks/{task_id}/complete")
+@router.post("/tasks/{task_id}/complete")
 async def complete_task(task_id: str, current_user: dict = Depends(get_current_user), manual: bool = True):
     """
     Görevi tamamla
@@ -244,7 +269,7 @@ async def complete_task(task_id: str, current_user: dict = Depends(get_current_u
         return {"success": False, "error": str(e)}
 
 
-@router.get("/student/tasks/today")
+@router.get("/tasks/today")
 async def get_todays_tasks_list(current_user: dict = Depends(get_current_user), x_user_timezone: str = Header("UTC")):
     student_id = current_user["id"]
     """
@@ -263,14 +288,21 @@ async def get_todays_tasks_list(current_user: dict = Depends(get_current_user), 
         ).order("priority_level", desc=False).execute()
         
         # Eğer bugün için görev yoksa, oluştur
+        # Eğer bugün için görev yoksa, boş liste döndür
         if not tasks.data:
-            # 4 Motor'dan görev oluştur (şimdilik mock)
-            created_tasks = create_daily_tasks(student_id, today)
-            tasks = supabase.table("student_tasks").select("*").eq(
-                "student_id", student_id
-            ).eq(
-                "task_date", today
-            ).execute()
+            return {
+                "success": True,
+                "tasks": [],
+                "at_risk_topics": [],
+                "total_at_risk": 0,
+                "summary": {
+                    "total_tasks": 0,
+                    "completed_tasks": 0,
+                    "total_time_minutes": 0,
+                    "completed_time_minutes": 0,
+                    "remaining_time_minutes": 0
+                }
+            }
         
         # Süre hesapla
         total_time = sum([t["estimated_time_minutes"] for t in tasks.data])
@@ -419,7 +451,7 @@ def create_daily_tasks(student_id: str, date: str):
     return tasks
 
 
-@router.delete("/student/tasks/cleanup")
+@router.delete("/tasks/cleanup")
 async def cleanup_tasks(date: str, current_user: dict = Depends(get_current_user)):
     student_id = current_user["id"]
     """Belirli bir günün tüm görevlerini sil"""
@@ -439,7 +471,7 @@ async def cleanup_tasks(date: str, current_user: dict = Depends(get_current_user
         return {"success": False, "error": str(e)}
 
 
-@router.post("/student/tasks/{task_id}/uncomplete")
+@router.post("/tasks/{task_id}/uncomplete")
 async def uncomplete_task(task_id: str, current_user: dict = Depends(get_current_user)):
     """
     Görevi geri al (sadece manuel tamamlamalar için)
@@ -496,7 +528,7 @@ def get_mock_todays_tasks():
             "streak": {
                 "current_streak": 0,
                 "longest_streak": 0,
-                "last_study_date": None,
+                "last_study_date": "",  # ← Empty string
                 "streak_status": "inactive",
                 "next_milestone": 7
             },

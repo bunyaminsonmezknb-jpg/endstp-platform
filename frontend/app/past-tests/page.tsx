@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api/client';
 import EditTestModal from './EditTestModal';
 
 interface TestRecord {
@@ -46,22 +47,8 @@ export default function PastTestsPage() {
 
       const user = JSON.parse(userStr);
 
-      const response = await fetch(
-        `http://localhost:8000/api/v1/student/${user.id}/tests`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Testler yüklenemedi');
-      }
-
-      const data = await response.json();
-      setTests(data.tests || []);
+const data = await api.get('/student/tests') as any;
+setTests(data.tests || []);
       setError(null);
     } catch (err: any) {
       console.error('Test yükleme hatası:', err);
@@ -72,59 +59,27 @@ export default function PastTestsPage() {
   };
 
   // ✅ BACKEND'E UPDATE İSTEĞİ YAPAN FONKSİYON
-  const updateTestInBackend = async (updatedTestData: any) => {
-    const accessToken = localStorage.getItem('access_token');
-    
-    const response = await fetch(
-      `http://localhost:8000/api/v1/tests/${updatedTestData.id}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          test_date: updatedTestData.test_date,
-          correct_count: updatedTestData.correct_count,
-          wrong_count: updatedTestData.wrong_count,
-          empty_count: updatedTestData.empty_count,
-        }),
-      }
-    );
+const updateTestInBackend = async (updatedTestData: any) => {
+  await api.put(`/tests/${updatedTestData.id}`, {
+    test_date: updatedTestData.test_date,
+    correct_count: updatedTestData.correct_count,
+    wrong_count: updatedTestData.wrong_count,
+    empty_count: updatedTestData.empty_count,
+  });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Güncelleme başarısız');
-    }
+  // Başarılı olduysa listeyi yenile
+  await loadTests();
+};
 
-    // Başarılı olduysa listeyi yenile
-    await loadTests();
-  };
-
-  const handleDelete = async (testId: string) => {
-    try {
-      const accessToken = localStorage.getItem('access_token');
-      
-      const response = await fetch(
-        `http://localhost:8000/api/v1/tests/${testId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Test silinemedi');
-      }
-
-      setTests(tests.filter(t => t.id !== testId));
-      setDeleteConfirm(null);
-    } catch (err: any) {
-      alert('Silme hatası: ' + err.message);
-    }
-  };
+const handleDelete = async (testId: string) => {
+  try {
+    await api.delete(`/tests/${testId}`);
+    setTests(tests.filter(t => t.id !== testId));
+    setDeleteConfirm(null);
+  } catch (err: any) {
+    alert('Silme hatası: ' + err.message);
+  }
+};
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('tr-TR', {

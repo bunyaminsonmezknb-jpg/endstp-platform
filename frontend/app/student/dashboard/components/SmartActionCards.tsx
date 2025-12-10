@@ -1,6 +1,6 @@
 'use client';
-
 import { useState, useEffect } from 'react';
+import { api } from '@/lib/api/client';
 import FeedbackButtons from './FeedbackButtons';
 
 interface MotorAction {
@@ -43,23 +43,7 @@ export default function SmartActionCards() {
 
       const user = JSON.parse(userStr);
 
-      const response = await fetch('http://localhost:8000/api/v1/student/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          student_id: user.id,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Analiz başarısız');
-      }
-
-      const data = await response.json();
-
+      const data = await api.post('/student/analyze') as any;
       const motors: MotorData[] = [];
 
       // 1. BS-MODEL (Akıllı Tekrar)

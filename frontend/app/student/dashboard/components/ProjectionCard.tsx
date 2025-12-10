@@ -1,6 +1,6 @@
 'use client';
-
 import { useState, useEffect } from 'react';
+import { api } from '@/lib/api/client';
 import FeedbackButtons from './FeedbackButtons';
 
 interface ProjectionData {
@@ -34,39 +34,23 @@ export default function ProjectionCard() {
 
       const user = JSON.parse(userStr);
 
-      const response = await fetch('http://localhost:8000/api/v1/student/projection', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          student_id: user.id,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Projeksiyon alınamadı');
-      }
-
-      const data = await response.json();
-
-      if (data.status === 'no_data') {
-        setProjection(null);
-    } else if (data.projection) {
-      const totalTopics =
-        Number(data.projection.total_topics ?? data.projection.totalTopics ?? 0);
-      const completedTopics =
-        Number(data.projection.completed_topics ?? data.projection.completedTopics ?? 0);
-      const estimatedDays =
-        Number(data.projection.estimated_days ?? data.projection.estimatedDays ?? 0);
+const response = await api.post('/student/projection') as any;
+if (response.status === 'no_data') {
+  setProjection(null);
+} else if (response.projection) {
+  const totalTopics =
+    Number(response.projection.total_topics ?? response.projection.totalTopics ?? 0);
+  const completedTopics =
+    Number(response.projection.completed_topics ?? response.projection.completedTopics ?? 0);
+  const estimatedDays =
+    Number(response.projection.estimated_days ?? response.projection.estimatedDays ?? 0);
 
       setProjection({
         totalTopics,
         completedTopics,
         estimatedDays,
         estimatedDate:
-          data.projection.estimated_date ?? data.projection.estimatedDate ?? '',
+          response.projection.estimated_date ?? response.projection.estimatedDate ?? '',
       });
     }
     } catch (err: any) {

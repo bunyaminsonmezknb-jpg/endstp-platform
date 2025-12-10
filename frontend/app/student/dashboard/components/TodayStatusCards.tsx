@@ -1,9 +1,8 @@
 'use client';
-
 import React from 'react';
+import { api } from '@/lib/api/client';
 import { useTodaysTasks } from '@/lib/api/useTodaysTasks';
 import { TopicAtRisk, PriorityTopic } from '@/lib/types/todaysTasks';
-import { getUserTimezone } from '@/lib/utils/timezone'; // ✅ EKLE
 
 // Task interfaces
 interface Task {
@@ -16,6 +15,7 @@ interface Task {
   question_count: number | null;
   status: string;
   completed_at: string | null;
+  manual_completion?: boolean;
 }
 
 interface TasksResponse {
@@ -56,23 +56,20 @@ export default function TodayStatusCards() {
   const [totalAtRisk, setTotalAtRisk] = React.useState(0);
   // Fetch tasks on mount
   React.useEffect(() => {
-    const fetchTasks = async () => {
-      setTasksLoading(true);
-      try {
-        const res = await fetch('http://localhost:8000/api/v1/student/tasks/today?student_id=53a971d3-7492-4670-a31d-ca8422d0781b', {
-  headers: { 'X-User-Timezone': getUserTimezone() }
-});
-        const tasksData: TasksResponse = await res.json();
+  const fetchTasks = async () => {
+    setTasksLoading(true);
+    try {
+  const tasksData = await api.get('/student/tasks/today') as any;
       if (tasksData.success) {
         setTasksList(tasksData.tasks);
         setAtRiskTopics(tasksData.at_risk_topics || []);
         setTotalAtRisk(tasksData.total_at_risk || 0);
       }
-      } catch (err) {
-        console.error('Tasks fetch error:', err);
-      } finally {
-        setTasksLoading(false);
-      }
+    } catch (err) {
+      console.error('Tasks fetch error:', err);
+    } finally {
+      setTasksLoading(false);
+    }
     };
     fetchTasks();
   }, []);
@@ -80,11 +77,7 @@ export default function TodayStatusCards() {
   // Handle task completion
         const handleCompleteTask = async (taskId: string) => {
           try {
-            const res = await fetch(
-              `http://localhost:8000/api/v1/student/tasks/${taskId}/complete?manual=true`,
-              { method: 'POST' }
-            );
-            const result = await res.json();
+            const result = await api.post(`/student/tasks/${taskId}/complete?manual=true`) as any;
             if (result.success) {
               setTasksList(prev =>
                 prev.map(t => (t.id === taskId ? { 
@@ -102,11 +95,7 @@ export default function TodayStatusCards() {
 // Handle task uncomplete (geri al)
   const handleUncompleteTask = async (taskId: string) => {
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/student/tasks/${taskId}/uncomplete`,
-        { method: 'POST' }
-      );
-      const result = await res.json();
+      const result = await api.post(`/student/tasks/${taskId}/uncomplete`) as any;
       if (result.success) {
         setTasksList(prev =>
           prev.map(t => (t.id === taskId ? { ...t, status: 'pending', completed_at: null, manual_completion: false } : t))
@@ -114,9 +103,9 @@ export default function TodayStatusCards() {
       } else {
         alert(result.error || 'Geri alınamadı');
       }
-    } catch (err) {
-      console.error(err);
-    }
+      } catch (err) {
+        console.error(err);
+      }
   };
   // Loading state
   if (isLoading) {

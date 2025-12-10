@@ -2,6 +2,11 @@
  * API Client - Authorization header otomatik ekler
  */
 
+/**
+ * API Client - Authorization ve Timezone header otomatik ekler
+ */
+import { getUserTimezone } from '@/lib/utils/timezone';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 interface RequestOptions extends RequestInit {
@@ -15,16 +20,17 @@ export async function apiRequest<T>(
   // Token'ı al
   const token = localStorage.getItem('access_token');
 
-  // Headers birleştir
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+// Headers birleştir
+const headers: Record<string, string> = {
+  'Content-Type': 'application/json',
+  'X-User-Timezone': getUserTimezone(), // ← OTOMATİK!
+  ...options.headers,
+};
 
-  // Token varsa ekle
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+// Token varsa ekle
+if (token) {
+  headers['Authorization'] = `Bearer ${token}`;
+}
 
   // İstek at
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {

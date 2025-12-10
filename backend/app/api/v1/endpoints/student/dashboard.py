@@ -207,8 +207,9 @@ async def get_student_tests(current_user: dict = Depends(get_current_user)):
         })
     
     return {"tests": formatted_tests}
-@router.get("/student/weekly-subjects")
-async def get_weekly_subjects(student_id: str):
+@router.get("/weekly-subjects")
+async def get_weekly_subjects(current_user: dict = Depends(get_current_user)):
+    student_id = current_user["id"]
     """
     Son 7 günün ders bazlı performansı
     """

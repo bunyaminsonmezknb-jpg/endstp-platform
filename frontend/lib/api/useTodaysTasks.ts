@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { api } from './client';
 import { TodaysTasksData, TodaysTasksResponse } from '../types/todaysTasks';
 
 // API base URL (from environment variable)
@@ -36,20 +36,11 @@ export const useTodaysTasks = (): UseTodaysTasksReturn => {
       setError(null);
 
       // Make API request
-      const response = await axios.get<TodaysTasksResponse>(
-        `${API_BASE_URL}/api/v1/student/todays-tasks`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            // TODO: Add JWT token from auth context
-            // 'Authorization': `Bearer ${token}`
-          },
-          timeout: 10000, // 10 seconds
-        }
-      );
+// Make API request
+const response = await api.get('/student/todays-tasks') as any;
 
-      if (response.data.success && response.data.data) {
-        setData(response.data.data);
+if (response.success && response.data) {
+  setData(response.data);
         setError(null);
       } else {
         throw new Error(response.data.error || 'Failed to fetch data');

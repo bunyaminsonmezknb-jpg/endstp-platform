@@ -1,6 +1,6 @@
 'use client';
-
 import { useState, useEffect } from 'react';
+import { api } from '@/lib/api/client';
 import FeedbackButtons from './FeedbackButtons';
 
 interface MotorTopic {
@@ -68,23 +68,8 @@ export default function MotorAnalysisPanel() {
 
       const user = JSON.parse(userStr);
 
-      const response = await fetch('http://localhost:8000/api/v1/student/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          student_id: user.id,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Analiz başarısız');
-      }
-
-      const data = await response.json();
-      setAnalysisData(data);
+      const response = await api.post('/student/analyze') as any;
+      setAnalysisData(response);
     } catch (err: any) {
       setError(err.message || 'Analiz sırasında hata oluştu');
     } finally {

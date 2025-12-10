@@ -233,10 +233,10 @@ export default function HeroStats({
                 </div>
                 <div className="space-y-2 text-sm">
                   {/* Ortalamayı Düşürenler */}
-                  {weeklySubjects.worst_subjects.length > 0 ? (
+                  {weeklySubjects?.worst_subjects?.length > 0 ? (
                     <div className="bg-red-100 rounded-lg p-2">
                       <div className="font-bold text-red-700 mb-1">📉 Ortalamayı Düşürenler:</div>
-                      {weeklySubjects.worst_subjects.map((subject, idx) => (
+                      {weeklySubjects?.worst_subjects?.map((subject, idx) => (
                         <div key={idx} className="text-gray-700 text-xs">
                           • {subject.name} (%{subject.avg_success}) - {subject.total_tests} test
                         </div>
@@ -249,16 +249,16 @@ export default function HeroStats({
                   )}
 
                   {/* Sırtlayanlar */}
-                  {weeklySubjects.best_subjects.length > 0 ? (
+                  {weeklySubjects?.best_subjects?.length > 0 ? (
                     <div className="bg-green-100 rounded-lg p-2">
                       <div className="font-bold text-green-700 mb-1">📈 Sırtlayanlar:</div>
-                      {weeklySubjects.best_subjects.map((subject, idx) => (
+                      {weeklySubjects?.best_subjects?.map((subject, idx) => (
                         <div key={idx} className="text-gray-700 text-xs">
                           • {subject.name} (%{subject.avg_success}) - {subject.total_tests} test
                         </div>
                       ))}
                     </div>
-                  ) : weeklySubjects.worst_subjects.length > 0 ? (
+                  ) : weeklySubjects?.worst_subjects?.length > 0 ? (
                     <div className="bg-blue-100 rounded-lg p-2">
                       <div className="text-blue-700 text-xs text-center">Tüm dersler aynı seviyede</div>
                     </div>

@@ -151,27 +151,19 @@ setTopics(response.data || response);
         throw new Error('Lütfen giriş yapın');
       }
 
-      const user = JSON.parse(userStr);
-
-      const response = await fetch('http://localhost:8000/api/v1/test-results', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          student_id: user.id,
-          subject_id: selectedSubject,
-          topic_id: selectedTopic,
-          test_date: testDateTime + ':00',
-          correct_count: correct,
-          wrong_count: wrong,
-          empty_count: empty,
-          net_score: parseFloat(net.toFixed(2)),
-          success_rate: parseFloat(successRate.toFixed(2)),
-          test_duration_minutes: testDuration ? parseInt(testDuration) : undefined, // ✅ EKLE - Test süresi
-        }),
-      });
+const user = JSON.parse(userStr);
+const response = await api.post('/test-results', {
+  student_id: user.id,
+  subject_id: selectedSubject,
+  topic_id: selectedTopic,
+  test_date: testDateTime + ':00',
+  correct_count: correct,
+  wrong_count: wrong,
+  empty_count: empty,
+  net_score: parseFloat(net.toFixed(2)),
+  success_rate: parseFloat(successRate.toFixed(2)),
+  test_duration_minutes: testDuration ? parseInt(testDuration) : undefined,
+}) as any;
 
       const data = await response.json();
 

@@ -14,7 +14,7 @@ from .utils import calculate_remembering_rate, format_turkish_date, calculate_ne
 
 router = APIRouter()
 
-@router.post("/student/projection")
+@router.post("/projection")
 async def get_student_projection(current_user: dict = Depends(get_current_user)):
     """
     Öğrenci ilerleme projeksiyonu
@@ -123,7 +123,7 @@ async def get_student_projection(current_user: dict = Depends(get_current_user))
     except Exception as e:
         print(f"Projection error: {str(e)}")
         return {"error": str(e)}
-@router.post("/student/goal")
+@router.post("/goal")
 async def set_student_goal(current_user: dict = Depends(get_current_user)):
     """
     Üniversite hedefi ilerlemesi (MVP - 12. sınıf için)
@@ -318,7 +318,7 @@ async def set_student_goal(current_user: dict = Depends(get_current_user)):
         print(f"Goal error: {str(e)}")
         return {"error": str(e)}
 
-@router.post("/student/analyze")
+@router.post("/analyze")
 async def analyze_student_performance(current_user: dict = Depends(get_current_user)):
     """
     4 Motor Analizi

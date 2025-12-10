@@ -3,7 +3,7 @@ import FeedbackWidget from '@/app/components/FeedbackWidget';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudentDashboard } from '@/lib/store/studentDashboardStore';
-import { getUserTimezone } from '@/lib/utils/timezone';
+import { api } from '@/lib/api/client';
 import DashboardHeader from './components/DashboardHeader';
 import CriticalAlert from './components/CriticalAlert';
 import HeroStats from './components/HeroStats';
@@ -51,43 +51,40 @@ export default function StudentDashboard() {
     }
 
 // Initialize timezone
-const timezone = getUserTimezone();
-console.log('🌍 User timezone:', timezone);
-
 const user = JSON.parse(userStr);
 fetchDashboardData(user.id);
   }, [router]);
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const res = await fetch('http://localhost:8000/api/v1/student/tasks/today?student_id=53a971d3-7492-4670-a31d-ca8422d0781b', {
-          headers: { 'X-User-Timezone': getUserTimezone() }
-        });
-        const data = await res.json();
-        if (data.success && data.summary) {
-          setTasksSummary(data.summary);
-          setTasksList(data.tasks || []);
-        }
-      } catch (err) {
-        console.error('Tasks summary fetch error:', err);
+useEffect(() => {
+  const fetchTasks = async () => {
+    try {
+      const data = await api.get('/student/tasks/today') as any;
+      if (data.success && data.summary) {
+        setTasksSummary(data.summary);
+        setTasksList(data.tasks || []);
       }
-    };
-    fetchTasks();
+    } catch (err) {
+      console.error('Tasks summary fetch error:', err);
+    }
+  };
+  
+  fetchTasks(); // İlk yükleme
+  
+  // 30 saniyede bir yenile
+  const interval = setInterval(fetchTasks, 30000);
+  
+  return () => clearInterval(interval); // Cleanup
   }, []);
   useEffect(() => {
-    const fetchWeeklySubjects = async () => {
-      try {
-        const res = await fetch('http://localhost:8000/api/v1/student/weekly-subjects?student_id=53a971d3-7492-4670-a31d-ca8422d0781b', {
-          headers: { 'X-User-Timezone': getUserTimezone() }
-        });
-        const data = await res.json();
-        if (data.success) {
-          setWeeklySubjects(data);
-        }
-      } catch (err) {
-        console.error('Weekly subjects fetch error:', err);
+  const fetchWeeklySubjects = async () => {
+    try {
+      const data = await api.get('/student/weekly-subjects') as any;
+      if (data.success) {
+        setWeeklySubjects(data);
       }
-    };
+    } catch (err) {
+      console.error('Weekly subjects fetch error:', err);
+    }
+  };
     fetchWeeklySubjects();
   }, []);
   if (isLoading) {
