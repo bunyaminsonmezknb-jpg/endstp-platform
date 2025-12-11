@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { api } from '@/lib/api/client';
 
 export default function FeedbackWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -34,11 +35,8 @@ export default function FeedbackWidget() {
 
     setIsSubmitting(true);
 
-    try {
-      const response = await fetch('http://localhost:8000/api/v1/support-feedback/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      try {
+        const data = await api.post('/student/support-feedback/submit', {
           page_url: window.location.pathname,
           satisfaction_score: satisfaction,
           issue_categories: issues,
@@ -47,12 +45,9 @@ export default function FeedbackWidget() {
             userAgent: navigator.userAgent,
             screenSize: `${window.innerWidth}x${window.innerHeight}`,
           },
-        }),
-      });
+        }) as any;
 
-      const data = await response.json();
-
-      if (data.success) {
+        if (data.success) {
         setShowThankYou(true);
         setTimeout(() => {
           setIsOpen(false);

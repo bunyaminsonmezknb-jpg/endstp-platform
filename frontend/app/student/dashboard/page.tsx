@@ -89,7 +89,7 @@ useEffect(() => {
   }, []);
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-200 via-purple-100 to-blue-200 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-700 text-xl mb-2 font-semibold">⏳ Dashboard yükleniyor...</p>
@@ -121,8 +121,8 @@ useEffect(() => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-200 via-purple-100 to-blue-200 p-5">
-      <div className="max-w-7xl mx-auto">
+<div className="min-h-screen p-6">
+  <div className="max-w-[1280px] mx-auto">
         <DashboardHeader
           studentName={dashboardData.studentName}
           streak={dashboardData.streak}
