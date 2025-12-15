@@ -60,7 +60,7 @@ setTests(data.tests || []);
 
   // ✅ BACKEND'E UPDATE İSTEĞİ YAPAN FONKSİYON
 const updateTestInBackend = async (updatedTestData: any) => {
-  await api.put(`/student/tests/${updatedTestData.id}`, {
+  await api.put(`/student/tests/${updatedTestData.id}`), {
     test_date: updatedTestData.test_date,
     correct_count: updatedTestData.correct_count,
     wrong_count: updatedTestData.wrong_count,

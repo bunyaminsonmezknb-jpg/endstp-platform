@@ -143,16 +143,18 @@ setTopics(response.data || response);
         throw new Error('⚠️ Gelecek tarih seçilemez! Test zaten çözülmüş olmalı.');
       }
 
-      // User ve token
+      // 👇 KULLANICI BİLGİSİNİ BURADA AL
       const userStr = localStorage.getItem('user');
       const accessToken = localStorage.getItem('access_token');
-      
+
       if (!userStr || !accessToken) {
         throw new Error('Lütfen giriş yapın');
       }
 
-const user = JSON.parse(userStr);
-const response = await api.post('/test-results', {
+      const user = JSON.parse(userStr);
+
+
+const response: any = await api.post('/test-results', {
   student_id: user.id,
   subject_id: selectedSubject,
   topic_id: selectedTopic,
@@ -163,19 +165,23 @@ const response = await api.post('/test-results', {
   net_score: parseFloat(net.toFixed(2)),
   success_rate: parseFloat(successRate.toFixed(2)),
   test_duration_minutes: testDuration ? parseInt(testDuration) : undefined,
-}) as any;
+});
 
-      const data = await response.json();
+// ✅ fetch/axios/custom hepsini destekler
+const data =
+  response?.data ??
+  (typeof response?.json === 'function' ? await response.json() : response);
 
-      if (!response.ok) {
-        throw new Error(data.detail || 'Test kaydedilemedi');
-      }
+// ✅ fetch ise status kontrolü, axios ise zaten catch’e düşer
+if (typeof response?.ok === 'boolean' && !response.ok) {
+  throw new Error(data?.detail || 'Test kaydedilemedi');
+}
 
-      setSuccess(true);
-      
-      setTimeout(() => {
-        router.push('/past-tests');
-      }, 2000);
+setSuccess(true);
+setTimeout(() => {
+  router.push('/past-tests');
+}, 2000);
+
 
     } catch (err: any) {
       console.error('Test entry error:', err);

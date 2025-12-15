@@ -16,7 +16,8 @@ module.exports = {
         'shake': 'shake 0.5s infinite',
         'blink': 'blink 1s infinite',
         'shine': 'shine 3s infinite',
-        'slideIn': 'slideIn 0.3s ease',
+        'slideIn': 'slideIn 0.3s ease', // ✅ BUNU KORUYORUZ (accordion için)
+        'slideInRight': 'slideInRight 0.3s ease-out', // ⭐ BUNU EKLİYORUZ (notification için)
       },
       keyframes: {
         shake: {
@@ -32,7 +33,7 @@ module.exports = {
           '0%': { left: '-100%' },
           '50%, 100%': { left: '100%' },
         },
-        slideIn: {
+        slideIn: { // ✅ BUNU KORUYORUZ (accordion için)
           from: {
             opacity: '0',
             transform: 'translateY(-50px)',
@@ -41,6 +42,16 @@ module.exports = {
             opacity: '1',
             transform: 'translateY(0)',
           },
+        },
+        slideInRight: { // ⭐ BUNU EKLİYORUZ (notification için)
+          '0%': { 
+            transform: 'translateX(100%)', 
+            opacity: '0' 
+          },
+          '100%': { 
+            transform: 'translateX(0)', 
+            opacity: '1' 
+          }
         },
       },
     },

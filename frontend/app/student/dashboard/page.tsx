@@ -16,18 +16,21 @@ import MotorAnalysisPanel from './components/MotorAnalysisPanel';
 import TodayStatusCards from './components/TodayStatusCards';
 
 /**
- * Student Dashboard - v4
+ * Student Dashboard - v4.1
  * 
  * TAB'LAR:
  * - 📊 Genel Bakış (Projection + HeroStats + Health Bars)
  * - 🚀 4 Motor Analizi
  * - 🎯 Bugünkü Görevler (TodayStatusCards)
+ * 
+ * ⭐ v4.1: Real-time Reflex Notifications added
  */
 
 export default function StudentDashboard() {
   const router = useRouter();
   const { dashboardData, isLoading, error, fetchDashboardData } = useStudentDashboard();
   const [activeTab, setActiveTab] = useState<'overview' | 'motors' | 'tasks'>('overview');
+  const [studentId, setStudentId] = useState<string>(''); // ⭐ NEW!
   const [tasksSummary, setTasksSummary] = useState({
     total_tasks: 5,
     completed_tasks: 0,
@@ -36,12 +39,13 @@ export default function StudentDashboard() {
     remaining_time_minutes: 0
   });
   const [tasksList, setTasksList] = useState([]);
- const [weeklySubjects, setWeeklySubjects] = useState({
-  worst_subjects: [],
-  best_subjects: [],
-  all_subjects: []
-});
- useEffect(() => {
+  const [weeklySubjects, setWeeklySubjects] = useState({
+    worst_subjects: [],
+    best_subjects: [],
+    all_subjects: []
+  });
+
+  useEffect(() => {
     const userStr = localStorage.getItem('user');
     const accessToken = localStorage.getItem('access_token');
     
@@ -50,43 +54,44 @@ export default function StudentDashboard() {
       return;
     }
 
-// Initialize timezone
-const user = JSON.parse(userStr);
-fetchDashboardData(user.id);
+    // Initialize timezone
+    const user = JSON.parse(userStr);
+    setStudentId(user.id); // ⭐ NEW! Store student ID for notifications
+    fetchDashboardData(user.id);
   }, [router]);
-useEffect(() => {
-  const fetchTasks = async () => {
-    try {
-      const data = await api.get('/student/tasks/today') as any;
-      if (data.success && data.summary) {
-        setTasksSummary(data.summary);
-        setTasksList(data.tasks || []);
-      }
-    } catch (err) {
-      console.error('Tasks summary fetch error:', err);
-    }
-  };
-  
-  fetchTasks(); // İlk yükleme
-  
-  // 30 saniyede bir yenile
-  const interval = setInterval(fetchTasks, 30000);
-  
-  return () => clearInterval(interval); // Cleanup
-  }, []);
+
   useEffect(() => {
-  const fetchWeeklySubjects = async () => {
-    try {
-      const data = await api.get('/student/weekly-subjects') as any;
-      if (data.success) {
-        setWeeklySubjects(data);
+    const fetchTasks = async () => {
+      try {
+        const data = await api.get('/student/tasks/today') as any;
+        if (data.success && data.summary) {
+          setTasksSummary(data.summary);
+          setTasksList(data.tasks || []);
+        }
+      } catch (err) {
+        console.error('Tasks summary fetch error:', err);
       }
-    } catch (err) {
-      console.error('Weekly subjects fetch error:', err);
-    }
-  };
+    };
+    
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchWeeklySubjects = async () => {
+      try {
+        const data = await api.get('/student/weekly-subjects') as any;
+        if (data.success) {
+          setWeeklySubjects(data);
+        }
+      } catch (err) {
+        console.error('Weekly subjects fetch error:', err);
+      }
+    };
     fetchWeeklySubjects();
   }, []);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -121,12 +126,15 @@ useEffect(() => {
   }
 
   return (
-<div className="min-h-screen p-6">
-  <div className="max-w-[1280px] mx-auto">
-        <DashboardHeader
-          studentName={dashboardData.studentName}
-          streak={dashboardData.streak}
-        />
+    <div className="min-h-screen p-6">
+      <div className="max-w-[1280px] mx-auto">
+      <DashboardHeader
+        studentName={dashboardData.studentName}
+        streak={dashboardData.streak}
+        studentId={studentId} // ⭐ EKLE
+      />
+
+        {/* ⭐ Notification Container - Orta Kısımda */}
 
         {/* TAB NAVIGATION */}
         <div className="bg-white rounded-2xl shadow-lg p-2 mb-5 flex gap-2">
@@ -172,13 +180,12 @@ useEffect(() => {
         {/* TAB CONTENT */}
         {activeTab === 'overview' ? (
           <>
-            {/* YENİ LAYOUT - GENEL BAKIŞ */}
+            {/* Rest of the overview tab content remains the same */}
             <div className="bg-green-500 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
               <span className="font-semibold">Canlı Veri (Gerçek Backend API)</span>
             </div>
 
-            {/* ACİL UYARI (Varsa) */}
             {dashboardData.criticalAlert && dashboardData.criticalAlert.show && (
               <CriticalAlert
                 topicName={dashboardData.criticalAlert.topicName}
@@ -187,7 +194,6 @@ useEffect(() => {
               />
             )}
 
-            {/* ÜST ALAN: Projection + University Goal (2'li) */}
             {dashboardData.projection && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
                 <ProjectionCard />
@@ -195,7 +201,6 @@ useEffect(() => {
               </div>
             )}
 
-            {/* BUGÜNKÜ DURUM (3'lü Kartlar) */}
             <HeroStats
               dailyGoal={{
                 current: tasksSummary.completed_tasks,
@@ -206,15 +211,12 @@ useEffect(() => {
               studyTimeToday={tasksSummary.completed_time_minutes}
               weeklyQuestions={dashboardData.weeklyQuestions}
               weeklyIncrease={dashboardData.weeklyIncrease}
-              tasksList={tasksList} // ✅ BUNU EKLE
-              weeklySubjects={weeklySubjects} // ✅ BUNU EKLE
-
+              tasksList={tasksList}
+              weeklySubjects={weeklySubjects}
             />
 
-            {/* SMART ACTION CARDS (4 Motor Önerisi) */}
             <SmartActionCards />
 
-            {/* BİLGİ SAĞLIĞI BAR */}
             {dashboardData.topics.length > 0 ? (
               <HealthStatusBar
                 totalTopics={dashboardData.topics.length}
@@ -230,10 +232,8 @@ useEffect(() => {
               </div>
             )}
 
-            {/* TOPIC HEALTH BARS */}
             <TopicHealthBar topics={dashboardData.topics} />
 
-            {/* PERFORMANS TRENDİ (Placeholder) */}
             <div className="bg-white rounded-3xl p-8 shadow-lg mt-8">
               <h2 className="text-2xl font-bold text-gray-800 mb-6">
                 📈 Son 30 Gün Performans Trendi
@@ -246,27 +246,22 @@ useEffect(() => {
           </>
         ) : activeTab === 'motors' ? (
           <>
-            {/* 4 MOTOR ANALİZİ */}
             <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
               <span className="font-semibold">4 Motor Sistemi (POST /api/v1/student/analyze)</span>
             </div>
-
             <MotorAnalysisPanel />
           </>
         ) : (
           <>
-            {/* BUGÜNKÜ GÖREVLER TAB */}
             <div className="bg-orange-500 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
               <span className="font-semibold">Canlı Veri (GET /api/v1/student/todays-tasks)</span>
             </div>
-
             <TodayStatusCards />
           </>
         )}
 
-{/* FEEDBACK WIDGET */}
         <FeedbackWidget />
       </div>
     </div>
