@@ -113,14 +113,19 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
           name: topic.name,
           subject: topic.subject,
           rememberingRate: topic.rememberingRate,
-          status: topic.status.toUpperCase() as any,
+          status: topic.status.toLowerCase() as any,
           statusText: topic.statusText,
           emoji: topic.emoji,
           daysSinceLastTest: topic.days_since_last_test,
           totalTests: topic.total_tests,
           latestNet: topic.latest_net,
           latestSuccessRate: topic.latest_success_rate,
-          nextReview: topic.next_review,
+          nextReview: topic.next_review
+  ? {
+      daysRemaining: topic.next_review.days_remaining,
+      urgency: topic.next_review.urgency
+    }
+  : undefined,
           achievementBadge: topic.achievementBadge,
         })),
         criticalAlert: response.critical_alert,

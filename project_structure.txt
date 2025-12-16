@@ -1,0 +1,1968 @@
+.
+├── CHANGELOG.md
+├── CHANGELOG.md:Zone.Identifier
+├── DAILY-REPORT-2024-11-30.md
+├── README.md
+├── README.md:Zone.Identifier
+├── backend
+│   ├── README.md
+│   ├── README_old.md
+│   ├── TABLE_CREATION_ANAYASA.sql
+│   ├── api_commercial_columns.sql
+│   ├── app
+│   │   ├── __init__.py
+│   │   ├── api
+│   │   │   ├── __init__.py
+│   │   │   ├── deps.py
+│   │   │   └── v1
+│   │   │       ├── __init__.py
+│   │   │       ├── api.py
+│   │   │       ├── endpoints
+│   │   │       │   ├── __init__.py
+│   │   │       │   ├── admin_exams.py
+│   │   │       │   ├── admin_osym.py
+│   │   │       │   ├── auth.py
+│   │   │       │   ├── feedback.py
+│   │   │       │   ├── student
+│   │   │       │   │   ├── __init__.py
+│   │   │       │   │   ├── analytics.py
+│   │   │       │   │   ├── dashboard.py
+│   │   │       │   │   ├── dashboard.py.backup
+│   │   │       │   │   ├── support_feedback.py
+│   │   │       │   │   ├── tasks.py
+│   │   │       │   │   ├── tasks.py.save
+│   │   │       │   │   ├── tests.py
+│   │   │       │   │   └── utils.py
+│   │   │       │   ├── student.py.backup
+│   │   │       │   ├── student_todays_tasks.py
+│   │   │       │   └── test_entry.py
+│   │   │       └── student_analysis.py
+│   │   ├── core
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── bs_model.py
+│   │   │   ├── config.py
+│   │   │   ├── difficulty_engine.py
+│   │   │   ├── priority_engine.py
+│   │   │   └── time_analyzer.py
+│   │   ├── db
+│   │   │   ├── __init__.py
+│   │   │   └── session.py
+│   │   ├── main.py
+│   │   ├── models
+│   │   │   ├── __init__.py
+│   │   │   └── user.py
+│   │   └── tests
+│   │       ├── quick_test.py
+│   │       └── test_motors.py
+│   ├── check_policies.sql
+│   ├── fix_rls_policy.sql
+│   ├── fix_rls_policy_v2.sql
+│   ├── main.py.OLD_BACKUP
+│   ├── migrations
+│   │   ├── 001_multi_curriculum.sql
+│   │   ├── 006_smart_mistake_analyzer_v3.4.1_FINAL_POLISH.sql
+│   │   ├── 006_smart_mistake_analyzer_v3.4.1_FINAL_POLISH.sql:Zone.Identifier
+│   │   ├── 007_ui_reflex_bridge_v1_SAFE.sql
+│   │   ├── 007_ui_reflex_bridge_v1_SAFE.sql:Zone.Identifier
+│   │   └── 20241128_add_5_motors.sql
+│   ├── models
+│   │   ├── __init__.py
+│   │   └── schemas.py
+│   ├── requirements.txt
+│   ├── scripts
+│   │   ├── run_migration.py
+│   │   ├── seed_curriculum_data.py
+│   │   └── seed_subjects.py
+│   ├── services
+│   │   ├── __init__.py
+│   │   └── analytics_service.py
+│   ├── test_motors_simple.py
+│   └── venv
+│       ├── bin
+│       │   ├── Activate.ps1
+│       │   ├── activate
+│       │   ├── activate.csh
+│       │   ├── activate.fish
+│       │   ├── dotenv
+│       │   ├── email_validator
+│       │   ├── f2py
+│       │   ├── httpx
+│       │   ├── normalizer
+│       │   ├── numpy-config
+│       │   ├── pip
+│       │   ├── pip3
+│       │   ├── pip3.10
+│       │   ├── py.test
+│       │   ├── pygmentize
+│       │   ├── pyrsa-decrypt
+│       │   ├── pyrsa-encrypt
+│       │   ├── pyrsa-keygen
+│       │   ├── pyrsa-priv2pub
+│       │   ├── pyrsa-sign
+│       │   ├── pyrsa-verify
+│       │   ├── pytest
+│       │   ├── python -> python3
+│       │   ├── python3 -> /usr/bin/python3
+│       │   ├── python3.10 -> python3
+│       │   ├── uvicorn
+│       │   ├── watchfiles
+│       │   └── websockets
+│       ├── include
+│       │   └── site
+│       │       └── python3.10
+│       │           └── greenlet
+│       │               └── greenlet.h
+│       ├── lib
+│       │   └── python3.10
+│       │       └── site-packages
+│       │           ├── PyJWT-2.10.1.dist-info
+│       │           │   ├── AUTHORS.rst
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── StrEnum-0.4.15.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── _cffi_backend.cpython-310-x86_64-linux-gnu.so
+│       │           ├── _distutils_hack
+│       │           │   ├── __init__.py
+│       │           │   └── override.py
+│       │           ├── _pytest
+│       │           │   ├── __init__.py
+│       │           │   ├── _argcomplete.py
+│       │           │   ├── _code
+│       │           │   ├── _io
+│       │           │   ├── _py
+│       │           │   ├── _version.py
+│       │           │   ├── assertion
+│       │           │   ├── cacheprovider.py
+│       │           │   ├── capture.py
+│       │           │   ├── compat.py
+│       │           │   ├── config
+│       │           │   ├── debugging.py
+│       │           │   ├── deprecated.py
+│       │           │   ├── doctest.py
+│       │           │   ├── faulthandler.py
+│       │           │   ├── fixtures.py
+│       │           │   ├── freeze_support.py
+│       │           │   ├── helpconfig.py
+│       │           │   ├── hookspec.py
+│       │           │   ├── junitxml.py
+│       │           │   ├── legacypath.py
+│       │           │   ├── logging.py
+│       │           │   ├── main.py
+│       │           │   ├── mark
+│       │           │   ├── monkeypatch.py
+│       │           │   ├── nodes.py
+│       │           │   ├── outcomes.py
+│       │           │   ├── pastebin.py
+│       │           │   ├── pathlib.py
+│       │           │   ├── py.typed
+│       │           │   ├── pytester.py
+│       │           │   ├── pytester_assertions.py
+│       │           │   ├── python.py
+│       │           │   ├── python_api.py
+│       │           │   ├── raises.py
+│       │           │   ├── recwarn.py
+│       │           │   ├── reports.py
+│       │           │   ├── runner.py
+│       │           │   ├── scope.py
+│       │           │   ├── setuponly.py
+│       │           │   ├── setupplan.py
+│       │           │   ├── skipping.py
+│       │           │   ├── stash.py
+│       │           │   ├── stepwise.py
+│       │           │   ├── subtests.py
+│       │           │   ├── terminal.py
+│       │           │   ├── threadexception.py
+│       │           │   ├── timing.py
+│       │           │   ├── tmpdir.py
+│       │           │   ├── tracemalloc.py
+│       │           │   ├── unittest.py
+│       │           │   ├── unraisableexception.py
+│       │           │   ├── warning_types.py
+│       │           │   └── warnings.py
+│       │           ├── _yaml
+│       │           │   └── __init__.py
+│       │           ├── annotated_doc
+│       │           │   ├── __init__.py
+│       │           │   ├── main.py
+│       │           │   └── py.typed
+│       │           ├── annotated_doc-0.0.4.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── licenses
+│       │           ├── annotated_types
+│       │           │   ├── __init__.py
+│       │           │   ├── py.typed
+│       │           │   └── test_cases.py
+│       │           ├── annotated_types-0.7.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── anyio
+│       │           │   ├── __init__.py
+│       │           │   ├── _backends
+│       │           │   ├── _core
+│       │           │   ├── abc
+│       │           │   ├── from_thread.py
+│       │           │   ├── lowlevel.py
+│       │           │   ├── py.typed
+│       │           │   ├── pytest_plugin.py
+│       │           │   ├── streams
+│       │           │   ├── to_process.py
+│       │           │   └── to_thread.py
+│       │           ├── anyio-3.7.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── top_level.txt
+│       │           ├── backports
+│       │           │   ├── __init__.py
+│       │           │   ├── _datetime_fromisoformat.cpython-310-x86_64-linux-gnu.so
+│       │           │   └── datetime_fromisoformat
+│       │           ├── backports_datetime_fromisoformat-2.0.3.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── bcrypt
+│       │           │   ├── __init__.py
+│       │           │   ├── __init__.pyi
+│       │           │   ├── _bcrypt.abi3.so
+│       │           │   └── py.typed
+│       │           ├── bcrypt-5.0.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── certifi
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── cacert.pem
+│       │           │   ├── core.py
+│       │           │   └── py.typed
+│       │           ├── certifi-2025.11.12.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── cffi
+│       │           │   ├── __init__.py
+│       │           │   ├── _cffi_errors.h
+│       │           │   ├── _cffi_include.h
+│       │           │   ├── _embedding.h
+│       │           │   ├── _imp_emulation.py
+│       │           │   ├── _shimmed_dist_utils.py
+│       │           │   ├── api.py
+│       │           │   ├── backend_ctypes.py
+│       │           │   ├── cffi_opcode.py
+│       │           │   ├── commontypes.py
+│       │           │   ├── cparser.py
+│       │           │   ├── error.py
+│       │           │   ├── ffiplatform.py
+│       │           │   ├── lock.py
+│       │           │   ├── model.py
+│       │           │   ├── parse_c_type.h
+│       │           │   ├── pkgconfig.py
+│       │           │   ├── recompiler.py
+│       │           │   ├── setuptools_ext.py
+│       │           │   ├── vengine_cpy.py
+│       │           │   ├── vengine_gen.py
+│       │           │   └── verifier.py
+│       │           ├── cffi-2.0.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── charset_normalizer
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── api.py
+│       │           │   ├── cd.py
+│       │           │   ├── cli
+│       │           │   ├── constant.py
+│       │           │   ├── legacy.py
+│       │           │   ├── md.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── md.py
+│       │           │   ├── md__mypyc.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── models.py
+│       │           │   ├── py.typed
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── charset_normalizer-3.4.4.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── click
+│       │           │   ├── __init__.py
+│       │           │   ├── _compat.py
+│       │           │   ├── _termui_impl.py
+│       │           │   ├── _textwrap.py
+│       │           │   ├── _utils.py
+│       │           │   ├── _winconsole.py
+│       │           │   ├── core.py
+│       │           │   ├── decorators.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── formatting.py
+│       │           │   ├── globals.py
+│       │           │   ├── parser.py
+│       │           │   ├── py.typed
+│       │           │   ├── shell_completion.py
+│       │           │   ├── termui.py
+│       │           │   ├── testing.py
+│       │           │   ├── types.py
+│       │           │   └── utils.py
+│       │           ├── click-8.3.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── cryptography
+│       │           │   ├── __about__.py
+│       │           │   ├── __init__.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── fernet.py
+│       │           │   ├── hazmat
+│       │           │   ├── py.typed
+│       │           │   ├── utils.py
+│       │           │   └── x509
+│       │           ├── cryptography-46.0.3.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── dateutil
+│       │           │   ├── __init__.py
+│       │           │   ├── _common.py
+│       │           │   ├── _version.py
+│       │           │   ├── easter.py
+│       │           │   ├── parser
+│       │           │   ├── relativedelta.py
+│       │           │   ├── rrule.py
+│       │           │   ├── tz
+│       │           │   ├── tzwin.py
+│       │           │   ├── utils.py
+│       │           │   └── zoneinfo
+│       │           ├── deprecation-2.1.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── deprecation.py
+│       │           ├── distutils-precedence.pth
+│       │           ├── dns
+│       │           │   ├── __init__.py
+│       │           │   ├── _asyncbackend.py
+│       │           │   ├── _asyncio_backend.py
+│       │           │   ├── _ddr.py
+│       │           │   ├── _features.py
+│       │           │   ├── _immutable_ctx.py
+│       │           │   ├── _no_ssl.py
+│       │           │   ├── _tls_util.py
+│       │           │   ├── _trio_backend.py
+│       │           │   ├── asyncbackend.py
+│       │           │   ├── asyncquery.py
+│       │           │   ├── asyncresolver.py
+│       │           │   ├── btree.py
+│       │           │   ├── btreezone.py
+│       │           │   ├── dnssec.py
+│       │           │   ├── dnssecalgs
+│       │           │   ├── dnssectypes.py
+│       │           │   ├── e164.py
+│       │           │   ├── edns.py
+│       │           │   ├── entropy.py
+│       │           │   ├── enum.py
+│       │           │   ├── exception.py
+│       │           │   ├── flags.py
+│       │           │   ├── grange.py
+│       │           │   ├── immutable.py
+│       │           │   ├── inet.py
+│       │           │   ├── ipv4.py
+│       │           │   ├── ipv6.py
+│       │           │   ├── message.py
+│       │           │   ├── name.py
+│       │           │   ├── namedict.py
+│       │           │   ├── nameserver.py
+│       │           │   ├── node.py
+│       │           │   ├── opcode.py
+│       │           │   ├── py.typed
+│       │           │   ├── query.py
+│       │           │   ├── quic
+│       │           │   ├── rcode.py
+│       │           │   ├── rdata.py
+│       │           │   ├── rdataclass.py
+│       │           │   ├── rdataset.py
+│       │           │   ├── rdatatype.py
+│       │           │   ├── rdtypes
+│       │           │   ├── renderer.py
+│       │           │   ├── resolver.py
+│       │           │   ├── reversename.py
+│       │           │   ├── rrset.py
+│       │           │   ├── serial.py
+│       │           │   ├── set.py
+│       │           │   ├── tokenizer.py
+│       │           │   ├── transaction.py
+│       │           │   ├── tsig.py
+│       │           │   ├── tsigkeyring.py
+│       │           │   ├── ttl.py
+│       │           │   ├── update.py
+│       │           │   ├── version.py
+│       │           │   ├── versioned.py
+│       │           │   ├── win32util.py
+│       │           │   ├── wire.py
+│       │           │   ├── xfr.py
+│       │           │   ├── zone.py
+│       │           │   ├── zonefile.py
+│       │           │   └── zonetypes.py
+│       │           ├── dnspython-2.8.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── dotenv
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── cli.py
+│       │           │   ├── ipython.py
+│       │           │   ├── main.py
+│       │           │   ├── parser.py
+│       │           │   ├── py.typed
+│       │           │   ├── variables.py
+│       │           │   └── version.py
+│       │           ├── ecdsa
+│       │           │   ├── __init__.py
+│       │           │   ├── _compat.py
+│       │           │   ├── _rwlock.py
+│       │           │   ├── _sha3.py
+│       │           │   ├── _version.py
+│       │           │   ├── curves.py
+│       │           │   ├── der.py
+│       │           │   ├── ecdh.py
+│       │           │   ├── ecdsa.py
+│       │           │   ├── eddsa.py
+│       │           │   ├── ellipticcurve.py
+│       │           │   ├── errors.py
+│       │           │   ├── keys.py
+│       │           │   ├── numbertheory.py
+│       │           │   ├── rfc6979.py
+│       │           │   ├── ssh.py
+│       │           │   ├── test_curves.py
+│       │           │   ├── test_der.py
+│       │           │   ├── test_ecdh.py
+│       │           │   ├── test_ecdsa.py
+│       │           │   ├── test_eddsa.py
+│       │           │   ├── test_ellipticcurve.py
+│       │           │   ├── test_jacobi.py
+│       │           │   ├── test_keys.py
+│       │           │   ├── test_malformed_sigs.py
+│       │           │   ├── test_numbertheory.py
+│       │           │   ├── test_pyecdsa.py
+│       │           │   ├── test_rw_lock.py
+│       │           │   ├── test_sha3.py
+│       │           │   └── util.py
+│       │           ├── ecdsa-0.19.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── email_validator
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── deliverability.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── py.typed
+│       │           │   ├── rfc_constants.py
+│       │           │   ├── syntax.py
+│       │           │   ├── types.py
+│       │           │   ├── validate_email.py
+│       │           │   └── version.py
+│       │           ├── email_validator-2.3.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── environs
+│       │           │   ├── __init__.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── fields.py
+│       │           │   ├── py.typed
+│       │           │   └── types.py
+│       │           ├── environs-14.5.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── et_xmlfile
+│       │           │   ├── __init__.py
+│       │           │   ├── incremental_tree.py
+│       │           │   └── xmlfile.py
+│       │           ├── et_xmlfile-2.0.0.dist-info
+│       │           │   ├── AUTHORS.txt
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENCE.python
+│       │           │   ├── LICENCE.rst
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── exceptiongroup
+│       │           │   ├── __init__.py
+│       │           │   ├── _catch.py
+│       │           │   ├── _exceptions.py
+│       │           │   ├── _formatting.py
+│       │           │   ├── _suppress.py
+│       │           │   ├── _version.py
+│       │           │   └── py.typed
+│       │           ├── exceptiongroup-1.3.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── fastapi
+│       │           │   ├── __init__.py
+│       │           │   ├── _compat.py
+│       │           │   ├── applications.py
+│       │           │   ├── background.py
+│       │           │   ├── concurrency.py
+│       │           │   ├── datastructures.py
+│       │           │   ├── dependencies
+│       │           │   ├── encoders.py
+│       │           │   ├── exception_handlers.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── logger.py
+│       │           │   ├── middleware
+│       │           │   ├── openapi
+│       │           │   ├── param_functions.py
+│       │           │   ├── params.py
+│       │           │   ├── py.typed
+│       │           │   ├── requests.py
+│       │           │   ├── responses.py
+│       │           │   ├── routing.py
+│       │           │   ├── security
+│       │           │   ├── staticfiles.py
+│       │           │   ├── templating.py
+│       │           │   ├── testclient.py
+│       │           │   ├── types.py
+│       │           │   ├── utils.py
+│       │           │   └── websockets.py
+│       │           ├── fastapi-0.104.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── fastapi_cors
+│       │           │   ├── VERSION
+│       │           │   ├── __init__.py
+│       │           │   ├── env.py
+│       │           │   └── main.py
+│       │           ├── fastapi_cors-0.0.6.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── greenlet
+│       │           │   ├── CObjects.cpp
+│       │           │   ├── PyGreenlet.cpp
+│       │           │   ├── PyGreenlet.hpp
+│       │           │   ├── PyGreenletUnswitchable.cpp
+│       │           │   ├── PyModule.cpp
+│       │           │   ├── TBrokenGreenlet.cpp
+│       │           │   ├── TExceptionState.cpp
+│       │           │   ├── TGreenlet.cpp
+│       │           │   ├── TGreenlet.hpp
+│       │           │   ├── TGreenletGlobals.cpp
+│       │           │   ├── TMainGreenlet.cpp
+│       │           │   ├── TPythonState.cpp
+│       │           │   ├── TStackState.cpp
+│       │           │   ├── TThreadState.hpp
+│       │           │   ├── TThreadStateCreator.hpp
+│       │           │   ├── TThreadStateDestroy.cpp
+│       │           │   ├── TUserGreenlet.cpp
+│       │           │   ├── __init__.py
+│       │           │   ├── _greenlet.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── greenlet.cpp
+│       │           │   ├── greenlet.h
+│       │           │   ├── greenlet_allocator.hpp
+│       │           │   ├── greenlet_compiler_compat.hpp
+│       │           │   ├── greenlet_cpython_compat.hpp
+│       │           │   ├── greenlet_exceptions.hpp
+│       │           │   ├── greenlet_internal.hpp
+│       │           │   ├── greenlet_msvc_compat.hpp
+│       │           │   ├── greenlet_refs.hpp
+│       │           │   ├── greenlet_slp_switch.hpp
+│       │           │   ├── greenlet_thread_support.hpp
+│       │           │   ├── platform
+│       │           │   ├── slp_platformselect.h
+│       │           │   └── tests
+│       │           ├── greenlet-3.2.4.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── h11
+│       │           │   ├── __init__.py
+│       │           │   ├── _abnf.py
+│       │           │   ├── _connection.py
+│       │           │   ├── _events.py
+│       │           │   ├── _headers.py
+│       │           │   ├── _readers.py
+│       │           │   ├── _receivebuffer.py
+│       │           │   ├── _state.py
+│       │           │   ├── _util.py
+│       │           │   ├── _version.py
+│       │           │   ├── _writers.py
+│       │           │   └── py.typed
+│       │           ├── h11-0.16.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── h2
+│       │           │   ├── __init__.py
+│       │           │   ├── config.py
+│       │           │   ├── connection.py
+│       │           │   ├── errors.py
+│       │           │   ├── events.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── frame_buffer.py
+│       │           │   ├── py.typed
+│       │           │   ├── settings.py
+│       │           │   ├── stream.py
+│       │           │   ├── utilities.py
+│       │           │   └── windows.py
+│       │           ├── h2-4.3.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── hpack
+│       │           │   ├── __init__.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── hpack.py
+│       │           │   ├── huffman.py
+│       │           │   ├── huffman_constants.py
+│       │           │   ├── huffman_table.py
+│       │           │   ├── py.typed
+│       │           │   ├── struct.py
+│       │           │   └── table.py
+│       │           ├── hpack-4.1.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── httpcore
+│       │           │   ├── __init__.py
+│       │           │   ├── _api.py
+│       │           │   ├── _async
+│       │           │   ├── _backends
+│       │           │   ├── _exceptions.py
+│       │           │   ├── _models.py
+│       │           │   ├── _ssl.py
+│       │           │   ├── _sync
+│       │           │   ├── _synchronization.py
+│       │           │   ├── _trace.py
+│       │           │   ├── _utils.py
+│       │           │   └── py.typed
+│       │           ├── httpcore-1.0.9.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── httptools
+│       │           │   ├── __init__.py
+│       │           │   ├── _version.py
+│       │           │   └── parser
+│       │           ├── httptools-0.7.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── httpx
+│       │           │   ├── __init__.py
+│       │           │   ├── __version__.py
+│       │           │   ├── _api.py
+│       │           │   ├── _auth.py
+│       │           │   ├── _client.py
+│       │           │   ├── _config.py
+│       │           │   ├── _content.py
+│       │           │   ├── _decoders.py
+│       │           │   ├── _exceptions.py
+│       │           │   ├── _main.py
+│       │           │   ├── _models.py
+│       │           │   ├── _multipart.py
+│       │           │   ├── _status_codes.py
+│       │           │   ├── _transports
+│       │           │   ├── _types.py
+│       │           │   ├── _urlparse.py
+│       │           │   ├── _urls.py
+│       │           │   ├── _utils.py
+│       │           │   └── py.typed
+│       │           ├── httpx-0.28.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── licenses
+│       │           ├── hyperframe
+│       │           │   ├── __init__.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── flags.py
+│       │           │   ├── frame.py
+│       │           │   └── py.typed
+│       │           ├── hyperframe-6.1.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── idna
+│       │           │   ├── __init__.py
+│       │           │   ├── codec.py
+│       │           │   ├── compat.py
+│       │           │   ├── core.py
+│       │           │   ├── idnadata.py
+│       │           │   ├── intranges.py
+│       │           │   ├── package_data.py
+│       │           │   ├── py.typed
+│       │           │   └── uts46data.py
+│       │           ├── idna-3.11.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── iniconfig
+│       │           │   ├── __init__.py
+│       │           │   ├── _parse.py
+│       │           │   ├── _version.py
+│       │           │   ├── exceptions.py
+│       │           │   └── py.typed
+│       │           ├── iniconfig-2.3.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── jose
+│       │           │   ├── __init__.py
+│       │           │   ├── backends
+│       │           │   ├── constants.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── jwe.py
+│       │           │   ├── jwk.py
+│       │           │   ├── jws.py
+│       │           │   ├── jwt.py
+│       │           │   └── utils.py
+│       │           ├── jwt
+│       │           │   ├── __init__.py
+│       │           │   ├── algorithms.py
+│       │           │   ├── api_jwk.py
+│       │           │   ├── api_jws.py
+│       │           │   ├── api_jwt.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── help.py
+│       │           │   ├── jwk_set_cache.py
+│       │           │   ├── jwks_client.py
+│       │           │   ├── py.typed
+│       │           │   ├── types.py
+│       │           │   ├── utils.py
+│       │           │   └── warnings.py
+│       │           ├── marshmallow
+│       │           │   ├── __init__.py
+│       │           │   ├── class_registry.py
+│       │           │   ├── constants.py
+│       │           │   ├── decorators.py
+│       │           │   ├── error_store.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── experimental
+│       │           │   ├── fields.py
+│       │           │   ├── orderedset.py
+│       │           │   ├── py.typed
+│       │           │   ├── schema.py
+│       │           │   ├── types.py
+│       │           │   ├── utils.py
+│       │           │   └── validate.py
+│       │           ├── marshmallow-4.1.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── multidict
+│       │           │   ├── __init__.py
+│       │           │   ├── _abc.py
+│       │           │   ├── _compat.py
+│       │           │   ├── _multidict.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── _multidict_py.py
+│       │           │   └── py.typed
+│       │           ├── multidict-6.7.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── multipart
+│       │           │   ├── __init__.py
+│       │           │   ├── decoders.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── multipart.py
+│       │           │   └── tests
+│       │           ├── numpy
+│       │           │   ├── __config__.py
+│       │           │   ├── __config__.pyi
+│       │           │   ├── __init__.cython-30.pxd
+│       │           │   ├── __init__.pxd
+│       │           │   ├── __init__.py
+│       │           │   ├── __init__.pyi
+│       │           │   ├── _array_api_info.py
+│       │           │   ├── _array_api_info.pyi
+│       │           │   ├── _configtool.py
+│       │           │   ├── _configtool.pyi
+│       │           │   ├── _core
+│       │           │   ├── _distributor_init.py
+│       │           │   ├── _distributor_init.pyi
+│       │           │   ├── _expired_attrs_2_0.py
+│       │           │   ├── _expired_attrs_2_0.pyi
+│       │           │   ├── _globals.py
+│       │           │   ├── _globals.pyi
+│       │           │   ├── _pyinstaller
+│       │           │   ├── _pytesttester.py
+│       │           │   ├── _pytesttester.pyi
+│       │           │   ├── _typing
+│       │           │   ├── _utils
+│       │           │   ├── char
+│       │           │   ├── compat
+│       │           │   ├── conftest.py
+│       │           │   ├── core
+│       │           │   ├── ctypeslib.py
+│       │           │   ├── ctypeslib.pyi
+│       │           │   ├── distutils
+│       │           │   ├── doc
+│       │           │   ├── dtypes.py
+│       │           │   ├── dtypes.pyi
+│       │           │   ├── exceptions.py
+│       │           │   ├── exceptions.pyi
+│       │           │   ├── f2py
+│       │           │   ├── fft
+│       │           │   ├── lib
+│       │           │   ├── linalg
+│       │           │   ├── ma
+│       │           │   ├── matlib.py
+│       │           │   ├── matlib.pyi
+│       │           │   ├── matrixlib
+│       │           │   ├── polynomial
+│       │           │   ├── py.typed
+│       │           │   ├── random
+│       │           │   ├── rec
+│       │           │   ├── strings
+│       │           │   ├── testing
+│       │           │   ├── tests
+│       │           │   ├── typing
+│       │           │   ├── version.py
+│       │           │   └── version.pyi
+│       │           ├── numpy-2.2.6.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE.txt
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── entry_points.txt
+│       │           ├── numpy.libs
+│       │           │   ├── libgfortran-040039e1-0352e75f.so.5.0.0
+│       │           │   ├── libquadmath-96973f99-934c22de.so.0.0.0
+│       │           │   └── libscipy_openblas64_-56d6093b.so
+│       │           ├── openpyxl
+│       │           │   ├── __init__.py
+│       │           │   ├── _constants.py
+│       │           │   ├── cell
+│       │           │   ├── chart
+│       │           │   ├── chartsheet
+│       │           │   ├── comments
+│       │           │   ├── compat
+│       │           │   ├── descriptors
+│       │           │   ├── drawing
+│       │           │   ├── formatting
+│       │           │   ├── formula
+│       │           │   ├── packaging
+│       │           │   ├── pivot
+│       │           │   ├── reader
+│       │           │   ├── styles
+│       │           │   ├── utils
+│       │           │   ├── workbook
+│       │           │   ├── worksheet
+│       │           │   ├── writer
+│       │           │   └── xml
+│       │           ├── openpyxl-3.1.5.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENCE.rst
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── packaging
+│       │           │   ├── __init__.py
+│       │           │   ├── _elffile.py
+│       │           │   ├── _manylinux.py
+│       │           │   ├── _musllinux.py
+│       │           │   ├── _parser.py
+│       │           │   ├── _structures.py
+│       │           │   ├── _tokenizer.py
+│       │           │   ├── licenses
+│       │           │   ├── markers.py
+│       │           │   ├── metadata.py
+│       │           │   ├── py.typed
+│       │           │   ├── requirements.py
+│       │           │   ├── specifiers.py
+│       │           │   ├── tags.py
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── packaging-25.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── pandas
+│       │           │   ├── __init__.py
+│       │           │   ├── _config
+│       │           │   ├── _libs
+│       │           │   ├── _testing
+│       │           │   ├── _typing.py
+│       │           │   ├── _version.py
+│       │           │   ├── _version_meson.py
+│       │           │   ├── api
+│       │           │   ├── arrays
+│       │           │   ├── compat
+│       │           │   ├── conftest.py
+│       │           │   ├── core
+│       │           │   ├── errors
+│       │           │   ├── io
+│       │           │   ├── plotting
+│       │           │   ├── pyproject.toml
+│       │           │   ├── testing.py
+│       │           │   ├── tests
+│       │           │   ├── tseries
+│       │           │   └── util
+│       │           ├── pandas-2.3.3.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   └── entry_points.txt
+│       │           ├── passlib
+│       │           │   ├── __init__.py
+│       │           │   ├── _data
+│       │           │   ├── apache.py
+│       │           │   ├── apps.py
+│       │           │   ├── context.py
+│       │           │   ├── crypto
+│       │           │   ├── exc.py
+│       │           │   ├── ext
+│       │           │   ├── handlers
+│       │           │   ├── hash.py
+│       │           │   ├── hosts.py
+│       │           │   ├── ifc.py
+│       │           │   ├── pwd.py
+│       │           │   ├── registry.py
+│       │           │   ├── tests
+│       │           │   ├── totp.py
+│       │           │   ├── utils
+│       │           │   └── win32.py
+│       │           ├── passlib-1.7.4.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── top_level.txt
+│       │           │   └── zip-safe
+│       │           ├── pip
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── __pip-runner__.py
+│       │           │   ├── _internal
+│       │           │   ├── _vendor
+│       │           │   └── py.typed
+│       │           ├── pip-25.3.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── licenses
+│       │           ├── pkg_resources
+│       │           │   ├── __init__.py
+│       │           │   ├── _vendor
+│       │           │   ├── extern
+│       │           │   └── tests
+│       │           ├── pluggy
+│       │           │   ├── __init__.py
+│       │           │   ├── _callers.py
+│       │           │   ├── _hooks.py
+│       │           │   ├── _manager.py
+│       │           │   ├── _result.py
+│       │           │   ├── _tracing.py
+│       │           │   ├── _version.py
+│       │           │   ├── _warnings.py
+│       │           │   └── py.typed
+│       │           ├── pluggy-1.6.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── postgrest
+│       │           │   ├── __init__.py
+│       │           │   ├── _async
+│       │           │   ├── _sync
+│       │           │   ├── base_client.py
+│       │           │   ├── base_request_builder.py
+│       │           │   ├── constants.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── py.typed
+│       │           │   ├── types.py
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── postgrest-2.24.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   └── WHEEL
+│       │           ├── propcache
+│       │           │   ├── __init__.py
+│       │           │   ├── _helpers.py
+│       │           │   ├── _helpers_c.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── _helpers_c.pyx
+│       │           │   ├── _helpers_py.py
+│       │           │   ├── api.py
+│       │           │   └── py.typed
+│       │           ├── propcache-0.4.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── psycopg2
+│       │           │   ├── __init__.py
+│       │           │   ├── _ipaddress.py
+│       │           │   ├── _json.py
+│       │           │   ├── _psycopg.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── _range.py
+│       │           │   ├── errorcodes.py
+│       │           │   ├── errors.py
+│       │           │   ├── extensions.py
+│       │           │   ├── extras.py
+│       │           │   ├── pool.py
+│       │           │   ├── sql.py
+│       │           │   └── tz.py
+│       │           ├── psycopg2_binary-2.9.11.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── psycopg2_binary.libs
+│       │           │   ├── libcom_err-2abe824b.so.2.1
+│       │           │   ├── libcrypto-d0bac21e.so.3
+│       │           │   ├── libgssapi_krb5-497db0c6.so.2.2
+│       │           │   ├── libk5crypto-b1f99d5c.so.3.1
+│       │           │   ├── libkeyutils-dfe70bd6.so.1.5
+│       │           │   ├── libkrb5-fcafa220.so.3.3
+│       │           │   ├── libkrb5support-d0bcff84.so.0.1
+│       │           │   ├── liblber-e91a9b10.so.2.0.200
+│       │           │   ├── libldap-6ead71ea.so.2.0.200
+│       │           │   ├── libpcre-9513aab5.so.1.2.0
+│       │           │   ├── libpq-9b38f5e3.so.5.17
+│       │           │   ├── libsasl2-883649fd.so.3.0.0
+│       │           │   ├── libselinux-0922c95c.so.1
+│       │           │   └── libssl-81ffa89e.so.3
+│       │           ├── py.py
+│       │           ├── pyasn1
+│       │           │   ├── __init__.py
+│       │           │   ├── codec
+│       │           │   ├── compat
+│       │           │   ├── debug.py
+│       │           │   ├── error.py
+│       │           │   └── type
+│       │           ├── pyasn1-0.6.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE.rst
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── top_level.txt
+│       │           │   └── zip-safe
+│       │           ├── pycparser
+│       │           │   ├── __init__.py
+│       │           │   ├── _ast_gen.py
+│       │           │   ├── _build_tables.py
+│       │           │   ├── _c_ast.cfg
+│       │           │   ├── ast_transforms.py
+│       │           │   ├── c_ast.py
+│       │           │   ├── c_generator.py
+│       │           │   ├── c_lexer.py
+│       │           │   ├── c_parser.py
+│       │           │   ├── lextab.py
+│       │           │   ├── ply
+│       │           │   ├── plyparser.py
+│       │           │   └── yacctab.py
+│       │           ├── pycparser-2.23.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── pydantic
+│       │           │   ├── __init__.py
+│       │           │   ├── _internal
+│       │           │   ├── _migration.py
+│       │           │   ├── alias_generators.py
+│       │           │   ├── aliases.py
+│       │           │   ├── annotated_handlers.py
+│       │           │   ├── class_validators.py
+│       │           │   ├── color.py
+│       │           │   ├── config.py
+│       │           │   ├── dataclasses.py
+│       │           │   ├── datetime_parse.py
+│       │           │   ├── decorator.py
+│       │           │   ├── deprecated
+│       │           │   ├── env_settings.py
+│       │           │   ├── error_wrappers.py
+│       │           │   ├── errors.py
+│       │           │   ├── experimental
+│       │           │   ├── fields.py
+│       │           │   ├── functional_serializers.py
+│       │           │   ├── functional_validators.py
+│       │           │   ├── generics.py
+│       │           │   ├── json.py
+│       │           │   ├── json_schema.py
+│       │           │   ├── main.py
+│       │           │   ├── mypy.py
+│       │           │   ├── networks.py
+│       │           │   ├── parse.py
+│       │           │   ├── plugin
+│       │           │   ├── py.typed
+│       │           │   ├── root_model.py
+│       │           │   ├── schema.py
+│       │           │   ├── tools.py
+│       │           │   ├── type_adapter.py
+│       │           │   ├── types.py
+│       │           │   ├── typing.py
+│       │           │   ├── utils.py
+│       │           │   ├── v1
+│       │           │   ├── validate_call_decorator.py
+│       │           │   ├── validators.py
+│       │           │   ├── version.py
+│       │           │   └── warnings.py
+│       │           ├── pydantic-2.12.4.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── pydantic_core
+│       │           │   ├── __init__.py
+│       │           │   ├── _pydantic_core.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── _pydantic_core.pyi
+│       │           │   ├── core_schema.py
+│       │           │   └── py.typed
+│       │           ├── pydantic_core-2.41.5.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── pydantic_settings
+│       │           │   ├── __init__.py
+│       │           │   ├── main.py
+│       │           │   ├── py.typed
+│       │           │   ├── sources.py
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── pydantic_settings-2.1.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── pygments
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── cmdline.py
+│       │           │   ├── console.py
+│       │           │   ├── filter.py
+│       │           │   ├── filters
+│       │           │   ├── formatter.py
+│       │           │   ├── formatters
+│       │           │   ├── lexer.py
+│       │           │   ├── lexers
+│       │           │   ├── modeline.py
+│       │           │   ├── plugin.py
+│       │           │   ├── regexopt.py
+│       │           │   ├── scanner.py
+│       │           │   ├── sphinxext.py
+│       │           │   ├── style.py
+│       │           │   ├── styles
+│       │           │   ├── token.py
+│       │           │   ├── unistring.py
+│       │           │   └── util.py
+│       │           ├── pygments-2.19.2.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── licenses
+│       │           ├── pytest
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   └── py.typed
+│       │           ├── pytest-9.0.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── python_dateutil-2.9.0.post0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── top_level.txt
+│       │           │   └── zip-safe
+│       │           ├── python_dotenv-1.0.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── top_level.txt
+│       │           ├── python_jose-3.5.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── python_multipart-0.0.6.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── pytz
+│       │           │   ├── __init__.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── lazy.py
+│       │           │   ├── reference.py
+│       │           │   ├── tzfile.py
+│       │           │   ├── tzinfo.py
+│       │           │   └── zoneinfo
+│       │           ├── pytz-2025.2.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE.txt
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── top_level.txt
+│       │           │   └── zip-safe
+│       │           ├── pyyaml-6.0.3.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── realtime
+│       │           │   ├── __init__.py
+│       │           │   ├── _async
+│       │           │   ├── _sync
+│       │           │   ├── exceptions.py
+│       │           │   ├── message.py
+│       │           │   ├── py.typed
+│       │           │   ├── transformers.py
+│       │           │   ├── types.py
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── realtime-2.24.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   └── WHEEL
+│       │           ├── requests
+│       │           │   ├── __init__.py
+│       │           │   ├── __version__.py
+│       │           │   ├── _internal_utils.py
+│       │           │   ├── adapters.py
+│       │           │   ├── api.py
+│       │           │   ├── auth.py
+│       │           │   ├── certs.py
+│       │           │   ├── compat.py
+│       │           │   ├── cookies.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── help.py
+│       │           │   ├── hooks.py
+│       │           │   ├── models.py
+│       │           │   ├── packages.py
+│       │           │   ├── sessions.py
+│       │           │   ├── status_codes.py
+│       │           │   ├── structures.py
+│       │           │   └── utils.py
+│       │           ├── requests-2.32.5.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── rsa
+│       │           │   ├── __init__.py
+│       │           │   ├── asn1.py
+│       │           │   ├── cli.py
+│       │           │   ├── common.py
+│       │           │   ├── core.py
+│       │           │   ├── key.py
+│       │           │   ├── parallel.py
+│       │           │   ├── pem.py
+│       │           │   ├── pkcs1.py
+│       │           │   ├── pkcs1_v2.py
+│       │           │   ├── prime.py
+│       │           │   ├── py.typed
+│       │           │   ├── randnum.py
+│       │           │   ├── transform.py
+│       │           │   └── util.py
+│       │           ├── rsa-4.9.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── entry_points.txt
+│       │           ├── setuptools
+│       │           │   ├── __init__.py
+│       │           │   ├── _deprecation_warning.py
+│       │           │   ├── _distutils
+│       │           │   ├── _imp.py
+│       │           │   ├── _vendor
+│       │           │   ├── archive_util.py
+│       │           │   ├── build_meta.py
+│       │           │   ├── cli-32.exe
+│       │           │   ├── cli-64.exe
+│       │           │   ├── cli-arm64.exe
+│       │           │   ├── cli.exe
+│       │           │   ├── command
+│       │           │   ├── config.py
+│       │           │   ├── dep_util.py
+│       │           │   ├── depends.py
+│       │           │   ├── dist.py
+│       │           │   ├── errors.py
+│       │           │   ├── extension.py
+│       │           │   ├── extern
+│       │           │   ├── glob.py
+│       │           │   ├── gui-32.exe
+│       │           │   ├── gui-64.exe
+│       │           │   ├── gui-arm64.exe
+│       │           │   ├── gui.exe
+│       │           │   ├── installer.py
+│       │           │   ├── launch.py
+│       │           │   ├── monkey.py
+│       │           │   ├── msvc.py
+│       │           │   ├── namespaces.py
+│       │           │   ├── package_index.py
+│       │           │   ├── py34compat.py
+│       │           │   ├── sandbox.py
+│       │           │   ├── script (dev).tmpl
+│       │           │   ├── script.tmpl
+│       │           │   ├── unicode_utils.py
+│       │           │   ├── version.py
+│       │           │   ├── wheel.py
+│       │           │   └── windows_support.py
+│       │           ├── setuptools-59.6.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── top_level.txt
+│       │           ├── six-1.17.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── six.py
+│       │           ├── sniffio
+│       │           │   ├── __init__.py
+│       │           │   ├── _impl.py
+│       │           │   ├── _tests
+│       │           │   ├── _version.py
+│       │           │   └── py.typed
+│       │           ├── sniffio-1.3.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── LICENSE.APACHE2
+│       │           │   ├── LICENSE.MIT
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── top_level.txt
+│       │           ├── sqlalchemy
+│       │           │   ├── __init__.py
+│       │           │   ├── connectors
+│       │           │   ├── cyextension
+│       │           │   ├── dialects
+│       │           │   ├── engine
+│       │           │   ├── event
+│       │           │   ├── events.py
+│       │           │   ├── exc.py
+│       │           │   ├── ext
+│       │           │   ├── future
+│       │           │   ├── inspection.py
+│       │           │   ├── log.py
+│       │           │   ├── orm
+│       │           │   ├── pool
+│       │           │   ├── py.typed
+│       │           │   ├── schema.py
+│       │           │   ├── sql
+│       │           │   ├── testing
+│       │           │   ├── types.py
+│       │           │   └── util
+│       │           ├── sqlalchemy-2.0.44.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── starlette
+│       │           │   ├── __init__.py
+│       │           │   ├── _compat.py
+│       │           │   ├── _utils.py
+│       │           │   ├── applications.py
+│       │           │   ├── authentication.py
+│       │           │   ├── background.py
+│       │           │   ├── concurrency.py
+│       │           │   ├── config.py
+│       │           │   ├── convertors.py
+│       │           │   ├── datastructures.py
+│       │           │   ├── endpoints.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── formparsers.py
+│       │           │   ├── middleware
+│       │           │   ├── py.typed
+│       │           │   ├── requests.py
+│       │           │   ├── responses.py
+│       │           │   ├── routing.py
+│       │           │   ├── schemas.py
+│       │           │   ├── staticfiles.py
+│       │           │   ├── status.py
+│       │           │   ├── templating.py
+│       │           │   ├── testclient.py
+│       │           │   ├── types.py
+│       │           │   └── websockets.py
+│       │           ├── starlette-0.27.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── storage3
+│       │           │   ├── __init__.py
+│       │           │   ├── _async
+│       │           │   ├── _sync
+│       │           │   ├── constants.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── py.typed
+│       │           │   ├── types.py
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── storage3-2.24.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   └── WHEEL
+│       │           ├── strenum
+│       │           │   ├── __init__.py
+│       │           │   ├── __init__.pyi
+│       │           │   ├── _name_mangler.py
+│       │           │   ├── _name_mangler.pyi
+│       │           │   ├── _version.py
+│       │           │   ├── mixins.py
+│       │           │   ├── mixins.pyi
+│       │           │   └── py.typed
+│       │           ├── supabase
+│       │           │   ├── __init__.py
+│       │           │   ├── _async
+│       │           │   ├── _sync
+│       │           │   ├── client.py
+│       │           │   ├── lib
+│       │           │   ├── py.typed
+│       │           │   ├── types.py
+│       │           │   └── version.py
+│       │           ├── supabase-2.24.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── supabase_auth
+│       │           │   ├── __init__.py
+│       │           │   ├── _async
+│       │           │   ├── _sync
+│       │           │   ├── constants.py
+│       │           │   ├── errors.py
+│       │           │   ├── helpers.py
+│       │           │   ├── py.typed
+│       │           │   ├── timer.py
+│       │           │   ├── types.py
+│       │           │   └── version.py
+│       │           ├── supabase_auth-2.24.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   └── WHEEL
+│       │           ├── supabase_functions
+│       │           │   ├── __init__.py
+│       │           │   ├── _async
+│       │           │   ├── _sync
+│       │           │   ├── errors.py
+│       │           │   ├── py.typed
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── supabase_functions-2.24.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   └── WHEEL
+│       │           ├── tomli
+│       │           │   ├── __init__.py
+│       │           │   ├── _parser.py
+│       │           │   ├── _re.py
+│       │           │   ├── _types.py
+│       │           │   └── py.typed
+│       │           ├── tomli-2.3.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── typing_extensions-4.15.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── typing_extensions.py
+│       │           ├── typing_inspection
+│       │           │   ├── __init__.py
+│       │           │   ├── introspection.py
+│       │           │   ├── py.typed
+│       │           │   ├── typing_objects.py
+│       │           │   └── typing_objects.pyi
+│       │           ├── typing_inspection-0.4.2.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── tzdata
+│       │           │   ├── __init__.py
+│       │           │   ├── zoneinfo
+│       │           │   └── zones
+│       │           ├── tzdata-2025.2.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── urllib3
+│       │           │   ├── __init__.py
+│       │           │   ├── _base_connection.py
+│       │           │   ├── _collections.py
+│       │           │   ├── _request_methods.py
+│       │           │   ├── _version.py
+│       │           │   ├── connection.py
+│       │           │   ├── connectionpool.py
+│       │           │   ├── contrib
+│       │           │   ├── exceptions.py
+│       │           │   ├── fields.py
+│       │           │   ├── filepost.py
+│       │           │   ├── http2
+│       │           │   ├── poolmanager.py
+│       │           │   ├── py.typed
+│       │           │   ├── response.py
+│       │           │   └── util
+│       │           ├── urllib3-2.6.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   └── licenses
+│       │           ├── uvicorn
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── _subprocess.py
+│       │           │   ├── _types.py
+│       │           │   ├── config.py
+│       │           │   ├── importer.py
+│       │           │   ├── lifespan
+│       │           │   ├── logging.py
+│       │           │   ├── loops
+│       │           │   ├── main.py
+│       │           │   ├── middleware
+│       │           │   ├── protocols
+│       │           │   ├── py.typed
+│       │           │   ├── server.py
+│       │           │   ├── supervisors
+│       │           │   └── workers.py
+│       │           ├── uvicorn-0.24.0.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── REQUESTED
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── licenses
+│       │           ├── uvloop
+│       │           │   ├── __init__.py
+│       │           │   ├── _noop.py
+│       │           │   ├── _testbase.py
+│       │           │   ├── _version.py
+│       │           │   ├── cbhandles.pxd
+│       │           │   ├── cbhandles.pyx
+│       │           │   ├── dns.pyx
+│       │           │   ├── errors.pyx
+│       │           │   ├── handles
+│       │           │   ├── includes
+│       │           │   ├── loop.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── loop.pxd
+│       │           │   ├── loop.pyi
+│       │           │   ├── loop.pyx
+│       │           │   ├── lru.pyx
+│       │           │   ├── pseudosock.pyx
+│       │           │   ├── py.typed
+│       │           │   ├── request.pxd
+│       │           │   ├── request.pyx
+│       │           │   ├── server.pxd
+│       │           │   ├── server.pyx
+│       │           │   ├── sslproto.pxd
+│       │           │   └── sslproto.pyx
+│       │           ├── uvloop-0.22.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── licenses
+│       │           │   └── top_level.txt
+│       │           ├── watchfiles
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── _rust_notify.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── _rust_notify.pyi
+│       │           │   ├── cli.py
+│       │           │   ├── filters.py
+│       │           │   ├── main.py
+│       │           │   ├── py.typed
+│       │           │   ├── run.py
+│       │           │   └── version.py
+│       │           ├── watchfiles-1.1.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── licenses
+│       │           ├── websockets
+│       │           │   ├── __init__.py
+│       │           │   ├── __main__.py
+│       │           │   ├── asyncio
+│       │           │   ├── auth.py
+│       │           │   ├── cli.py
+│       │           │   ├── client.py
+│       │           │   ├── connection.py
+│       │           │   ├── datastructures.py
+│       │           │   ├── exceptions.py
+│       │           │   ├── extensions
+│       │           │   ├── frames.py
+│       │           │   ├── headers.py
+│       │           │   ├── http.py
+│       │           │   ├── http11.py
+│       │           │   ├── imports.py
+│       │           │   ├── legacy
+│       │           │   ├── protocol.py
+│       │           │   ├── py.typed
+│       │           │   ├── server.py
+│       │           │   ├── speedups.c
+│       │           │   ├── speedups.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── speedups.pyi
+│       │           │   ├── streams.py
+│       │           │   ├── sync
+│       │           │   ├── typing.py
+│       │           │   ├── uri.py
+│       │           │   ├── utils.py
+│       │           │   └── version.py
+│       │           ├── websockets-15.0.1.dist-info
+│       │           │   ├── INSTALLER
+│       │           │   ├── LICENSE
+│       │           │   ├── METADATA
+│       │           │   ├── RECORD
+│       │           │   ├── WHEEL
+│       │           │   ├── entry_points.txt
+│       │           │   └── top_level.txt
+│       │           ├── yaml
+│       │           │   ├── __init__.py
+│       │           │   ├── _yaml.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── composer.py
+│       │           │   ├── constructor.py
+│       │           │   ├── cyaml.py
+│       │           │   ├── dumper.py
+│       │           │   ├── emitter.py
+│       │           │   ├── error.py
+│       │           │   ├── events.py
+│       │           │   ├── loader.py
+│       │           │   ├── nodes.py
+│       │           │   ├── parser.py
+│       │           │   ├── reader.py
+│       │           │   ├── representer.py
+│       │           │   ├── resolver.py
+│       │           │   ├── scanner.py
+│       │           │   ├── serializer.py
+│       │           │   └── tokens.py
+│       │           ├── yarl
+│       │           │   ├── __init__.py
+│       │           │   ├── _parse.py
+│       │           │   ├── _path.py
+│       │           │   ├── _query.py
+│       │           │   ├── _quoters.py
+│       │           │   ├── _quoting.py
+│       │           │   ├── _quoting_c.cpython-310-x86_64-linux-gnu.so
+│       │           │   ├── _quoting_c.pyx
+│       │           │   ├── _quoting_py.py
+│       │           │   ├── _url.py
+│       │           │   └── py.typed
+│       │           └── yarl-1.22.0.dist-info
+│       │               ├── INSTALLER
+│       │               ├── METADATA
+│       │               ├── RECORD
+│       │               ├── WHEEL
+│       │               ├── licenses
+│       │               └── top_level.txt
+│       ├── lib64 -> lib
+│       └── pyvenv.cfg
+├── backup
+│   └── student.py.old
+├── database
+│   ├── ROADMAP.md
+│   └── migrations
+│       ├── 2025-11-18_01_analytics_tables.sql
+│       ├── 2025-11-18_02_global_structure.sql
+│       ├── 2025-11-18_03_dashboard_improvements.sql
+│       ├── 2025-11-18_04_reports_endpoint.sql
+│       ├── 2025-11-18_DEMO_DATA.sql
+│       ├── 2025-11-18_FULL_BACKUP.sql
+│       └── 2025-11-19_03_flexible_osym_mapping.sql
+├── docs
+│   ├── DEPLOYMENT_GUIDE.md
+│   ├── DEPLOYMENT_GUIDE.md:Zone.Identifier
+│   ├── MIGRATIONS_COMPLETE_SUMMARY.md
+│   ├── MIGRATIONS_COMPLETE_SUMMARY.md:Zone.Identifier
+│   ├── UI_INTEGRATION_GUIDE.md
+│   └── UI_INTEGRATION_GUIDE.md:Zone.Identifier
+├── frontend
+│   ├── app
+│   │   ├── admin
+│   │   │   ├── exams
+│   │   │   │   └── page.tsx
+│   │   │   ├── osym
+│   │   │   │   └── page.tsx
+│   │   │   └── page.tsx
+│   │   ├── components
+│   │   │   ├── FeedbackWidget.tsx
+│   │   │   ├── Logo.tsx
+│   │   │   └── Sidebar.tsx
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── login
+│   │   │   └── page.tsx
+│   │   ├── page.tsx
+│   │   ├── past-tests
+│   │   │   └── page.tsx
+│   │   ├── providers.tsx
+│   │   ├── register
+│   │   │   └── page.tsx
+│   │   ├── reports
+│   │   │   └── page.tsx
+│   │   ├── student
+│   │   │   ├── dashboard
+│   │   │   │   ├── components
+│   │   │   │   │   ├── ActionCards.tsx
+│   │   │   │   │   ├── CriticalAlert.tsx
+│   │   │   │   │   ├── DashboardHeader.tsx
+│   │   │   │   │   ├── FeedbackButtons.tsx
+│   │   │   │   │   ├── HealthStatusBar.tsx
+│   │   │   │   │   ├── HeroStats-v2Backup.tsx
+│   │   │   │   │   ├── HeroStats.tsx
+│   │   │   │   │   ├── HeroStats.tsx.BACKUP_20241129
+│   │   │   │   │   ├── MotorAnalysisPanel-v2backup.tsx
+│   │   │   │   │   ├── MotorAnalysisPanel.tsx
+│   │   │   │   │   ├── MotorAnalysisPanel.tsx.BACKUP_20241129
+│   │   │   │   │   ├── ProjectionCard.tsx
+│   │   │   │   │   ├── RecoveryModal.tsx
+│   │   │   │   │   ├── SmartActionCards.tsx
+│   │   │   │   │   ├── TodayStatusCards.tsx
+│   │   │   │   │   ├── TopicHealthBar.tsx
+│   │   │   │   │   └── UniversityGoalCard.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── page.tsx.BACKUP
+│   │   │   │   └── page2911.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── past-tests
+│   │   │   │   ├── EditTestModal.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── page.tsx.backup
+│   │   │   └── test-entry
+│   │   │       └── page.tsx
+│   │   └── test-entry
+│   │       └── page.tsx
+│   ├── components
+│   │   ├── NotificationBell.tsx
+│   │   ├── ReflexNotificationCard.tsx
+│   │   ├── ReflexNotificationContainer.tsx
+│   │   └── SafeExternalLink.tsx
+│   ├── end-stp-frontend@0.1.0
+│   ├── frontend@0.1.0
+│   ├── hooks
+│   │   └── useReflexNotifications.ts
+│   ├── lib
+│   │   ├── api
+│   │   │   ├── client.ts
+│   │   │   └── useTodaysTasks.ts
+│   │   ├── api-client.ts
+│   │   ├── api-client.ts.BACKUP
+│   │   ├── api-client.ts.OLD_20251129
+│   │   ├── api-client2911.ts
+│   │   ├── constants.ts
+│   │   ├── security-meta.ts
+│   │   ├── store
+│   │   │   ├── studentDashboardStore copy.ts
+│   │   │   ├── studentDashboardStore.ts
+│   │   │   ├── studentDashboardStore.ts.OLD_20251129
+│   │   │   └── studentDashboardStore.ts.backup
+│   │   ├── supabase
+│   │   │   └── client.ts
+│   │   ├── supabase.ts
+│   │   ├── types
+│   │   │   └── todaysTasks.ts
+│   │   └── utils
+│   │       ├── timezone.ts
+│   │       └── type-guards.ts
+│   ├── middleware
+│   ├── middleware.ts
+│   ├── middleware.ts.backup
+│   ├── next
+│   ├── next-env.d.ts
+│   ├── next.config.js
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── public
+│   │   └── logo.png
+│   ├── tailwind.config.js
+│   └── tsconfig.json
+├── next
+├── package-lock.json
+├── package.json
+├── proje-agaci.txt
+├── proje_agaci.txt
+├── project_structure.txt
+└── table_template.sql
+
+422 directories, 1543 files

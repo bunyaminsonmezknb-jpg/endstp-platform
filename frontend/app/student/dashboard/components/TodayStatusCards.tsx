@@ -161,7 +161,10 @@ export default function TodayStatusCards() {
     <>
       {/* 3 Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <AtRiskCard topics={atRiskTopics} total={totalAtRisk} />
+        <AtRiskCard 
+  topics={data?.at_risk_topics || []} 
+  total={data?.total_at_risk || 0} 
+/>
         <PriorityCard topics={data.priority_topics} total={data.total_priority} />
         <StreakCard streak={data.streak} timeStats={data.time_stats} />
       </div>

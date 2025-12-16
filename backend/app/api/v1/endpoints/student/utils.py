@@ -41,7 +41,7 @@ def format_turkish_date(date_obj):
 
 
 def calculate_next_review_date(remembering_rate, last_test_date):
-    """Optimal tekrar tarihini hesapla"""
+    """Optimal tekrar tarihini hesapla + gecikme kontrolü"""
     if remembering_rate >= 85:
         interval_days = 14
         urgency = "RAHAT"
@@ -58,14 +58,29 @@ def calculate_next_review_date(remembering_rate, last_test_date):
         interval_days = 0
         urgency = "HEMEN"
     
+    now = datetime.now(timezone.utc)
     next_date = last_test_date + timedelta(days=interval_days)
+    
+    # Gerçek gün farkı (negatif olabilir)
+    actual_days = (next_date - now).days
+    
+    # Gecikme hesabı
+    if actual_days < 0:
+        overdue_days = abs(actual_days)
+        days_remaining = 0
+        status = "overdue"  # Gecikmiş
+    else:
+        overdue_days = 0
+        days_remaining = actual_days
+        status = "upcoming"  # Yaklaşan
     
     return {
         "date": next_date,
-        "days_remaining": interval_days,
+        "days_remaining": days_remaining,
+        "overdue_days": overdue_days,  # ✅ YENİ
+        "status": status,  # ✅ YENİ
         "urgency": urgency
     }
-
 
 def calculate_remembering_rate(tests_data):
     """Basit unutma eğrisi hesaplama"""

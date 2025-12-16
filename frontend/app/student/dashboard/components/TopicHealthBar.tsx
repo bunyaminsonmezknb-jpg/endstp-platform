@@ -47,26 +47,39 @@ export default function TopicHealthBar({ topics }: TopicHealthBarProps) {
     return 'text-gray-600';
   };
 
-  const getNextReviewText = (nextReview: { daysRemaining: number; urgency: string }) => {
-    const { daysRemaining, urgency } = nextReview;
-    
-    if (urgency === 'HEMEN') {
-      return { text: '⏰ HEMEN', color: 'text-red-600 font-bold animate-pulse' };
-    }
-    if (urgency === 'ACİL') {
-      return { text: `📅 ${daysRemaining} gün sonra (ACİL)`, color: 'text-orange-600 font-semibold' };
-    }
-    if (urgency === 'YAKIN') {
-      return { text: `📅 ${daysRemaining} gün sonra`, color: 'text-yellow-600' };
-    }
-    if (urgency === 'NORMAL') {
-      return { text: `📅 ${daysRemaining} gün sonra`, color: 'text-green-600' };
-    }
-    if (urgency === 'RAHAT') {
-      return { text: `📅 ${daysRemaining} gün sonra (Rahat)`, color: 'text-emerald-600' };
-    }
+const getNextReviewText = (
+  nextReview?: { daysRemaining?: number; urgency?: string }
+) => {
+  if (!nextReview) {
     return { text: '📅 Bekliyor', color: 'text-gray-500' };
-  };
+  }
+  const { daysRemaining = 0, urgency = 'NORMAL' } = nextReview;
+  
+  // ✅ GECİKMİŞ KONTROL (daysRemaining = 0 ve urgent ise gecikmiş demektir)
+  if (daysRemaining === 0 && (urgency === 'HEMEN' || urgency === 'ACİL')) {
+    return { 
+      text: '🚨 GECİKMİŞ!', 
+      color: 'text-red-600 font-bold animate-pulse' 
+    };
+  }
+  
+  if (urgency === 'HEMEN') {
+    return { text: '⏰ BUGÜN', color: 'text-red-600 font-bold' };
+  }
+  if (urgency === 'ACİL') {
+    return { text: `📅 ${daysRemaining} gün sonra (ACİL)`, color: 'text-orange-600 font-semibold' };
+  }
+  if (urgency === 'YAKIN') {
+    return { text: `📅 ${daysRemaining} gün sonra`, color: 'text-yellow-600' };
+  }
+  if (urgency === 'NORMAL') {
+    return { text: `📅 ${daysRemaining} gün sonra`, color: 'text-green-600' };
+  }
+  if (urgency === 'RAHAT') {
+    return { text: `📅 ${daysRemaining} gün sonra (Rahat)`, color: 'text-emerald-600' };
+  }
+  return { text: '📅 Bekliyor', color: 'text-gray-500' };
+};
 
   const getPartnerLinks = (topicName: string) => {
     return [
@@ -149,7 +162,7 @@ export default function TopicHealthBar({ topics }: TopicHealthBarProps) {
                     <div className="bg-white rounded-lg p-3 shadow-sm">
                       <div className="text-gray-500 text-xs mb-1">📊 Son Başarı</div>
                       <div className="font-semibold text-gray-800">
-                        %{Math.round(topic.latestSuccessRate)} ({topic.latestNet.toFixed(1)} net)
+                        %{Math.round(topic.latestSuccessRate ?? 0)} ({(topic.latestNet ?? 0).toFixed(1)} net)
                       </div>
                     </div>
                     
@@ -161,7 +174,10 @@ export default function TopicHealthBar({ topics }: TopicHealthBarProps) {
                     <div className="bg-white rounded-lg p-3 shadow-sm">
                       <div className="text-gray-500 text-xs mb-1">📅 Sonraki Tekrar</div>
                       <div className={`font-semibold ${nextReview.color}`}>
-                        {topic.nextReview.daysRemaining === 0 ? 'Bugün!' : `${topic.nextReview.daysRemaining} gün`}
+                        {topic.nextReview?.daysRemaining === 0
+                          ? 'Bugün!'
+                          : `${topic.nextReview?.daysRemaining ?? '-'} gün`}
+
                       </div>
                     </div>
                   </div>

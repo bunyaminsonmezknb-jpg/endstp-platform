@@ -32,7 +32,7 @@ export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'motors' | 'tasks'>('overview');
   const [studentId, setStudentId] = useState<string>(''); // ⭐ NEW!
   const [tasksSummary, setTasksSummary] = useState({
-    total_tasks: 5,
+    total_tasks: 0, // ✅ Düzeltildi
     completed_tasks: 0,
     total_time_minutes: 0,
     completed_time_minutes: 0,
@@ -216,7 +216,13 @@ export default function StudentDashboard() {
             />
 
             <SmartActionCards />
-
+            {console.log('HealthStatusBar props:', {
+              total: dashboardData.topics.length,
+              healthy: dashboardData.topics.filter(t => t.status === 'excellent' || t.status === 'good').length,
+              warning: dashboardData.topics.filter(t => t.status === 'warning').length,
+              frozen: dashboardData.topics.filter(t => t.status === 'frozen').length,
+              critical: dashboardData.topics.filter(t => t.status === 'critical').length
+            })}
             {dashboardData.topics.length > 0 ? (
               <HealthStatusBar
                 totalTopics={dashboardData.topics.length}
