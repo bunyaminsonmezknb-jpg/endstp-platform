@@ -48,23 +48,44 @@ export default function TopicHealthBar({ topics }: TopicHealthBarProps) {
   };
 
 const getNextReviewText = (
-  nextReview?: { daysRemaining?: number; urgency?: string }
+  nextReview?: { 
+    daysRemaining?: number; 
+    overdueDays?: number; 
+    status?: string; 
+    urgency?: string 
+  }
 ) => {
   if (!nextReview) {
     return { text: '📅 Bekliyor', color: 'text-gray-500' };
   }
-  const { daysRemaining = 0, urgency = 'NORMAL' } = nextReview;
   
-  // ✅ GECİKMİŞ KONTROL (daysRemaining = 0 ve urgent ise gecikmiş demektir)
-  if (daysRemaining === 0 && (urgency === 'HEMEN' || urgency === 'ACİL')) {
+  const { 
+    daysRemaining = 0, 
+    overdueDays = 0, 
+    status = 'upcoming', 
+    urgency = 'NORMAL' 
+  } = nextReview;
+  
+  // ✅ GECİKMİŞ (overdue)
+  if (status === 'overdue' && overdueDays > 0) {
     return { 
-      text: '🚨 GECİKMİŞ!', 
+      text: `🚨 ${overdueDays} gün gecikmiş!`, 
       color: 'text-red-600 font-bold animate-pulse' 
     };
   }
   
+  // ✅ BUGÜN (daysRemaining = 0 ama status = upcoming)
+  if (daysRemaining === 0 && status === 'upcoming') {
+    if (urgency === 'HEMEN') {
+      return { text: '⏰ BUGÜN!', color: 'text-red-600 font-bold' };
+    }
+    if (urgency === 'ACİL') {
+      return { text: '⏰ BUGÜN! (ACİL)', color: 'text-orange-600 font-semibold' };
+    }
+  }
+  
   if (urgency === 'HEMEN') {
-    return { text: '⏰ BUGÜN', color: 'text-red-600 font-bold' };
+    return { text: '⏰ HEMEN', color: 'text-red-600 font-bold' };
   }
   if (urgency === 'ACİL') {
     return { text: `📅 ${daysRemaining} gün sonra (ACİL)`, color: 'text-orange-600 font-semibold' };
@@ -78,6 +99,7 @@ const getNextReviewText = (
   if (urgency === 'RAHAT') {
     return { text: `📅 ${daysRemaining} gün sonra (Rahat)`, color: 'text-emerald-600' };
   }
+  
   return { text: '📅 Bekliyor', color: 'text-gray-500' };
 };
 

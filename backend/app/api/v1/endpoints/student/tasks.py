@@ -171,6 +171,7 @@ def calculate_at_risk_topics(topic_performance: Dict[str, Dict[str, Any]], limit
         topic_name = data.get("topic_name", "Unknown")[:50]
         print(f"\n📌 Topic: {topic_name}")
         print(f"   Rate: {remembering_rate}% | Urgency: {next_review.get('urgency')} | Days: {next_review.get('days_remaining')}")
+        print(f"   Status: {next_review.get('status')} | Overdue: {next_review.get('overdue_days', 0)}")  # ✅ YENİ SATIR
 
         if next_review.get("urgency") in ["HEMEN", "ACİL", "YAKIN"]:
             print(f"   ✅ ADDED")

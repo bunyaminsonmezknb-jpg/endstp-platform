@@ -64,15 +64,15 @@ def calculate_next_review_date(remembering_rate, last_test_date):
     # Gerçek gün farkı (negatif olabilir)
     actual_days = (next_date - now).days
     
-    # Gecikme hesabı
+    # ✅ Gecikme hesabı
     if actual_days < 0:
         overdue_days = abs(actual_days)
         days_remaining = 0
-        status = "overdue"  # Gecikmiş
+        status = "overdue"
     else:
         overdue_days = 0
         days_remaining = actual_days
-        status = "upcoming"  # Yaklaşan
+        status = "upcoming"
     
     return {
         "date": next_date,
