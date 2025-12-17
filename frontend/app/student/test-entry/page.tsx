@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api/client';
+import { useSearchParams } from 'next/navigation';
 
 interface Subject {
   id: string;
@@ -82,6 +83,60 @@ setSubjects(response.data || response); // Backend direkt array dönüyor olabil
 
     fetchSubjects();
   }, []);
+const searchParams = useSearchParams();
+
+// ✅ Pre-fill from query params (subjects yüklendikten sonra)
+useEffect(() => {
+  const subjectId = searchParams.get('subject_id');
+  const topicId = searchParams.get('topic_id');
+  
+  // Subjects yüklenene kadar bekle
+  if (!subjectId || !topicId || subjects.length === 0) {
+    return;
+  }
+  
+  console.log('🎯 Pre-filling test entry:', { 
+    subjectId, 
+    topicId, 
+    subjectsLoaded: subjects.length 
+  });
+  
+  // Subject seç
+  setSelectedSubject(subjectId);
+  
+  // Topics yükle ve topic seç
+  const loadTopics = async () => {
+    try {
+      setLoadingTopics(true);
+      
+      const response = await api.get(`/subjects/${subjectId}/topics`) as any;
+      const topicsData = response.data || response;
+      setTopics(topicsData);
+      
+      // Topic seç
+      setTimeout(() => {
+        setSelectedTopic(topicId);
+        console.log('✅ Pre-filled successfully');
+        
+        // Form'a scroll (optional)
+        setTimeout(() => {
+          document.getElementById('test-form')?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        }, 300);
+      }, 100);
+      
+    } catch (error) {
+      console.error('Topics fetch error:', error);
+      setError('Konular yüklenemedi');
+    } finally {
+      setLoadingTopics(false);
+    }
+  };
+  
+  loadTopics();
+}, [searchParams, subjects]); // ✅ subjects dependency
 
   // Subject değişince topics yükle
   useEffect(() => {

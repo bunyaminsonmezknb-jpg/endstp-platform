@@ -3,12 +3,15 @@ import React from 'react';
 import { api } from '@/lib/api/client';
 import { useTodaysTasks } from '@/lib/api/useTodaysTasks';
 import { TopicAtRisk, PriorityTopic } from '@/lib/types/todaysTasks';
+import { useRouter } from 'next/navigation';
 
 // Task interfaces
 interface Task {
   id: string;
   task_type: string;
   topic_name: string;
+  subject_id: string; // ✅ EKLE
+  topic_id: string;   // ✅ EKLE
   source_motor: string;
   priority_level: number;
   estimated_time_minutes: number;
@@ -47,6 +50,7 @@ const ChartIcon = () => <span className="text-xl">📊</span>;
  * 4. Bugünkü Görevlerim (Task list with completion)
  */
 export default function TodayStatusCards() {
+  const router = useRouter(); // ✅ EKLE
   const { data, isLoading, error, refetch } = useTodaysTasks();
   
   // Task list states
@@ -54,45 +58,47 @@ export default function TodayStatusCards() {
   const [tasksLoading, setTasksLoading] = React.useState(false);
   const [atRiskTopics, setAtRiskTopics] = React.useState<any[]>([]);
   const [totalAtRisk, setTotalAtRisk] = React.useState(0);
+
   // Fetch tasks on mount
   React.useEffect(() => {
-  const fetchTasks = async () => {
-    setTasksLoading(true);
-    try {
-  const tasksData = await api.get('/student/tasks/today') as any;
-      if (tasksData.success) {
-        setTasksList(tasksData.tasks);
-        setAtRiskTopics(tasksData.at_risk_topics || []);
-        setTotalAtRisk(tasksData.total_at_risk || 0);
+    const fetchTasks = async () => {
+      setTasksLoading(true);
+      try {
+        const tasksData = await api.get('/student/tasks/today') as any;
+        if (tasksData.success) {
+          setTasksList(tasksData.tasks);
+          setAtRiskTopics(tasksData.at_risk_topics || []);
+          setTotalAtRisk(tasksData.total_at_risk || 0);
+        }
+      } catch (err) {
+        console.error('Tasks fetch error:', err);
+      } finally {
+        setTasksLoading(false);
       }
-    } catch (err) {
-      console.error('Tasks fetch error:', err);
-    } finally {
-      setTasksLoading(false);
-    }
     };
     fetchTasks();
   }, []);
 
   // Handle task completion
-        const handleCompleteTask = async (taskId: string) => {
-          try {
-            const result = await api.post(`/student/tasks/${taskId}/complete?manual=true`) as any;
-            if (result.success) {
-              setTasksList(prev =>
-                prev.map(t => (t.id === taskId ? { 
-                  ...t, 
-                  status: 'completed',
-                  manual_completion: true,
-                  completed_at: new Date().toISOString()
-                } : t))
-              );
-            }
-          } catch (err) {
-            console.error(err);
-          }
-        };
-// Handle task uncomplete (geri al)
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      const result = await api.post(`/student/tasks/${taskId}/complete?manual=true`) as any;
+      if (result.success) {
+        setTasksList(prev =>
+          prev.map(t => (t.id === taskId ? { 
+            ...t, 
+            status: 'completed',
+            manual_completion: true,
+            completed_at: new Date().toISOString()
+          } : t))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Handle task uncomplete
   const handleUncompleteTask = async (taskId: string) => {
     try {
       const result = await api.post(`/student/tasks/${taskId}/uncomplete`) as any;
@@ -103,10 +109,11 @@ export default function TodayStatusCards() {
       } else {
         alert(result.error || 'Geri alınamadı');
       }
-      } catch (err) {
-        console.error(err);
-      }
+    } catch (err) {
+      console.error(err);
+    }
   };
+  
   // Loading state
   if (isLoading) {
     return (
@@ -219,10 +226,22 @@ export default function TodayStatusCards() {
                   </div>
                   ) : (
                     <>
-                      {task.task_type === 'test' ? (
-                        <div className="text-purple-600 font-semibold flex items-center gap-2">
-                          <span>📝</span> Test girişi ile tamamlanacak
-                        </div>
+{task.task_type === 'test' ? (
+<button
+  onClick={() => {
+    console.log('🔍 Task data:', task);
+    console.log('🔑 subject_id:', task.subject_id);
+    console.log('🔑 topic_id:', task.topic_id);
+    
+    // ✅ ROUTER.PUSH EKLE
+    router.push(
+      `/student/test-entry?subject_id=${task.subject_id}&topic_id=${task.topic_id}&topic_name=${encodeURIComponent(task.topic_name)}`
+    );
+  }}
+  className="text-purple-600 hover:text-purple-700 text-sm font-medium flex items-center gap-1 transition-colors hover:underline"
+>
+  📝 Test girişi ile tamamlanacak →
+</button>
                       ) : (
                         <button
                           onClick={() => handleCompleteTask(task.id)}
