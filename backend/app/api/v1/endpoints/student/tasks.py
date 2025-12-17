@@ -256,7 +256,166 @@ def calculate_streak(all_tests: List[Dict[str, Any]], x_user_timezone: str) -> S
         next_milestone=7
     )
 
-
+def generate_motor_driven_tasks(student_id: str, date: str, max_tasks: int = 10):
+    """
+    ✅ Generate daily tasks based on motor analysis
+    
+    Combines:
+    - BS-Motor (spaced repetition urgency)
+    - Priority Motor (low success rate topics)
+    - At-risk topics (forgetting curve)
+    
+    Returns 5-10 prioritized tasks
+    """
+    supabase = get_supabase_admin()
+    
+    print(f"\n🤖 === MOTOR-DRIVEN TASK GENERATION START ===")
+    print(f"📅 Date: {date} | Max tasks: {max_tasks}")
+    
+    # 1️⃣ Get student's test history with topic/subject info
+    tests_result = (
+        supabase.table("student_topic_tests")
+        .select("*, topics(name_tr, subject_id, subjects(name_tr))")
+        .eq("student_id", student_id)
+        .eq("status", "completed")
+        .order("test_date", desc=True)
+        .execute()
+    )
+    
+    tests = tests_result.data or []
+    
+    if not tests:
+        print("⚠️  No test history found, creating demo tasks")
+        return create_daily_tasks(student_id, date)
+    
+    print(f"📊 Found {len(tests)} completed tests")
+    
+    # 2️⃣ Group tests by topic
+    topic_performance = group_tests_by_topic(tests)
+    print(f"📂 Grouped into {len(topic_performance)} unique topics")
+    
+    # 3️⃣ Score each topic
+    scored_topics = []
+    
+    for topic_id, data in topic_performance.items():
+        topic_tests = data.get("tests", [])
+        if not topic_tests:
+            continue
+        
+        last_test = topic_tests[0]
+        topic_name = data.get("topic_name", "Unknown")
+        subject_name = data.get("subject_name", "Unknown")
+        
+        # Get topic and subject IDs
+        topic_obj = last_test.get("topics")
+        if not topic_obj:
+            continue
+            
+        subject_id = topic_obj.get("subject_id")
+        if not subject_id:
+            continue
+        
+        # Calculate metrics
+        remembering_rate = calculate_remembering_rate(topic_tests)
+        
+        test_date_str = last_test.get("test_date", "")
+        if not test_date_str:
+            continue
+            
+        test_date = datetime.fromisoformat(test_date_str.replace('Z', '+00:00'))
+        days_since = (datetime.now(timezone.utc) - test_date).days
+        
+        next_review = calculate_next_review_date(remembering_rate, test_date)
+        
+        # 🎯 TASK SCORING ALGORITHM
+        score = 0
+        
+        # Urgency weight (0-100)
+        urgency = next_review.get("urgency", "NORMAL")
+        if urgency == "HEMEN":
+            score += 100
+        elif urgency == "ACİL":
+            score += 80
+        elif urgency == "YAKIN":
+            score += 60
+        elif urgency == "NORMAL":
+            score += 40
+        else:  # RAHAT
+            score += 20
+        
+        # Retention penalty (0-100): Lower retention = higher priority
+        score += (100 - remembering_rate)
+        
+        # Time penalty (0-50): Longer time = higher priority
+        score += min(days_since * 5, 50)
+        
+        # Overdue bonus (0-100)
+        if next_review.get("status") == "overdue":
+            overdue_days = next_review.get("overdue_days", 0)
+            score += overdue_days * 10
+        
+        scored_topics.append({
+            "topic_id": topic_id,
+            "topic_name": topic_name,
+            "subject_id": subject_id,
+            "subject_name": subject_name,
+            "score": score,
+            "urgency": urgency,
+            "remembering_rate": remembering_rate,
+            "days_since": days_since,
+            "overdue_days": next_review.get("overdue_days", 0),
+            "status": next_review.get("status", "upcoming")
+        })
+    
+    if not scored_topics:
+        print("⚠️  No scorable topics, creating demo tasks")
+        return create_daily_tasks(student_id, date)
+    
+    # 4️⃣ Sort by score (highest priority first)
+    scored_topics.sort(key=lambda x: x["score"], reverse=True)
+    
+    print(f"\n🏆 TOP SCORED TOPICS:")
+    for i, topic in enumerate(scored_topics[:5]):
+        print(f"  {i+1}. {topic['topic_name'][:40]} | Score: {topic['score']} | {topic['urgency']}")
+    
+    # 5️⃣ Create tasks from top N topics
+    tasks_to_create = []
+    
+    for i, topic in enumerate(scored_topics[:max_tasks]):
+        # First 7 are tests, rest are study sessions
+        task_type = "test" if i < 7 else "study"
+        
+        # Determine source motor
+        if topic["urgency"] in ["HEMEN", "ACİL"]:
+            source_motor = "bs_motor"  # Spaced repetition
+        elif topic["remembering_rate"] < 60:
+            source_motor = "priority"  # Low success rate
+        else:
+            source_motor = "review"  # Regular review
+        
+        tasks_to_create.append({
+            "student_id": student_id,
+            "task_date": date,
+            "task_type": task_type,
+            "subject_id": topic["subject_id"],
+            "topic_id": topic["topic_id"],
+            "topic_name": topic["topic_name"],
+            "source_motor": source_motor,
+            "priority_level": i + 1,
+            "estimated_time_minutes": 20 if task_type == "test" else 30,
+            "question_count": 12 if task_type == "test" else None,
+            "status": "pending"
+        })
+    
+    # 6️⃣ Insert to database
+    if tasks_to_create:
+        result = supabase.table("student_tasks").insert(tasks_to_create).execute()
+        print(f"✅ Created {len(tasks_to_create)} motor-driven tasks")
+        print(f"=== END ===\n")
+        return result.data
+    else:
+        print("⚠️  No tasks created, using demo")
+        return create_daily_tasks(student_id, date)
 # ============================================
 # TASK CREATION HELPER
 # ============================================
@@ -425,11 +584,17 @@ async def get_todays_tasks_list(
         )
 
         tasks = tasks_res.data or []
-
+        # ✅ EĞER MOCK IZLERİ VARSA TEMİZLE
+        if tasks and any(t.get("source_motor") in ["priority", "repetition", "weakness", "speed"] 
+                        and t.get("topic_name") in ["Limit", "İntegral", "Türev", "Fonksiyonlar"] 
+                        for t in tasks):
+            print("🚨 MOCK DATA DETECTED! Cleaning up...")
+            supabase.table("student_tasks").delete().eq("student_id", student_id).eq("task_date", today_str).execute()
+            tasks = []
         # ✅ OTOMATİK TASK CREATION
         if not tasks:
-            print(f"⚠️  No tasks for {today_str}, creating...")
-            create_daily_tasks(student_id, today_str)
+            print(f"⚠️  No tasks for {today_str}, generating motor-driven tasks...")
+            generate_motor_driven_tasks(student_id, today_str, max_tasks=10)  # ✅ DEĞİŞTİ
             
             # Yeniden çek
             tasks = (
@@ -439,7 +604,7 @@ async def get_todays_tasks_list(
                 .eq("task_date", today_str)
                 .order("priority_level", desc=False)
                 .execute()
-            ).data or []
+    ).data or []
 
         total_time = sum([t.get("estimated_time_minutes", 0) for t in tasks])
         completed_time = sum([t.get("estimated_time_minutes", 0) for t in tasks if t.get("status") == "completed"])
