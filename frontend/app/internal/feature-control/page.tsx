@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api/client';
-import { useFeatureFlag } from '@/hooks/useFeatureFlag';  // ✅ DÜZELTİLDİ
 
 interface FeatureFlag {
   id: string;
@@ -13,6 +12,36 @@ interface FeatureFlag {
   error_count: number;
   last_error_at: string | null;
   disabled_reason: string | null;
+  disabled_by: string | null;
+  disabled_at: string | null;
+  
+  // Existing
+  component_path: string | null;
+  backend_endpoint: string | null;
+  related_files: string[] | null;
+  fix_guide: string | null;
+  error_severity: string;
+  user_impact_level: string;
+  error_rate_percent: number;
+  depends_on: string[] | null;
+  blocks: string[] | null;
+  
+  // ⭐ NEW - Health Breakdown
+  latency_score: number | null;
+  error_score: number | null;
+  freshness_score: number | null;
+  data_volume_score: number | null;
+  
+  // ⭐ NEW - Runtime Metrics
+  avg_response_time_ms: number | null;
+  p95_response_time_ms: number | null;
+  rows_processed: number | null;
+  cache_hit_rate: number | null;
+  
+  // ⭐ NEW - Error Details
+  last_error_message: string | null;
+  last_error_function: string | null;
+  last_error_trace: string | null;
 }
 
 const ACCESS_CODE = 'endstp2025';
@@ -41,19 +70,25 @@ export default function FeatureControlPage() {
   };
 
   const toggleFlag = async (flagKey: string) => {
-    const reason = flags.find(f => f.flag_key === flagKey)?.is_enabled
-      ? prompt('❗ Reason for disabling:')
-      : null;
+    const flag = flags.find(f => f.flag_key === flagKey);
+    const reason = flag?.is_enabled ? prompt('❗ Reason for disabling:') : null;
     
-    if (flags.find(f => f.flag_key === flagKey)?.is_enabled && !reason) {
-      return; // Cancelled
-    }
+    if (flag?.is_enabled && !reason) return;
 
     try {
       await api.post(`/flags/${flagKey}/toggle`, { reason });
       fetchFlags();
     } catch (error) {
       console.error('Failed to toggle:', error);
+    }
+  };
+
+  const quickAction = async (flagKey: string, action: string) => {
+    try {
+      await api.post(`/flags/${flagKey}/quick-action?action=${action}`);
+      fetchFlags();
+    } catch (error) {
+      console.error('Quick action failed:', error);
     }
   };
 
@@ -67,6 +102,27 @@ export default function FeatureControlPage() {
     if (phase === 'mvp') return 'bg-blue-100 text-blue-800';
     if (phase === 'v1.1') return 'bg-purple-100 text-purple-800';
     return 'bg-gray-100 text-gray-800';
+  };
+
+  const getSeverityBadge = (severity: string) => {
+    const badges: any = {
+      critical: { icon: '🔥', text: 'CRITICAL', color: 'bg-red-600 text-white' },
+      high: { icon: '⚠️', text: 'HIGH', color: 'bg-orange-500 text-white' },
+      medium: { icon: '⚡', text: 'MEDIUM', color: 'bg-yellow-500 text-white' },
+      low: { icon: '✓', text: 'LOW', color: 'bg-green-500 text-white' }
+    };
+    return badges[severity] || badges.low;
+  };
+
+  const getImpactBadge = (impact: string) => {
+    const badges: any = {
+      critical: { icon: '👥', text: 'ALL USERS', color: 'bg-red-100 text-red-800 border-red-300' },
+      high: { icon: '👤', text: 'MANY USERS', color: 'bg-orange-100 text-orange-800 border-orange-300' },
+      medium: { icon: '👤', text: 'SOME USERS', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+      low: { icon: '✓', text: 'LIMITED', color: 'bg-green-100 text-green-800 border-green-300' },
+      none: { icon: '✓', text: 'NONE', color: 'bg-gray-100 text-gray-600 border-gray-300' }
+    };
+    return badges[impact] || badges.none;
   };
 
   // Login screen
@@ -99,7 +155,7 @@ export default function FeatureControlPage() {
   // Control panel
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -126,52 +182,395 @@ export default function FeatureControlPage() {
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-lg font-bold text-gray-800">
-                      {flag.flag_key}
-                    </h3>
+                    <h3 className="text-lg font-bold text-gray-800">{flag.flag_key}</h3>
+                    
+                    {/* Phase Badge */}
                     <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase ${getPhaseColor(flag.phase)}`}>
                       {flag.phase}
                     </span>
+                    
+                    {/* Severity Badge */}
+                    {flag.error_severity && flag.error_severity !== 'low' && (
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${getSeverityBadge(flag.error_severity).color}`}>
+                        {getSeverityBadge(flag.error_severity).icon}
+                        {getSeverityBadge(flag.error_severity).text}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-600">{flag.description}</p>
                 </div>
 
-                {/* Health Badge */}
-                <div className={`px-4 py-2 rounded-lg border-2 font-bold ${getHealthColor(flag.health_score)}`}>
-                  <div className="text-xs">Health</div>
-                  <div className="text-2xl">{flag.health_score}</div>
+                {/* Health Score */}
+                <div 
+                className={`px-4 py-2 rounded-lg border-2 font-bold ${getHealthColor(flag.health_score)} relative group cursor-help`}
+                title={`Weighted avg: Latency (30%), Errors (30%), Volume (20%), Freshness (20%)`}
+                >
+                <div className="text-xs flex items-center gap-1">
+                    Health 
+                    <span className="text-xs opacity-60">ⓘ</span>
+                </div>
+                <div className="text-2xl">{flag.health_score}</div>
+                
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                    <div className="bg-gray-900 text-white text-xs rounded px-3 py-2 whitespace-nowrap">
+                    <div className="font-bold mb-1">Health Formula:</div>
+                    <div>Latency: {flag.latency_score || 100} × 30%</div>
+                    <div>Errors: {flag.error_score || 100} × 30%</div>
+                    <div>Volume: {flag.data_volume_score || 100} × 20%</div>
+                    <div>Freshness: {flag.freshness_score || 100} × 20%</div>
+                    <div className="border-t border-gray-700 mt-1 pt-1">
+                        = {flag.health_score}
+                    </div>
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                    <div className="border-8 border-transparent border-t-gray-900"></div>
+                    </div>
+                </div>
                 </div>
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-4 gap-3 mb-4">
                 <div className="bg-gray-50 rounded-lg p-3">
                   <div className="text-xs text-gray-500 mb-1">Status</div>
-                  <div className="text-xl font-bold">
+                  <div className="text-lg font-bold">
                     {flag.is_enabled ? '✅ ON' : '❌ OFF'}
                   </div>
                 </div>
+                
                 <div className="bg-gray-50 rounded-lg p-3">
                   <div className="text-xs text-gray-500 mb-1">Errors</div>
-                  <div className="text-xl font-bold text-gray-800">{flag.error_count}</div>
+                  <div className="text-lg font-bold text-gray-800">{flag.error_count}</div>
                 </div>
+                
                 <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="text-xs text-gray-500 mb-1">Last Error</div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {flag.last_error_at ? new Date(flag.last_error_at).toLocaleDateString('tr-TR') : 'None'}
+                  <div className="text-xs text-gray-500 mb-1">Error Rate</div>
+                  <div className="text-lg font-bold text-gray-800">
+                    {flag.error_rate_percent ? `${flag.error_rate_percent}%` : '0%'}
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="text-xs text-gray-500 mb-1">User Impact</div>
+                  <div className={`text-xs font-bold px-2 py-1 rounded border ${getImpactBadge(flag.user_impact_level).color}`}>
+                    {getImpactBadge(flag.user_impact_level).icon} {getImpactBadge(flag.user_impact_level).text}
                   </div>
                 </div>
               </div>
+                {/* ⭐ YENİ: HEALTH BREAKDOWN - BURAYA EKLE */}
+                {(flag.latency_score || flag.error_score || flag.data_volume_score || flag.freshness_score) && (
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 rounded-lg p-4 mb-4">
+                    <div className="text-sm font-bold text-purple-800 mb-3">📊 HEALTH BREAKDOWN</div>
+                    <div className="grid grid-cols-4 gap-3">
+                    <div>
+                        <div className="text-xs text-gray-600 mb-1">Latency</div>
+                        <div className={`text-2xl font-bold ${
+                        (flag.latency_score || 100) >= 80 ? 'text-green-600' : 
+                        (flag.latency_score || 100) >= 50 ? 'text-yellow-600' : 
+                        'text-red-600'
+                        }`}>
+                        {flag.latency_score || 100}
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-600 mb-1">Errors</div>
+                        <div className={`text-2xl font-bold ${
+                        (flag.error_score || 100) >= 80 ? 'text-green-600' : 
+                        (flag.error_score || 100) >= 50 ? 'text-yellow-600' : 
+                        'text-red-600'
+                        }`}>
+                        {flag.error_score || 100}
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-600 mb-1">Freshness</div>
+                        <div className={`text-2xl font-bold ${
+                        (flag.freshness_score || 100) >= 80 ? 'text-green-600' : 
+                        (flag.freshness_score || 100) >= 50 ? 'text-yellow-600' : 
+                        'text-red-600'
+                        }`}>
+                        {flag.freshness_score || 100}
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-600 mb-1">Data Volume</div>
+                        <div className={`text-2xl font-bold ${
+                        (flag.data_volume_score || 100) >= 80 ? 'text-green-600' : 
+                        (flag.data_volume_score || 100) >= 50 ? 'text-yellow-600' : 
+                        'text-red-600'
+                        }`}>
+                        {flag.data_volume_score || 100}
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                )}
+
+                {/* ⭐ YENİ: RUNTIME SNAPSHOT - BURAYA EKLE */}
+                {(flag.avg_response_time_ms || flag.rows_processed) && (
+                <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 mb-4">
+                    <div className="text-sm font-bold text-orange-800 mb-3">⚡ RUNTIME SNAPSHOT</div>
+                    <div className="grid grid-cols-3 gap-3">
+                    {flag.avg_response_time_ms && (
+                        <div>
+                        <div className="text-xs text-orange-600">Avg Response</div>
+                        <div className={`text-lg font-bold ${
+                            flag.avg_response_time_ms > 2000 ? 'text-red-700' : 
+                            flag.avg_response_time_ms > 1000 ? 'text-orange-700' : 
+                            'text-green-700'
+                        }`}>
+                            {flag.avg_response_time_ms}ms
+                        </div>
+                        </div>
+                    )}
+                    {flag.p95_response_time_ms && (
+                        <div>
+                        <div className="text-xs text-orange-600">P95 Response</div>
+                        <div className={`text-lg font-bold ${
+                            flag.p95_response_time_ms > 5000 ? 'text-red-700' : 
+                            flag.p95_response_time_ms > 2000 ? 'text-orange-700' : 
+                            'text-green-700'
+                        }`}>
+                            {flag.p95_response_time_ms}ms
+                        </div>
+                        </div>
+                    )}
+                    {flag.rows_processed && (
+                        <div>
+                        <div className="text-xs text-orange-600">Rows Processed</div>
+                        <div className={`text-lg font-bold ${
+                            flag.rows_processed > 100000 ? 'text-red-700' : 
+                            flag.rows_processed > 50000 ? 'text-orange-700' : 
+                            'text-green-700'
+                        }`}>
+                            {flag.rows_processed.toLocaleString()}
+                        </div>
+                        </div>
+                    )}
+                    </div>
+                </div>
+                )}
+
+                {/* ⭐ YENİ: LAST ERROR DETAILS - BURAYA EKLE */}
+                {flag.last_error_message && (
+                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4">
+                    <div className="text-sm font-bold text-red-800 mb-2">🔥 LAST ERROR SNAPSHOT</div>
+                    <div className="space-y-2">
+                    <div>
+                        <div className="text-xs text-red-600 font-semibold">Message:</div>
+                        <code className="text-sm text-red-800 bg-white px-2 py-1 rounded block mt-1">
+                        {flag.last_error_message}
+                        </code>
+                    </div>
+                    {flag.last_error_function && (
+                        <div>
+                        <div className="text-xs text-red-600 font-semibold">Function:</div>
+                        <code className="text-sm text-red-800 bg-white px-2 py-1 rounded block mt-1">
+                            {flag.last_error_function}
+                        </code>
+                        </div>
+                    )}
+                    {flag.last_error_at && (
+                        <div className="text-xs text-red-600 mt-2">
+                        Last occurred: {new Date(flag.last_error_at).toLocaleString('tr-TR')}
+                        </div>
+                    )}
+                    </div>
+                </div>
+                )}
+              {/* Navigation Metadata */}
+              {flag.component_path && (
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="text-sm font-bold text-blue-800 mb-3">🗺️ NAVIGATION & DIAGNOSTICS</div>
+                  
+                  {/* Component Path */}
+                  <div className="mb-2">
+                    <span className="text-xs text-blue-600 font-semibold">📁 Component:</span>
+                    <code className="ml-2 text-xs bg-white px-2 py-1 rounded border border-blue-200 font-mono">
+                      {flag.component_path}
+                    </code>
+                  </div>
+                  
+                  {/* Backend Endpoint */}
+                  {flag.backend_endpoint && (
+                    <div className="mb-2">
+                      <span className="text-xs text-blue-600 font-semibold">🔌 API:</span>
+                      <code className="ml-2 text-xs bg-white px-2 py-1 rounded border border-blue-200 font-mono">
+                        {flag.backend_endpoint}
+                      </code>
+                    </div>
+                  )}
+                  
+                  {/* Related Files */}
+                  {flag.related_files && flag.related_files.length > 0 && (
+                    <div className="mb-2">
+                      <span className="text-xs text-blue-600 font-semibold">📄 Files:</span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {flag.related_files.map((f, i) => (
+                          <code key={i} className="text-xs bg-white px-2 py-1 rounded border border-blue-200">
+                            {f}
+                          </code>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Fix Guide */}
+                  {flag.fix_guide && (
+                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded p-3 mt-3">
+                      <div className="text-xs font-bold text-yellow-800 mb-1">🔧 QUICK FIX GUIDE:</div>
+                      <div className="text-sm text-yellow-800">{flag.fix_guide}</div>
+                    </div>
+                  )}
+                  
+                  {/* Dependencies */}
+                  {flag.depends_on && flag.depends_on.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-blue-200">
+                      <span className="text-xs text-blue-600 font-semibold">⚡ Depends on:</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {flag.depends_on.map((dep, i) => (
+                          <span key={i} className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                            {dep}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Disabled Reason */}
               {flag.disabled_reason && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 mb-4">
                   <div className="text-xs font-bold text-red-800 mb-1">⚠️ DISABLED REASON:</div>
                   <div className="text-sm text-red-700">{flag.disabled_reason}</div>
+                  {flag.disabled_by && (
+                    <div className="text-xs text-red-600 mt-2">
+                      Disabled by: {flag.disabled_by} • {flag.disabled_at ? new Date(flag.disabled_at).toLocaleString('tr-TR') : ''}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Toggle Button */}
+              {/* Quick Actions */}
+              <div className="grid grid-cols-4 gap-2 mb-4">  {/* ← 3'ten 4'e değiştir */}
+                <button
+                  onClick={() => quickAction(flag.flag_key, 'reset_health')}
+                  className="px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 rounded text-xs font-semibold transition"
+                >
+                  💚 Reset Health
+                </button>
+                <button
+                  onClick={() => quickAction(flag.flag_key, 'clear_errors')}
+                  className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded text-xs font-semibold transition"
+                >
+                  🧹 Clear Errors
+                </button>
+                <button
+                  onClick={() => quickAction(flag.flag_key, 'attempt_recovery')}
+                  className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded text-xs font-semibold transition"
+                >
+                  🔄 Recovery
+                </button>
+                
+                {/* ⭐ YENİ: Ask AI - BURAYA EKLE */}
+                <button
+                  onClick={() => {
+                    const diagnostic = {
+                      feature: flag.flag_key,
+                      description: flag.description,
+                      health: {
+                        overall: flag.health_score,
+                        latency: flag.latency_score || 100,
+                        errors: flag.error_score || 100,
+                        data_volume: flag.data_volume_score || 100
+                      },
+                      runtime: {
+                        avg_ms: flag.avg_response_time_ms,
+                        p95_ms: flag.p95_response_time_ms,
+                        rows: flag.rows_processed
+                      },
+                      last_error: {
+                        message: flag.last_error_message,
+                        function: flag.last_error_function
+                      },
+                      navigation: {
+                        component: flag.component_path,
+                        api: flag.backend_endpoint,
+                        files: flag.related_files
+                      },
+                      fix_guide: flag.fix_guide
+                    };
+                    
+                    const report = `🤖 AI DIAGNOSTIC CONTEXT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Feature: ${flag.flag_key}
+Description: ${flag.description}
+Status: ${flag.is_enabled ? 'ON' : 'OFF'}
+Phase: ${flag.phase}
+
+━━━━━ HEALTH BREAKDOWN ━━━━━
+Overall: ${flag.health_score}
+├─ Latency: ${flag.latency_score || 100} ${flag.avg_response_time_ms ? `(${flag.avg_response_time_ms}ms avg)` : ''}
+├─ Errors: ${flag.error_score || 100}
+├─ Freshness: ${flag.freshness_score || 100}
+└─ Data Volume: ${flag.data_volume_score || 100} ${flag.rows_processed ? `(${flag.rows_processed.toLocaleString()} rows)` : ''}
+
+${flag.last_error_message ? `━━━━━ LAST ERROR ━━━━━
+Message: ${flag.last_error_message}
+Function: ${flag.last_error_function || 'unknown'}
+` : ''}━━━━━ NAVIGATION ━━━━━
+Component: ${flag.component_path || 'N/A'}
+API: ${flag.backend_endpoint || 'N/A'}
+Files: ${flag.related_files?.join(', ') || 'N/A'}
+
+${flag.fix_guide ? `━━━━━ FIX GUIDE ━━━━━
+${flag.fix_guide}
+` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STRUCTURED DATA:
+${JSON.stringify(diagnostic, null, 2)}`;
+
+                    navigator.clipboard.writeText(report);
+                    alert('✅ Diagnostic report copied!\n\nPaste into Claude for AI analysis.');
+                  }}
+                  className="px-3 py-2 bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-800 rounded text-xs font-semibold transition"
+                >
+                  🤖 Ask AI
+                </button>
+              </div>
+
+              {/* ⭐ YENİ: Fallback Warning - Main Toggle'dan ÖNCE */}
+              {flag.is_enabled && (
+                <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3 mb-4">
+                  <div className="flex items-start gap-2">
+                    <span className="text-yellow-600 text-xl">⚠️</span>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-yellow-800 mb-1">
+                        Disable Behavior
+                      </div>
+                      <div className="text-xs text-yellow-700">
+                        {flag.flag_key === 'daily_tasks' && (
+                          <>Component will NOT render. Users see: "Görevleriniz hazırlanıyor..."</>
+                        )}
+                        {flag.flag_key === 'at_risk_display' && (
+                          <>Component will NOT render. Placeholder card shown.</>
+                        )}
+                        {flag.flag_key === 'test_entry' && (
+                          <>⚠️ CRITICAL: Students cannot submit tests! Emergency only.</>
+                        )}
+                        {!['daily_tasks', 'at_risk_display', 'test_entry'].includes(flag.flag_key) && (
+                          <>Component will NOT render. No fallback UI.</>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Main Toggle */}
               <button
                 onClick={() => toggleFlag(flag.flag_key)}
                 className={`w-full py-3 rounded-lg font-bold transition shadow-sm ${

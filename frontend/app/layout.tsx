@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Providers } from './providers';
+import FloatingFeatureMonitor from '@/components/FloatingFeatureMonitor';
 
 export const metadata: Metadata = {
   title: 'End.STP - Akıllı Öğrenme Analiz Sistemi',
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body>
         <Providers>
           {children}
+                  <FloatingFeatureMonitor /> {/* ✅ EKLE */}
         </Providers>
       </body>
     </html>
