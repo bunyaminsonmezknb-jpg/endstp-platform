@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.api.v1.student_analysis import router as student_router
+import time
+from contextlib import asynccontextmanager
 
 app = FastAPI(
     title="End.STP API",
@@ -25,9 +27,87 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ⭐ YENİ: Response Time Monitoring Middleware
+@app.middleware("http")
+async def monitor_response_time(request, call_next):
+    start_time = time.time()
+    
+    try:
+        response = await call_next(request)
+        process_time = int((time.time() - start_time) * 1000)  # ms
+        response.headers["X-Process-Time"] = str(process_time)
+        
+        # Report slow endpoints (background task)
+        if process_time > 1000:
+            await report_slow_endpoint(request.url.path, process_time)
+        
+        return response
+        
+    except Exception as e:
+        process_time = int((time.time() - start_time) * 1000)
+        await report_endpoint_error(request.url.path, str(e), process_time)
+        raise
+
+async def report_slow_endpoint(path: str, response_time_ms: int):
+    """Report slow response time to feature flags"""
+    try:
+        flag_key = None
+        if "/student/tasks/today" in path:
+            flag_key = "daily_tasks"
+        elif "/student/todays-tasks" in path:
+            flag_key = "at_risk_display"
+        elif "/test-entry" in path:
+            flag_key = "test_entry"
+        
+        if flag_key:
+            from app.db.session import get_supabase_admin
+            supabase = get_supabase_admin()
+            
+            supabase.table("feature_flags").update({
+                "avg_response_time_ms": response_time_ms,
+                "last_success_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            }).eq("flag_key", flag_key).execute()
+            
+            print(f"⚠️ SLOW: {flag_key} took {response_time_ms}ms")
+    except Exception as e:
+        print(f"Monitoring error: {e}")
+
+async def report_endpoint_error(path: str, error: str, response_time_ms: int):
+    """Report error to feature flags"""
+    try:
+        flag_key = None
+        if "/student/tasks/today" in path:
+            flag_key = "daily_tasks"
+        elif "/student/todays-tasks" in path:
+            flag_key = "at_risk_display"
+        elif "/test-entry" in path:
+            flag_key = "test_entry"
+        
+        if flag_key:
+            from app.db.session import get_supabase_admin
+            supabase = get_supabase_admin()
+            
+            result = supabase.table("feature_flags").select("error_count, health_score").eq("flag_key", flag_key).execute()
+            if result.data:
+                current = result.data[0]
+                new_error_count = current["error_count"] + 1
+                new_health = max(0, current["health_score"] - 10)
+                
+                supabase.table("feature_flags").update({
+                    "error_count": new_error_count,
+                    "health_score": new_health,
+                    "last_error_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "last_error_message": str(error)[:500],
+                    "avg_response_time_ms": response_time_ms
+                }).eq("flag_key", flag_key).execute()
+                
+                print(f"🚨 ERROR: {flag_key} - {error}")
+    except Exception as e:
+        print(f"Error reporting failed: {e}")
+
 # Routers (eski sistem + yeni motorlar)
-app.include_router(api_router, prefix="/api/v1")  # Eski endpoints
-app.include_router(student_router)  # Yeni 4 motor (zaten prefix içinde)
+app.include_router(api_router, prefix="/api/v1")
+app.include_router(student_router)
 
 @app.get("/")
 async def root():
