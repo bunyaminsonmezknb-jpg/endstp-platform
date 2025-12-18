@@ -4,6 +4,7 @@ API Router v1
 from fastapi import APIRouter
 from app.api.v1.endpoints import auth, admin_osym, admin_exams, feedback, test_entry
 from app.api.v1.endpoints.student import router as student_router
+from app.api.v1.endpoints import feature_flags
 
 api_router = APIRouter()
 
@@ -22,3 +23,6 @@ api_router.include_router(admin_exams.router, prefix="/admin", tags=["admin-exam
 
 # Feedback
 api_router.include_router(feedback.router, tags=["feedback"])
+
+# feature flags
+api_router.include_router(feature_flags.router, prefix="/flags", tags=["feature-flags"])
