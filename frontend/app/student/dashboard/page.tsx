@@ -1,14 +1,12 @@
 'use client';
 import FeedbackWidget from '@/app/components/FeedbackWidget';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudentDashboard } from '@/lib/store/studentDashboardStore';
 import { api } from '@/lib/api/client';
 import DashboardHeader from './components/DashboardHeader';
 import CriticalAlert from './components/CriticalAlert';
 import HeroStats from './components/HeroStats';
-import ProjectionCard from './components/ProjectionCard';
-import UniversityGoalCard from './components/UniversityGoalCard';
 import SmartActionCards from './components/SmartActionCards';
 import TopicHealthBar from './components/TopicHealthBar';
 import HealthStatusBar from './components/HealthStatusBar';
@@ -16,23 +14,24 @@ import MotorAnalysisPanel from './components/MotorAnalysisPanel';
 import TodayStatusCards from './components/TodayStatusCards';
 
 /**
- * Student Dashboard - v4.1
+ * Student Dashboard - v5.0
  * 
- * TAB'LAR:
- * - 📊 Genel Bakış (Projection + HeroStats + Health Bars)
- * - 🚀 4 Motor Analizi
- * - 🎯 Bugünkü Görevler (TodayStatusCards)
+ * GÖRÜNÜM MODLARI (Segment Control):
+ * - 📊 Genel Bakış: Bugünkü durumun özeti
+ * - 🚀 4 Motor Analizi: AI'ın o anki önerileri
+ * - 🎯 Bugünkü Görevler: Planlanmış aksiyon listesi
  * 
- * ⭐ v4.1: Real-time Reflex Notifications added
+ * ⭐ Üst tablar = Dashboard filtresi (sayfa değil, görünüm)
+ * ⭐ Sol menü = Statik yapı (Test Girişi, Analiz Merkezi, vb.)
  */
 
 export default function StudentDashboard() {
   const router = useRouter();
   const { dashboardData, isLoading, error, fetchDashboardData } = useStudentDashboard();
-  const [activeTab, setActiveTab] = useState<'overview' | 'motors' | 'tasks'>('overview');
-  const [studentId, setStudentId] = useState<string>(''); // ⭐ NEW!
+  const [activeView, setActiveView] = useState<'overview' | 'motors' | 'tasks'>('overview');
+  const [studentId, setStudentId] = useState<string>('');
   const [tasksSummary, setTasksSummary] = useState({
-    total_tasks: 0, // ✅ Düzeltildi
+    total_tasks: 0,
     completed_tasks: 0,
     total_time_minutes: 0,
     completed_time_minutes: 0,
@@ -54,29 +53,35 @@ export default function StudentDashboard() {
       return;
     }
 
-    // Initialize timezone
     const user = JSON.parse(userStr);
-    setStudentId(user.id); // ⭐ NEW! Store student ID for notifications
+    setStudentId(user.id);
     fetchDashboardData(user.id);
   }, [router]);
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const data = await api.get('/student/tasks/today') as any;
-        if (data.success && data.summary) {
-          setTasksSummary(data.summary);
-          setTasksList(data.tasks || []);
-        }
-      } catch (err) {
-        console.error('Tasks summary fetch error:', err);
+  const fetchTasks = useCallback(async () => {
+    try {
+      const data = await api.get('/student/tasks/today') as any;
+
+      if (data.success && data.summary) {
+        setTasksSummary(data.summary);
+        setTasksList(data.tasks || []);
       }
-    };
-    
+    } catch (err) {
+      console.error('Tasks summary fetch error:', err);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchTasks();
     const interval = setInterval(fetchTasks, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    const onTasksUpdated = () => fetchTasks();
+    window.addEventListener('endstp:tasks-updated', onTasksUpdated);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('endstp:tasks-updated', onTasksUpdated);
+    };
+  }, [fetchTasks]);
 
   useEffect(() => {
     const fetchWeeklySubjects = async () => {
@@ -128,59 +133,74 @@ export default function StudentDashboard() {
   return (
     <div className="min-h-screen p-6">
       <div className="max-w-[1280px] mx-auto">
-      <DashboardHeader
-        studentName={dashboardData.studentName}
-        streak={dashboardData.streak}
-        studentId={studentId} // ⭐ EKLE
-      />
+        <DashboardHeader
+          studentName={dashboardData.studentName}
+          streak={dashboardData.streak}
+          studentId={studentId}
+        />
 
-        {/* ⭐ Notification Container - Orta Kısımda */}
-
-        {/* TAB NAVIGATION */}
-        <div className="bg-white rounded-2xl shadow-lg p-2 mb-5 flex gap-2">
+        {/* ⭐ SEGMENT CONTROL - iOS Tarzı Dashboard Filtresi */}
+        <div className="bg-white rounded-2xl shadow-lg p-1.5 mb-6 flex gap-1 w-full">
           <button
-            onClick={() => setActiveTab('overview')}
-            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${
-              activeTab === 'overview'
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
+            onClick={() => setActiveView('overview')}
+            className={`flex-1 py-3.5 px-6 rounded-xl font-semibold transition-all duration-300 relative ${
+              activeView === 'overview'
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
-            <span className="text-xl mr-2">📊</span>
-            Genel Bakış
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-lg">📊</span>
+              <span className="text-sm md:text-base">Genel Bakış</span>
+            </div>
+            {activeView === 'overview' && (
+              <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/50 rounded-full" />
+            )}
           </button>
           
           <button
-            onClick={() => setActiveTab('motors')}
-            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${
-              activeTab === 'motors'
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
+            onClick={() => setActiveView('motors')}
+            className={`flex-1 py-3.5 px-6 rounded-xl font-semibold transition-all duration-300 relative ${
+              activeView === 'motors'
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
-            <span className="text-xl mr-2">🚀</span>
-            4 Motor Analizi
-            <span className="ml-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">YENİ</span>
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-lg">🚀</span>
+              <span className="text-sm md:text-base">4 Motor Analizi</span>
+            </div>
+            {activeView === 'motors' && (
+              <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/50 rounded-full" />
+            )}
           </button>
 
           <button
-            onClick={() => setActiveTab('tasks')}
-            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${
-              activeTab === 'tasks'
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
+            onClick={() => setActiveView('tasks')}
+            className={`flex-1 py-3.5 px-6 rounded-xl font-semibold transition-all duration-300 relative ${
+              activeView === 'tasks'
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
-            <span className="text-xl mr-2">🎯</span>
-            Bugünkü Görevler
-            <span className="ml-2 bg-orange-500 text-white text-xs px-2 py-1 rounded-full">YENİ</span>
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-lg">🎯</span>
+              <span className="text-sm md:text-base">Bugünkü Görevler</span>
+              {tasksSummary.total_tasks > 0 && activeView !== 'tasks' && (
+                <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full ml-1">
+                  {tasksSummary.total_tasks}
+                </span>
+              )}
+            </div>
+            {activeView === 'tasks' && (
+              <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/50 rounded-full" />
+            )}
           </button>
         </div>
 
-        {/* TAB CONTENT */}
-        {activeTab === 'overview' ? (
+        {/* GÖRÜNÜM İÇERİĞİ (View Content) */}
+        {activeView === 'overview' && (
           <>
-            {/* Rest of the overview tab content remains the same */}
             <div className="bg-green-500 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
               <span className="font-semibold">Canlı Veri (Gerçek Backend API)</span>
@@ -192,13 +212,6 @@ export default function StudentDashboard() {
                 daysAgo={dashboardData.criticalAlert.daysAgo}
                 forgetRisk={dashboardData.criticalAlert.forgetRisk}
               />
-            )}
-
-            {dashboardData.projection && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-                <ProjectionCard />
-                <UniversityGoalCard />
-              </div>
             )}
 
             <HeroStats
@@ -216,13 +229,7 @@ export default function StudentDashboard() {
             />
 
             <SmartActionCards />
-            {console.log('HealthStatusBar props:', {
-              total: dashboardData.topics.length,
-              healthy: dashboardData.topics.filter(t => t.status === 'excellent' || t.status === 'good').length,
-              warning: dashboardData.topics.filter(t => t.status === 'warning').length,
-              frozen: dashboardData.topics.filter(t => t.status === 'frozen').length,
-              critical: dashboardData.topics.filter(t => t.status === 'critical').length
-            })}
+
             {dashboardData.topics.length > 0 ? (
               <HealthStatusBar
                 totalTopics={dashboardData.topics.length}
@@ -250,7 +257,9 @@ export default function StudentDashboard() {
               </div>
             </div>
           </>
-        ) : activeTab === 'motors' ? (
+        )}
+
+        {activeView === 'motors' && (
           <>
             <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
@@ -258,13 +267,19 @@ export default function StudentDashboard() {
             </div>
             <MotorAnalysisPanel />
           </>
-        ) : (
+        )}
+
+        {activeView === 'tasks' && (
           <>
             <div className="bg-orange-500 text-white text-sm px-4 py-2 rounded-lg mb-3 flex items-center gap-2 w-fit ml-auto shadow-md">
               <span className="animate-pulse">🟢</span>
               <span className="font-semibold">Canlı Veri (GET /api/v1/student/todays-tasks)</span>
             </div>
-            <TodayStatusCards />
+            <TodayStatusCards
+              tasksList={tasksList}
+              tasksLoading={false}
+              onTaskChanged={fetchTasks}
+            />
           </>
         )}
 
