@@ -1,42 +1,144 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import SubjectIcon from '@/components/SubjectIcon';
+import { useState, useRef, useEffect } from 'react';
 
-interface SubjectProgress {
+interface Subject {
   subject_id: string;
   subject_name: string;
-  subject_code: string;
   progress_percentage: number;
+  test_count: number;
   topics_total: number;
+  topics_tested: number;
   topics_mastered: number;
   topics_mastered_personal: number;
-  topics_in_progress: number;
-  topics_not_started: number;
   avg_success_rate: number;
   trend: string;
-  trend_icon?: string;
-  test_count?: number;
-  phase?: string;
-  disclaimer?: string;
+  trend_icon: string;
+  phase: string;
+  disclaimer: string | null;
+  last_test_date: string | null;
 }
 
 interface SubjectProgressListProps {
-  subjects: SubjectProgress[] | null;
-  isLoading?: boolean;
+  subjects: Subject[] | null;
+  isLoading: boolean;
 }
 
-function SubjectProgressList({ subjects, isLoading = false }: SubjectProgressListProps) {
-  const [firstVisit, setFirstVisit] = useState(true);
+// ===== DERS İKONLARI (SUBJECT-SPECIFIC) =====
+function getSubjectIcon(subjectName: string): string {
+  const name = subjectName.toLowerCase();
+  
+  if (name.includes('matematik')) return '📐';
+  if (name.includes('fizik')) return '⚡';
+  if (name.includes('kimya')) return '⚗️';
+  if (name.includes('biyoloji')) return '🧬';
+  if (name.includes('tarih')) return '📜';
+  if (name.includes('coğrafya')) return '🌍';
+  if (name.includes('edebiyat')) return '📖';
+  if (name.includes('türkçe')) return '🇹🇷';
+  if (name.includes('din')) return '☪️';
+  if (name.includes('felsefe')) return '🤔';
+  if (name.includes('geometri')) return '📏';
+  if (name.includes('ingilizce') || name.includes('İngilizce')) return '🇬🇧';
+  
+  return '📚'; // Default
+}
+
+// ===== GÜÇLENDİRİLMİŞ RİSK SKORU (4 MOTOR PRENSİBİ) =====
+function calculatePriorityScore(subject: Subject): number {
+  let score = 0;
+  
+  // ✅ MOTOR 1: ÖNCELİK (Risk/Aciliyet) - %45 ağırlık
+  const priorityScore = (() => {
+    let p = 0;
+    
+    // Düşük başarı = yüksek risk
+    if (subject.progress_percentage < 30) p += 50;
+    else if (subject.progress_percentage < 50) p += 35;
+    else if (subject.progress_percentage < 70) p += 20;
+    
+    // Trend durumu
+    if (subject.trend === 'declining') p += 40;
+    else if (subject.trend === 'stable') p += 15;
+    
+    // Az test = belirsizlik
+    if (subject.test_count < 3) p += 15;
+    else if (subject.test_count < 5) p += 8;
+    
+    return p;
+  })();
+  
+  score += priorityScore * 0.45;
+  
+  // ✅ MOTOR 2: TEKRAR RİSKİ (Unutma eğrisi) - %25 ağırlık
+  const reviewScore = (() => {
+    if (!subject.last_test_date) return 60; // Hiç test yok
+    
+    const daysSinceTest = Math.floor(
+      (new Date().getTime() - new Date(subject.last_test_date).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    if (daysSinceTest > 21) return 50; // 3+ hafta
+    if (daysSinceTest > 14) return 35; // 2+ hafta
+    if (daysSinceTest > 7) return 20; // 1+ hafta
+    return 5; // Güncel
+  })();
+  
+  score += reviewScore * 0.25;
+  
+  // ✅ MOTOR 3: MOMENTUM (Trend + aktivite) - %20 ağırlık
+  const momentumScore = (() => {
+    let m = 0;
+    
+    // Trend yönü
+    if (subject.trend === 'declining') m += 40;
+    else if (subject.trend === 'stable') m += 20;
+    else if (subject.trend === 'improving') m += 5;
+    
+    // Test sıklığı (aktivite)
+    if (subject.test_count < 2) m += 30;
+    else if (subject.test_count < 5) m += 15;
+    
+    return m;
+  })();
+  
+  score += momentumScore * 0.20;
+  
+  // ✅ MOTOR 4: ÖĞRENME ZORLUĞU (Kapsam vs başarı) - %10 ağırlık
+  const difficultyScore = (() => {
+    const coverage = (subject.topics_tested / subject.topics_total) * 100;
+    
+    // Düşük kapsam + düşük başarı = zor ders
+    if (coverage < 30 && subject.avg_success_rate < 50) return 40;
+    if (coverage < 50 && subject.avg_success_rate < 60) return 25;
+    if (subject.avg_success_rate < 50) return 15;
+    
+    return 5;
+  })();
+  
+  score += difficultyScore * 0.10;
+  
+  return Math.round(score);
+}
+
+// ===== TREND EMOJI & TEXT =====
+function getTrendDisplay(trend: string) {
+  switch(trend) {
+    case 'improving':
+      return { emoji: '📈', text: 'Yükseliyor', color: 'text-green-700', bg: 'bg-green-50' };
+    case 'declining':
+      return { emoji: '📉', text: 'Düşüyor', color: 'text-red-700', bg: 'bg-red-50' };
+    case 'stable':
+      return { emoji: '➡️', text: 'Sabit', color: 'text-blue-700', bg: 'bg-blue-50' };
+    default:
+      return { emoji: '⏸️', text: 'Belirsiz', color: 'text-gray-700', bg: 'bg-gray-50' };
+  }
+}
+
+export default function SubjectProgressList({ subjects, isLoading }: SubjectProgressListProps) {
+  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
   const [showTooltip, setShowTooltip] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const hasVisited = localStorage.getItem('progress_guide_seen');
-    if (hasVisited) {
-      setFirstVisit(false);
-    }
-  }, []);
 
   // Outside click handler
   useEffect(() => {
@@ -45,124 +147,78 @@ function SubjectProgressList({ subjects, isLoading = false }: SubjectProgressLis
         setShowTooltip(false);
       }
     };
-
     if (showTooltip) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTooltip]);
 
-  const dismissBanner = () => {
-    setFirstVisit(false);
-    localStorage.setItem('progress_guide_seen', 'true');
+  // İlk render: En kritik dersi aç
+  useEffect(() => {
+    if (subjects && subjects.length > 0 && expandedSubjects.size === 0) {
+      const sortedByPriority = [...subjects].sort((a, b) => 
+        calculatePriorityScore(b) - calculatePriorityScore(a)
+      );
+      setExpandedSubjects(new Set([sortedByPriority[0].subject_id]));
+    }
+  }, [subjects]);
+
+  // Toggle expand
+  const toggleExpand = (subjectId: string) => {
+    setExpandedSubjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(subjectId)) {
+        newSet.delete(subjectId);
+      } else {
+        newSet.add(subjectId);
+      }
+      return newSet;
+    });
   };
 
-  if (isLoading || !subjects) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="border border-gray-100 rounded-lg p-4 animate-pulse">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-                <div>
-                  <div className="h-5 bg-gray-200 rounded w-32 mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-24"></div>
-                </div>
-              </div>
-              <div className="h-8 bg-gray-200 rounded w-16"></div>
-            </div>
-            <div className="h-2 bg-gray-200 rounded-full mb-3"></div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-4 bg-gray-200 rounded w-20"></div>
-                <div className="h-4 bg-gray-200 rounded w-24"></div>
-                <div className="h-4 bg-gray-200 rounded w-20"></div>
-              </div>
-              <div className="h-4 bg-gray-200 rounded w-16"></div>
-            </div>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="animate-pulse">
+            <div className="h-16 bg-gray-200 rounded-xl"></div>
           </div>
         ))}
       </div>
     );
   }
 
-  if (subjects.length === 0) {
+  if (!subjects || subjects.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
-        </div>
-        <p className="text-gray-500 text-lg">Henüz test girişi yapılmamış</p>
+        <p className="text-gray-500 text-lg">Henüz test verisi yok</p>
       </div>
     );
   }
 
-  const getTrendIcon = (trend: string) => {
-    if (trend === 'improving') {
-      return (
-        <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-        </svg>
-      );
-    } else if (trend === 'declining') {
-      return (
-        <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-        </svg>
-      );
-    }
-    return (
-      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
-      </svg>
-    );
-  };
+  // ✅ ÖNCELİK SKORUNA GÖRE SIRALA (YÜKSEK → DÜŞÜK)
+  const sortedSubjects = [...subjects].sort((a, b) => {
+    const scoreA = calculatePriorityScore(a);
+    const scoreB = calculatePriorityScore(b);
+    
+    // Önce skora göre
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    
+    // Eşitse trend'e göre
+    const trendOrder = { declining: 3, stable: 2, improving: 1 };
+    const trendA = trendOrder[a.trend as keyof typeof trendOrder] || 0;
+    const trendB = trendOrder[b.trend as keyof typeof trendOrder] || 0;
+    if (trendB !== trendA) return trendB - trendA;
+    
+    // Eşitse düşük başarıya göre
+    return a.progress_percentage - b.progress_percentage;
+  });
 
-  const getProgressColor = (percentage: number) => {
-    if (percentage >= 70) return 'bg-green-500';
-    if (percentage >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  const getTrendLabel = (trend: string) => {
-    if (trend === 'improving') return 'Gelişiyor';
-    if (trend === 'declining') return 'Düşüyor';
-    return 'Sabit';
-  };
+  // En kritik dersi bul (vurgulama için)
+  const mostCriticalId = sortedSubjects[0]?.subject_id;
 
   return (
     <div>
-      {/* İlk Ziyaret Banner */}
-      {firstVisit && (
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3 flex-1">
-              <p className="text-sm text-blue-700">
-                <strong>Sistem şu an başlangıç modunda.</strong> 0-5 test arası sadece test başarısı ölçülür. 
-                5+ test girince kapsam, 15+ test girince ustalık oranı da eklenecek.
-              </p>
-              <button 
-                onClick={dismissBanner}
-                className="mt-2 text-sm text-blue-600 underline hover:text-blue-800"
-              >
-                Anladım, gösterme
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Başlık + Tooltip */}
       <div className="flex items-center gap-3 mb-6 relative">
         <h2 className="text-xl font-bold text-gray-900">📊 Ders Bazlı İlerleme</h2>
@@ -181,187 +237,229 @@ function SubjectProgressList({ subjects, isLoading = false }: SubjectProgressLis
         {showTooltip && (
           <div 
             ref={tooltipRef}
-            className="absolute top-8 right-0 w-full max-w-2xl bg-white shadow-2xl rounded-lg p-6 z-50 border border-gray-200"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg text-gray-900">📖 Bu Sayfa Nasıl Okunur?</h3>
-              <button 
-                onClick={() => setShowTooltip(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="space-y-4 text-sm">
-              {/* İlerleme Sistemi */}
-              <div>
-                <div className="font-semibold text-purple-600 mb-2 flex items-center gap-2">
-                  <span>🎯</span>
-                  <span>İlerleme Sistemi (3 Aşama)</span>
-                </div>
-                <ul className="space-y-1.5 text-gray-600 ml-6">
-                  <li>• <strong>0-5 test:</strong> Test başarısı (başlangıç - motivasyonel)</li>
-                  <li>• <strong>5-15 test:</strong> Başarı + Kapsam (gelişim dönemi)</li>
-                  <li>• <strong>15+ test:</strong> Başarı + Kapsam + Ustalık (olgunluk)</li>
-                </ul>
-              </div>
-              
-              {/* Trend */}
-              <div>
-                <div className="font-semibold text-green-600 mb-2 flex items-center gap-2">
-                  <span>📈</span>
-                  <span>Akıllı Trend Göstergeleri</span>
-                </div>
-                <ul className="space-y-1.5 text-gray-600 ml-6">
-                  <li>🔥 <strong>Hızlanıyor:</strong> Kalan gelişim alanına göre anlamlı artış</li>
-                  <li>→ <strong>Sabit:</strong> Performans dengeli</li>
-                  <li>🔻 <strong>Düşüyor:</strong> Anlamlı gerileme</li>
-                  <li className="text-xs text-gray-500 ml-4">* En az 3 test gerekir</li>
-                  <li className="text-xs text-purple-600 ml-4">💡 Düşük başarıda büyük, yüksek başarıda küçük değişimler anlamlıdır</li>
-                </ul>
-              </div>
-              
-              {/* Ustalık */}
-              <div>
-                <div className="font-semibold text-blue-600 mb-2 flex items-center gap-2">
-                  <span>🏆</span>
-                  <span>Ustalık Seviyeleri</span>
-                </div>
-                <ul className="space-y-1.5 text-gray-600 ml-6">
-                  <li>🏆 <strong>Evrensel:</strong> %80+ başarı, 2+ test (objektif)</li>
-                  <li>🧠 <strong>Kişisel Güçlü:</strong> Kendi ortalamanın üstü (motivasyonel)</li>
-                </ul>
-              </div>
-              
-              {/* İpucu */}
-              <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
-                <p className="text-xs text-purple-800">
-                  <strong>💡 İpucu:</strong> Sistem test sayısı arttıkça daha gelişmiş hesaplamalar yapar. 
-                  %98'deki +1 puan, %20'deki +5 puan kadar değerlidir!
-                </p>
-              </div>
-            </div>
+            className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-50">
+            <h4 className="font-bold text-gray-900 mb-2">📖 Nasıl Okunur?</h4>
+            <ul className="text-sm text-gray-700 space-y-2">
+              <li>✅ <strong>Yüzde:</strong> Genel ilerleme puanı</li>
+              <li>📈 <strong>Trend:</strong> Son haftalardaki performans yönü</li>
+              <li>🎯 <strong>Kapsam:</strong> Kaç konuda test çözüldü</li>
+              <li>🏆 <strong>Evrensel Ustalık:</strong> Genel başarı standardına göre uzman olunan konular (%75+ başarı)</li>
+              <li>🧠 <strong>Kişisel Ustalık:</strong> Kendi geçmiş performansına göre gelişim gösterilen konular (sürekli artış trendi)</li>
+              <li>💡 <strong>En üstteki</strong> en öncelikli derstir</li>
+              <li>🔢 <strong>Sıralama:</strong> Risk + Trend + Momentum + Zorluk + Sınav Ağırlığı</li>
+            </ul>
           </div>
         )}
       </div>
 
-      {/* Subject List */}
-      <div className="space-y-5">
-        {subjects.map((subject) => (
-          <div key={subject.subject_id} className="border border-gray-100 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <SubjectIcon 
-                  subjectCode={subject.subject_code}
-                  size="md"
-                  showBadge={true}
-                />
-                
-                <div>
-                  <h3 className="font-semibold text-gray-900">{subject.subject_name}</h3>
-                  <p className="text-sm text-gray-500">
-                    {subject.topics_in_progress}/{subject.topics_total} konuya başlandı
-                  </p>
+      {/* Ders Listesi */}
+      <div className="space-y-3">
+        {sortedSubjects.map((subject) => {
+          const isExpanded = expandedSubjects.has(subject.subject_id);
+          const isMostCritical = subject.subject_id === mostCriticalId;
+          const trendDisplay = getTrendDisplay(subject.trend);
+          const subjectIcon = getSubjectIcon(subject.subject_name);
+          const priorityScore = calculatePriorityScore(subject);
+
+          return (
+            <div 
+              key={subject.subject_id}
+              className={`border rounded-xl overflow-hidden transition-all ${
+                isMostCritical 
+                  ? 'border-orange-300 bg-orange-50/30' 
+                  : 'border-gray-200 bg-white'
+              }`}
+            >
+              {/* ===== KAPALI DURUM (TEK SATIR) ===== */}
+              <button
+                onClick={() => toggleExpand(subject.subject_id)}
+                className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              >
+                {/* Sol: İkon + İsim + Kapsam */}
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <span className="text-2xl">{subjectIcon}</span>
+                  </div>
+                  
+                  <div className="text-left">
+                    <h3 className="font-bold text-gray-900 text-lg">
+                      {subject.subject_name}
+                    </h3>
+                    {/* ✅ DÜZELTME: tested/total formatı */}
+                    <p className="text-sm text-gray-500">
+                      {subject.topics_tested}/{subject.topics_total} konuda test çözüldü
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="text-right" space-y-1>
-              <div className="text-2xl font-bold text-gray-900">
-                {subject.progress_percentage}%
-              </div>
-              {subject.test_count && subject.test_count >= 3 ? (
-                <div className="flex items-center gap-1 text-sm text-gray-500 justify-end">
-                  {getTrendIcon(subject.trend)}
-                  <span>{getTrendLabel(subject.trend)}</span>
-                </div>
-              ) : (
-                <div className="h-6"></div>
-              )}
-            </div>
-            </div>
+                {/* Sağ: Yüzde + Trend + Badge */}
+                <div className="flex items-center gap-6">
+                  {/* Yüzde */}
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-gray-900">
+                      {subject.progress_percentage}%
+                    </div>
+                  </div>
 
-            {/* Progress bar */}
-            <div className="mb-3">
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full ${getProgressColor(subject.progress_percentage)} transition-all duration-500`}
-                  style={{ width: `${subject.progress_percentage}%` }}
-                ></div>
-              </div>
-            </div>
-
-            {/* Trend & Ustalık - SADECE İÇERİK VARSA GÖSTER */}
-            {((subject.test_count && subject.test_count >= 3 && subject.trend_icon) || 
-              subject.topics_mastered > 0 || 
-              subject.topics_mastered_personal > 0) && (
-              <div className="flex items-center justify-between mb-3 text-sm">
-                {/* Trend (3+ test varsa) */}
-                {subject.test_count && subject.test_count >= 3 && subject.trend_icon && (
-                  <div className={`flex items-center gap-1 ${
-                    subject.trend === 'improving' ? 'text-green-600' :
-                    subject.trend === 'declining' ? 'text-orange-600' :
-                    'text-gray-500'
-                  }`}>
-                    <span className="text-base">{subject.trend_icon}</span>
-                    <span className="font-medium">
-                      {subject.trend === 'improving' ? 'Hızlanıyor' :
-                      subject.trend === 'declining' ? 'Yavaşlıyor' :
-                      'Sabit'}
+                  {/* Trend Badge */}
+                  <div className={`px-4 py-2 rounded-lg ${trendDisplay.bg} flex items-center gap-2`}>
+                    <span className="text-xl">{trendDisplay.emoji}</span>
+                    <span className={`font-semibold text-sm ${trendDisplay.color}`}>
+                      {trendDisplay.text}
                     </span>
                   </div>
-                )}
-                
-                {/* Ustalık */}
-                {(subject.topics_mastered > 0 || subject.topics_mastered_personal > 0) && (
-                  <div className="flex items-center gap-2 text-xs ml-auto">
-                    {subject.topics_mastered > 0 && (
-                      <span className="text-green-600 font-medium">
-                        🏆 {subject.topics_mastered} evrensel
-                      </span>
-                    )}
-                    {subject.topics_mastered_personal > 0 && (
-                      <span className="text-purple-600 font-medium">
-                        🧠 {subject.topics_mastered_personal} kişisel
-                      </span>
-                    )}
+
+                  {/* En kritik badge */}
+                  {isMostCritical && (
+                    <div className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
+                      ÖNCELİKLİ
+                    </div>
+                  )}
+
+                  {/* Expand icon */}
+                  <svg 
+                    className={`w-6 h-6 text-gray-400 transition-transform ${
+                      isExpanded ? 'rotate-180' : ''
+                    }`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {/* ===== AÇIK DURUM (DETAYLAR) ===== */}
+              {isExpanded && (
+                <div className="px-6 pb-6 pt-2 border-t border-gray-200 space-y-4 bg-gray-50">
+                  {/* ✅ YENİ: NEDEN ÖNCELİKLİ? */}
+                  {isMostCritical && (
+                    <div className="bg-orange-100 border border-orange-300 rounded-lg p-4">
+                      <h4 className="font-bold text-orange-900 mb-2 flex items-center gap-2">
+                        <span>🎯</span> Bu ders neden öncelikli?
+                      </h4>
+                      <ul className="text-sm text-orange-800 space-y-1">
+                        {subject.progress_percentage < 50 && (
+                          <li>• Düşük ilerleme (%{subject.progress_percentage})</li>
+                        )}
+                        {subject.trend === 'declining' && (
+                          <li>• Performans düşüş eğiliminde</li>
+                        )}
+                        {subject.last_test_date && (() => {
+                          const days = Math.floor(
+                            (new Date().getTime() - new Date(subject.last_test_date).getTime()) / (1000 * 60 * 60 * 24)
+                          );
+                          if (days > 14) return <li>• {days} gündür test çözülmedi</li>;
+                        })()}
+                        {subject.test_count < 3 && (
+                          <li>• Az test verisi (belirsizlik yüksek)</li>
+                        )}
+                        <li className="text-xs text-orange-600 mt-2">
+                          💡 Öncelik skoru: {priorityScore}/100
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Progress Bar */}
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-600">İlerleme</span>
+                      <span className="font-semibold">{subject.progress_percentage}%</span>
+                    </div>
+                    <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${
+                          subject.progress_percentage >= 75 ? 'bg-green-500' :
+                          subject.progress_percentage >= 50 ? 'bg-yellow-500' :
+                          'bg-red-500'
+                        }`}
+                        style={{ width: `${subject.progress_percentage}%` }}
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* Disclaimer */}
-            {subject.disclaimer && (
-              <div className={`mb-3 text-xs px-3 py-2 rounded-lg ${
-                subject.phase === 'no_data' 
-                  ? 'text-gray-600 bg-gray-50' 
-                  : 'text-blue-600 bg-blue-50'
-              }`}>
-                💡 {subject.disclaimer}
-              </div>
-            )}
+                  {/* Trend detayı */}
+                  {subject.test_count >= 3 && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-600">Trend:</span>
+                      <span className={`font-semibold ${trendDisplay.color}`}>
+                        {trendDisplay.emoji} {trendDisplay.text}
+                      </span>
+                    </div>
+                  )}
 
-            {/* Stats */}
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-4">
-                <span className="text-blue-600 font-medium">
-                  📚 {subject.topics_in_progress} aktif
-                </span>
-                <span className="text-gray-400">
-                  ⚪ {subject.topics_not_started} başlanmadı
-                </span>
-              </div>
-              <span className="text-gray-600 font-medium">
-                Ort: %{Math.round(subject.avg_success_rate)}
-              </span>
+                  {/* Ustalık */}
+                  {(subject.topics_mastered > 0 || subject.topics_mastered_personal > 0) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {subject.topics_mastered > 0 && (
+                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">🏆</span>
+                            <span className="text-xs text-gray-500">Evrensel Ustalık</span>
+                          </div>
+                          <div className="text-xl font-bold text-purple-600">
+                            {subject.topics_mastered} konu
+                          </div>
+                        </div>
+                      )}
+                      
+                      {subject.topics_mastered_personal > 0 && (
+                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">🧠</span>
+                            <span className="text-xs text-gray-500">Kişisel Ustalık</span>
+                          </div>
+                          <div className="text-xl font-bold text-blue-600">
+                            {subject.topics_mastered_personal} konu
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Disclaimer */}
+                  {subject.disclaimer && (
+                    <div className={`text-xs px-3 py-2 rounded-lg ${
+                      subject.phase === 'no_data' 
+                        ? 'text-gray-600 bg-gray-100' 
+                        : 'text-blue-600 bg-blue-50'
+                    }`}>
+                      💡 {subject.disclaimer}
+                    </div>
+                  )}
+
+                  {/* İstatistikler */}
+                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-200">
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500 mb-1">Test Sayısı</div>
+                      <div className="text-lg font-bold text-gray-900">{subject.test_count}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500 mb-1">Ort. Başarı</div>
+                      <div className="text-lg font-bold text-gray-900">%{subject.avg_success_rate.toFixed(0)}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500 mb-1">Kapsam</div>
+                      <div className="text-lg font-bold text-gray-900">
+                        {subject.topics_tested}/{subject.topics_total}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Son test tarihi */}
+                  {subject.last_test_date && (
+                    <div className="text-xs text-gray-500 text-center pt-2 border-t border-gray-200">
+                      Son test: {new Date(subject.last_test_date).toLocaleDateString('tr-TR')}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
-
-export default SubjectProgressList;

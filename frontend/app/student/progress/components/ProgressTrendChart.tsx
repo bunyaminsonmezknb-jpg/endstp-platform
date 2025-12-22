@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -11,7 +11,7 @@ import {
   Title,
   Tooltip,
   Legend,
-  Filler,
+  Filler
 } from 'chart.js';
 
 ChartJS.register(
@@ -25,168 +25,321 @@ ChartJS.register(
   Filler
 );
 
-// ✅ DOĞRU interface - page.tsx'e uyumlu
-interface ProgressTrendChartProps {
-  weeklyData: any | null;
-  monthlyData: any | null;
-  isLoading?: boolean;
+interface TrendChartProps {
+  weeklyData: any;
+  monthlyData: any;
+  isLoading: boolean;
 }
 
-function ProgressTrendChart({ weeklyData, monthlyData, isLoading = false }: ProgressTrendChartProps) {
-  const [currentPeriod, setCurrentPeriod] = useState<'weekly' | 'monthly'>('weekly');
+export default function ProgressTrendChart({ 
+  weeklyData, 
+  monthlyData, 
+  isLoading 
+}: TrendChartProps) {
+  const [period, setPeriod] = useState<'weekly' | 'monthly'>('weekly');
+  const [prediction, setPrediction] = useState<any>(null);
+  const [showPrediction, setShowPrediction] = useState(false); // ✅ YENİ: Tahmin toggle
+  const [showSubjects, setShowSubjects] = useState(false); // ✅ YENİ: Ders toggle
 
-  // ✅ Period'a göre data seç
-  const currentData = currentPeriod === 'weekly' ? weeklyData : monthlyData;
+  // Prediction data fetch
+  useEffect(() => {
+    const fetchPrediction = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+        
+        const res = await fetch(`${API_BASE}/student/progress/prediction?period=${period}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+          const result = await res.json();
+          setPrediction(result.data);
+        }
+      } catch (error) {
+        console.error('Prediction fetch error:', error);
+      }
+    };
 
-  // ✅ Loading state
-  if (isLoading || !currentData) {
+    fetchPrediction();
+  }, [period]);
+
+  const data = period === 'weekly' ? weeklyData : monthlyData;
+
+  if (isLoading || !data) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-200 rounded-xl animate-pulse"></div>
-            <div className="h-6 bg-gray-200 rounded w-40 animate-pulse"></div>
-          </div>
-          <div className="flex gap-2">
-            <div className="h-10 bg-gray-200 rounded w-24 animate-pulse"></div>
-            <div className="h-10 bg-gray-200 rounded w-24 animate-pulse"></div>
-          </div>
-        </div>
-        <div className="h-64 bg-gray-100 rounded animate-pulse"></div>
+      <div className="animate-pulse space-y-4">
+        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+        <div className="h-64 bg-gray-200 rounded"></div>
       </div>
     );
   }
 
-  // ✅ Safe data extraction
-  const labels = currentData.labels || ['Veri yok'];
-  const overallTrend = currentData.overall_trend || [0];
-  const datasets = currentData.datasets || [];
+  // Gelecek period label'ları
+  const futureLabels = period === 'weekly'
+    ? ['Gelecek hafta', '2 hafta sonra', '3 hafta sonra', '4 hafta sonra']
+    : ['Gelecek ay', '2 ay sonra', '3 ay sonra', '4 ay sonra'];
 
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        label: 'Genel Ortalama',
-        data: overallTrend,
-        borderColor: 'rgb(147, 51, 234)',
-        backgroundColor: 'rgba(147, 51, 234, 0.1)',
-        borderWidth: 3,
-        fill: true,
-        tension: 0.4,
-      },
-      ...datasets.map((ds: any, idx: number) => {
-        const colors = [
-          { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.1)' },
-          { border: 'rgb(16, 185, 129)', bg: 'rgba(16, 185, 129, 0.1)' },
-          { border: 'rgb(245, 158, 11)', bg: 'rgba(245, 158, 11, 0.1)' },
-        ];
-        const color = colors[idx % colors.length];
-        
-        return {
-          label: ds.label,
-          data: ds.data,
-          borderColor: color.border,
-          backgroundColor: color.bg,
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-        };
-      }),
-    ],
+  // ===== ✅ YENİ: GENEL ORTALAMA DATASET (HER ZAMAN GÖSTER) =====
+  const overallDataset = {
+    label: 'Genel Ortalama',
+    data: data.overall_trend || [],
+    borderColor: 'rgb(99, 102, 241)', // İndigo
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    borderWidth: 4, // ✅ KALIN ÇİZGİ
+    pointRadius: 6,
+    pointHoverRadius: 8,
+    tension: 0.4,
+    fill: true
   };
 
-  const chartOptions = {
+  // ===== DERS DATASETS (TOGGLE İLE GÖSTER) =====
+  const subjectDatasets = (data.datasets || []).map((ds: any, idx: number) => {
+    const colors = [
+      'rgb(147, 51, 234)',  // Mor
+      'rgb(59, 130, 246)',  // Mavi
+      'rgb(34, 197, 94)',   // Yeşil
+      'rgb(249, 115, 22)'   // Turuncu
+    ];
+    
+    const color = colors[idx % colors.length];
+
+    return {
+      label: ds.label,
+      data: ds.data,
+      borderColor: color,
+      backgroundColor: color.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+      borderWidth: 2, // ✅ İNCE ÇİZGİ
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      tension: 0.4,
+      fill: true,
+      subjectId: ds.subject_id // Tahmin için gerekli
+    };
+  });
+
+  // ===== TAHMİN DATASETS (TOGGLE İLE GÖSTER) =====
+  const predictionDatasets: any[] = [];
+  
+  if (showPrediction && prediction && prediction.predictions) {
+    // Genel ortalama tahmini (her zaman)
+    const firstSubjectId = Object.keys(prediction.predictions)[0];
+    if (firstSubjectId) {
+      const firstPred = prediction.predictions[firstSubjectId];
+      
+      predictionDatasets.push({
+        label: 'Genel Ortalama (Senaryo)',
+        data: [
+          ...Array(data.labels.length - 1).fill(null),
+          firstPred.current,
+          ...firstPred.future
+        ],
+        borderColor: 'rgba(99, 102, 241, 0.5)',
+        backgroundColor: 'transparent',
+        borderWidth: 4,
+        borderDash: [5, 5],
+        pointRadius: 4,
+        tension: 0.4,
+        fill: false
+      });
+    }
+
+    // Ders tahminleri (sadece dersler açıksa)
+    if (showSubjects) {
+      subjectDatasets.forEach((ds: any) => {
+        const pred = prediction.predictions[ds.subjectId];
+        if (pred) {
+          predictionDatasets.push({
+            label: `${ds.label} (Senaryo)`,
+            data: [
+              ...Array(data.labels.length - 1).fill(null),
+              pred.current,
+              ...pred.future
+            ],
+            borderColor: ds.borderColor.replace(')', ', 0.5)'),
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            pointRadius: 3,
+            tension: 0.4,
+            fill: false
+          });
+        }
+      });
+    }
+  }
+
+  // ===== FİNAL CHART DATA =====
+  const chartData = {
+    labels: showPrediction ? [...data.labels, ...futureLabels] : data.labels,
+    datasets: [
+      overallDataset, // Her zaman göster
+      ...(showSubjects ? subjectDatasets : []), // Toggle ile göster
+      ...predictionDatasets // Toggle ile göster
+    ]
+  };
+
+  // ===== CHART OPTIONS =====
+  const options = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
     plugins: {
       legend: {
         position: 'bottom' as const,
         labels: {
           usePointStyle: true,
           padding: 15,
+          font: { size: 12 }
         },
+        // ✅ YENİ: TIKLANABİLİR LEGEND
+        onClick: function(e: any, legendItem: any, legend: any) {
+          const index = legendItem.datasetIndex;
+          const chart = legend.chart;
+          const meta = chart.getDatasetMeta(index);
+          
+          // Toggle visibility
+          meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+          chart.update();
+        }
       },
       tooltip: {
-        mode: 'index' as const,
-        intersect: false,
         callbacks: {
-          label: function(context: any) {
+          title: (context: any) => {
+            const label = context[0].label;
+            if (futureLabels.includes(label)) {
+              return `⚠️ ${label} (Senaryo)`;
+            }
+            return label;
+          },
+          label: (context: any) => {
             let label = context.dataset.label || '';
             if (label) {
               label += ': ';
             }
-            if (context.parsed.y !== null) {
-              label += context.parsed.y.toFixed(1) + '%';
+            label += context.parsed.y !== null ? `${context.parsed.y}%` : 'Veri yok';
+            
+            // Tahmin dataseti ise açıklama ekle
+            if (context.dataset.borderDash) {
+              label += ' (test çözülmezse)';
             }
             return label;
           }
         }
-      },
+      }
     },
     scales: {
       y: {
         beginAtZero: true,
         max: 100,
         ticks: {
-          callback: function(value: any) {
-            return value + '%';
-          }
+          callback: (value: any) => `${value}%`
         },
         grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-        },
+          color: 'rgba(0, 0, 0, 0.05)'
+        }
       },
       x: {
         grid: {
-          display: false,
-        },
-      },
-    },
+          display: false
+        }
+      }
+    }
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-            </svg>
+    <div>
+      {/* ===== ✅ YENİ: YUMUŞAK UYARI KUTUSU ===== */}
+      {showPrediction && prediction?.steepest_decline && (
+        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center gap-3">
+          <span className="text-2xl">💡</span>
+          <div>
+            <p className="font-semibold text-yellow-900">
+              {prediction.steepest_decline.subject_name} için test boşluğu oluşuyor
+            </p>
+            <p className="text-sm text-yellow-700">
+              Bu şekilde devam ederse, 4 haftada ~<strong>%{prediction.steepest_decline.decline_rate}</strong> değişim olası. 
+              İstersen projeksiyon detaylarını inceleyebilirsin.
+            </p>
           </div>
-          <h2 className="text-xl font-bold text-gray-900">İlerleme Trendi</h2>
         </div>
+      )}
 
-        <div className="flex gap-2">
+      {/* ===== HEADER + TOGGLES ===== */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">📊</span>
+          <h3 className="text-xl font-bold text-gray-900">İlerleme Trendi</h3>
+        </div>
+        
+        <div className="flex gap-3">
+          {/* ✅ YENİ: DERS DETAYLARI TOGGLE */}
           <button
-            onClick={() => setCurrentPeriod('weekly')}
-            disabled={!weeklyData}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              currentPeriod === 'weekly'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
+            onClick={() => setShowSubjects(!showSubjects)}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              showSubjects
+                ? 'bg-blue-500 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            Haftalık
+            {showSubjects ? '📚 Dersler Açık' : '📚 Ders Detayları'}
           </button>
+
+          {/* ✅ YENİ: TAHMİN TOGGLE */}
           <button
-            onClick={() => setCurrentPeriod('monthly')}
-            disabled={!monthlyData}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              currentPeriod === 'monthly'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
+            onClick={() => setShowPrediction(!showPrediction)}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              showPrediction
+                ? 'bg-orange-500 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            Aylık
+            {showPrediction ? '🔮 Senaryo Açık' : '🔮 Gelecek Senaryosu'}
           </button>
+
+          {/* HAFTALıK/AYLIK TOGGLE */}
+          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setPeriod('weekly')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                period === 'weekly'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Haftalık
+            </button>
+            <button
+              onClick={() => setPeriod('monthly')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                period === 'monthly'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Aylık
+            </button>
+          </div>
         </div>
       </div>
 
-      <div style={{ height: '300px' }}>
-        <Line data={chartData} options={chartOptions} />
+      {/* ===== CHART ===== */}
+      <div className="h-80">
+        <Line data={chartData} options={options} />
       </div>
+
+      {/* ===== AÇIKLAMA (SADECE TAHMİN AÇIKSA) ===== */}
+      {showPrediction && (
+        <div className="mt-4 p-3 bg-purple-50 rounded-lg">
+          <p className="text-sm text-purple-700">
+            💡 <strong>Kesikli çizgiler</strong> test çözülmediği takdirde olası evrimi gösterir.
+            Proaktif çalışarak performansını koruyabilirsin!
+          </p>
+        </div>
+      )}
     </div>
   );
 }
-
-export default ProgressTrendChart;

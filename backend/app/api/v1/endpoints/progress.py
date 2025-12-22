@@ -617,3 +617,103 @@ async def progress_health():
         "features": ["projection", "subjects", "trends"],
         "data_source": "student_topic_tests"
     }
+
+@router.get("/student/progress/prediction")
+async def get_forgetting_prediction(
+    period: str = "weekly",
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_admin)
+):
+    """
+    Unutma eğrisi tahmini (gelecek 4 hafta/ay)
+    """
+    try:
+        student_id = current_user.get("id")
+        
+        # Son test verilerini al
+        tests_result = supabase.table("student_topic_tests").select(
+            "subject_id, success_rate, test_date"
+        ).eq("student_id", student_id).order("test_date", desc=True).execute()
+        
+        tests = tests_result.data or []
+        
+        if not tests:
+            return {
+                "success": True,
+                "data": {
+                    "predictions": {},
+                    "steepest_decline": None
+                }
+            }
+        
+        # Subject bazında son test ve trend
+        from collections import defaultdict
+        subject_data = defaultdict(list)
+        for test in tests:
+            subject_data[test['subject_id']].append({
+                'success_rate': test['success_rate'],
+                'test_date': test['test_date']
+            })
+        
+        predictions = {}
+        steepest_decline = {"subject_id": None, "decline_rate": 0}
+        
+        for subject_id, subject_tests in subject_data.items():
+            # Son başarı oranı
+            last_success = subject_tests[0]['success_rate']
+            last_date = datetime.fromisoformat(subject_tests[0]['test_date'].replace('Z', '+00:00'))
+            
+            # Basit unutma eğrisi: Her hafta %5 azalma (test çözülmezse)
+            # Daha sofistike: Geçmiş trend'e göre hesapla
+            if len(subject_tests) >= 2:
+                recent_avg = sum(t['success_rate'] for t in subject_tests[:3]) / min(3, len(subject_tests))
+                older_avg = sum(t['success_rate'] for t in subject_tests[3:6]) / max(1, min(3, len(subject_tests[3:6])))
+                decay_rate = max(0.02, (recent_avg - older_avg) / 100) if recent_avg < older_avg else 0.05
+            else:
+                decay_rate = 0.05  # %5 varsayılan
+            
+            # Gelecek 4 period tahmini
+            future_predictions = []
+            current_prediction = last_success
+            
+            for i in range(1, 5):
+                # Her period %decay_rate kadar düşüş
+                current_prediction = max(0, current_prediction - (last_success * decay_rate))
+                future_predictions.append(round(current_prediction, 1))
+            
+            predictions[subject_id] = {
+                "current": last_success,
+                "future": future_predictions,
+                "decay_rate": round(decay_rate * 100, 1),
+                "last_test_date": last_date.strftime('%Y-%m-%d')
+            }
+            
+            # En sert düşüşü bul
+            total_decline = last_success - future_predictions[-1]
+            if total_decline > steepest_decline["decline_rate"]:
+                steepest_decline = {
+                    "subject_id": subject_id,
+                    "decline_rate": round(total_decline, 1)
+                }
+        
+        # Subject isimlerini ekle
+        if steepest_decline["subject_id"]:
+            subject_result = supabase.table("subjects").select("name_tr").eq(
+                "id", steepest_decline["subject_id"]
+            ).execute()
+            if subject_result.data:
+                steepest_decline["subject_name"] = subject_result.data[0]['name_tr']
+        
+        return {
+            "success": True,
+            "data": {
+                "predictions": predictions,
+                "steepest_decline": steepest_decline if steepest_decline["subject_id"] else None
+            }
+        }
+    
+    except Exception as e:
+        print(f"❌ Prediction error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
