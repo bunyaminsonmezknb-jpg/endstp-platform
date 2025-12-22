@@ -46,6 +46,13 @@ interface FeatureFlag {
   last_error_message: string | null;
   last_error_function: string | null;
   last_error_trace: string | null;
+  // Human Summary System fields
+  human_summary_key: string | null;
+  summary_tr: string | null;
+  summary_en: string | null;
+  severity: string | null;
+  effective_health_score: number | null;
+  impact_modifier: number | null;
 }
 
 const ACCESS_CODE = 'endstp2025';
@@ -55,6 +62,7 @@ export default function FeatureControlPage() {
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedFlags, setExpandedFlags] = useState<Set<string>>(new Set());
+  const [language, setLanguage] = useState<'tr' | 'en'>('tr');
 
   useEffect(() => {
     if (authenticated) {
@@ -196,7 +204,28 @@ export default function FeatureControlPage() {
     };
     return badges[impact] || badges.none;
   };
+// Human Summary System helpers
+  const getSeverityColor = (severity: string | null) => {
+    switch(severity) {
+      case 'healthy': return 'bg-green-50 text-green-800 border-green-300';
+      case 'degraded': return 'bg-yellow-50 text-yellow-800 border-yellow-300';
+      case 'high_risk': return 'bg-orange-50 text-orange-800 border-orange-300';
+      case 'disabled': return 'bg-red-50 text-red-800 border-red-300';
+      case 'recovery': return 'bg-blue-50 text-blue-800 border-blue-300';
+      default: return 'bg-gray-50 text-gray-800 border-gray-300';
+    }
+  };
 
+  const getSeverityEmoji = (severity: string | null) => {
+    switch(severity) {
+      case 'healthy': return '✅';
+      case 'degraded': return '⚠️';
+      case 'high_risk': return '🔴';
+      case 'disabled': return '🚫';
+      case 'recovery': return '🔄';
+      default: return '❓';
+    }
+  };
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center">
@@ -429,7 +458,31 @@ export default function FeatureControlPage() {
             </div>
           );
         })()}
-
+{/* Language Toggle */}
+        <div className="mb-6 flex justify-end">
+          <div className="inline-flex rounded-lg border-2 border-purple-300 bg-white p-1 shadow-sm">
+            <button
+              onClick={() => setLanguage('tr')}
+              className={`px-5 py-2 rounded-md text-sm font-bold transition-all ${
+                language === 'tr'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              🇹🇷 Türkçe
+            </button>
+            <button
+              onClick={() => setLanguage('en')}
+              className={`px-5 py-2 rounded-md text-sm font-bold transition-all ${
+                language === 'en'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              🇬🇧 English
+            </button>
+          </div>
+        </div>
         {/* Flags */}
         <div className="space-y-4">
           {flags.map((flag) => {
@@ -491,6 +544,45 @@ export default function FeatureControlPage() {
 
                 {isExpanded && (
                   <div className="border-t-2 border-gray-200 p-6 bg-gray-50">
+                                        {/* 🧠 HUMAN SUMMARY - YENİ EKLENDİ */}
+                    {flag.summary_tr && flag.summary_en && (
+                      <div className={`mb-6 p-5 rounded-xl border-2 shadow-sm ${getSeverityColor(flag.severity)}`}>
+                        <div className="flex items-start gap-4">
+                          <div className="text-4xl flex-shrink-0">
+                            {getSeverityEmoji(flag.severity)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <h4 className="font-bold text-gray-900 text-lg">
+                                {language === 'tr' ? '📋 Durum Özeti' : '📋 Status Summary'}
+                              </h4>
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${getSeverityColor(flag.severity)}`}>
+                                {flag.severity}
+                              </span>
+                              {flag.effective_health_score !== null && (
+                                <span className="ml-auto text-base font-bold text-gray-700 bg-white px-3 py-1 rounded-lg border-2 border-gray-300">
+                                  Health: {flag.effective_health_score}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-900 leading-relaxed font-medium mb-3">
+                              {language === 'tr' ? flag.summary_tr : flag.summary_en}
+                            </p>
+                            {flag.impact_modifier !== null && flag.impact_modifier < 1.0 && (
+                              <div className="flex items-center gap-2 text-xs text-gray-700 bg-white px-3 py-2 rounded-lg border border-gray-300">
+                                <span className="font-bold">⚖️ Impact Modifier:</span>
+                                <span className="font-mono font-bold text-orange-700">
+                                  {(flag.impact_modifier * 100).toFixed(0)}%
+                                </span>
+                                <span className="text-gray-600">
+                                  ({flag.user_impact_level} user impact reduces health score)
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <p className="text-sm text-gray-600 mb-4">{flag.description}</p>
 
                     <div className="grid grid-cols-4 gap-3 mb-4">

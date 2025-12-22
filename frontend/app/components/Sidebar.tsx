@@ -11,6 +11,7 @@ const menuItems = [
   { icon: '🎯', label: 'Görevlerim', href: '/student/tasks' },
   { icon: '📚', label: 'Konu Haritası', href: '/student/topics' },
   { icon: '📖', label: 'Geçmiş Testler', href: '/student/past-tests' },
+  { icon: '📈', label: 'İlerleme & Hedefler', href: '/student/progress' },
   // ⚙️ Ayarlar kaldırıldı - artık Avatar menüsünde
 ];
 

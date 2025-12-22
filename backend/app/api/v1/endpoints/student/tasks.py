@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
+import random
 
 from app.db.session import get_supabase_admin
 from app.core.auth import get_current_user
@@ -171,7 +172,7 @@ def calculate_at_risk_topics(topic_performance: Dict[str, Dict[str, Any]], limit
         topic_name = data.get("topic_name", "Unknown")[:50]
         print(f"\n📌 Topic: {topic_name}")
         print(f"   Rate: {remembering_rate}% | Urgency: {next_review.get('urgency')} | Days: {next_review.get('days_remaining')}")
-        print(f"   Status: {next_review.get('status')} | Overdue: {next_review.get('overdue_days', 0)}")  # ✅ YENİ SATIR
+        print(f"   Status: {next_review.get('status')} | Overdue: {next_review.get('overdue_days', 0)}")
 
         if next_review.get("urgency") in ["HEMEN", "ACİL", "YAKIN"]:
             print(f"   ✅ ADDED")
@@ -256,16 +257,107 @@ def calculate_streak(all_tests: List[Dict[str, Any]], x_user_timezone: str) -> S
         next_milestone=7
     )
 
-def generate_motor_driven_tasks(student_id: str, date: str, max_tasks: int = 10):
+
+def generate_motivation_message(tasks: List[Dict], dominant_motor: str) -> Dict:
     """
-    ✅ Generate daily tasks based on motor analysis
+    ✅ Rule-based motivation message generator
+    NO CRON, generated on API call
+    """
+    # Seed for consistent daily messages per user
+    today = datetime.now().date()
+    seed = hash(str(today))
+    random.seed(seed)
+    
+    # INTRO POOL
+    INTRO_POOL = {
+        "bs_motor": [
+            "Analiz motorlarımız hafıza durumunu tekrar taradı.",
+            "Bugün unutma eğrisi verilerine özellikle baktık.",
+            "Son öğrenmelerin zihinsel dayanıklılığı ölçüldü."
+        ],
+        "priority": [
+            "Öğrenme profilin bugün biraz zorlayıcı bir tablo gösteriyor.",
+            "Bazı konular şu an ekstra dikkat istiyor.",
+            "Zorluk analiz motoru kırmızı bölgeleri işaretledi."
+        ],
+        "difficulty": [
+            "Hız ve süre analizleri güncellendi.",
+            "Zaman yönetiminde gelişim alanları tespit edildi."
+        ]
+    }
+    
+    # REASON POOL
+    REASON_POOL = {
+        "bs_motor": [
+            "{count} konu son günlerde tekrar edilmedi ve hafıza direnci düşüyor.",
+            "Bu konular unutma eğrisinde kritik eşiğe yaklaştı."
+        ],
+        "priority": [
+            "Seçilen konular senin için yüksek zorluk bölgesinde.",
+            "Bu konularda öğrenme yükün ortalamanın üzerinde."
+        ]
+    }
+    
+    # ACTION POOL
+    ACTION_POOL = {
+        "bs_motor": [
+            "Kısa tekrarlar büyük fark yaratır.",
+            "Bugün küçük bir tekrar, yarın büyük kazanç sağlar."
+        ],
+        "priority": [
+            "Bugün acele etmeden derinleşmeni istiyoruz.",
+            "Bu konuları sakin ve odaklı çalış."
+        ]
+    }
+    
+    # CLOSING POOL
+    CLOSING_POOL = [
+        "Kontrol sende. Başla! 💪",
+        "Küçük adımlar büyük sonuçlar getirir.",
+        "Bugünkü çaban yarının rahatlığı olacak.",
+        "Akşam verilerini birlikte değerlendireceğiz."
+    ]
+    
+    # Generate message
+    motor = dominant_motor if dominant_motor in INTRO_POOL else "bs_motor"
+    
+    tekrar_count = len([t for t in tasks if t.get("source_motor") == "bs_motor"])
+    calisma_count = len(tasks) - tekrar_count
+    
+    intro = random.choice(INTRO_POOL[motor])
+    reason = random.choice(REASON_POOL[motor]).format(count=tekrar_count)
+    action = random.choice(ACTION_POOL[motor])
+    closing = random.choice(CLOSING_POOL)
+    
+    full_text = f"{intro} {reason} {action} {closing}"
+    
+    # Öğrenci için özet
+    student_summary = f"Bugünkü {len(tasks)} görev, End.stp analiz motorları tarafından seçildi.\n\n• {tekrar_count} görev, unutma riski taşıyan konulardan oluşuyor.\n• {calisma_count} görev ise seni bir adım ileri taşıyacak öncelikli alanlardan seçildi.\n\nKontrol sende. Bugün bu {len(tasks)}'i bitirmek yeterli. 💪"
+    
+    # Koç için detaylı
+    coach_detail = f"Bu günlük plan, 4 analiz motorunun ortak çıktısına göre oluşturuldu.\n\nSeçim Dağılımı:\n• {tekrar_count} Tekrar Görevi: Unutma eğrisi kritik seviyede\n• {calisma_count} Çalışma/Test Görevi: Sınav ağırlığı yüksek veya zorluk bölgesi\n\nNot: Sistem bugün toplam {len(tasks)} aday görev hesapladı. Bunlar arasından en yüksek etki potansiyeline sahip 5 görev seçildi."
+    
+    return {
+        "text": full_text,
+        "student_summary": student_summary,
+        "coach_detail": coach_detail,
+        "dominant_motor": motor,
+        "task_distribution": {
+            "tekrar": tekrar_count,
+            "calisma": calisma_count
+        }
+    }
+
+
+def generate_motor_driven_tasks(student_id: str, date: str, max_tasks: int = 5):
+    """
+    ✅ Generate daily tasks based on motor analysis (5 GÖREV LİMİTİ)
     
     Combines:
-    - BS-Motor (spaced repetition urgency)
-    - Priority Motor (low success rate topics)
-    - At-risk topics (forgetting curve)
+    - BS-Motor (spaced repetition urgency) → 3 TEKRAR
+    - Priority/Difficulty Motor → 2 ÇALIŞMA
     
-    Returns 5-10 prioritized tasks
+    Returns 5 prioritized tasks
     """
     supabase = get_supabase_admin()
     
@@ -277,7 +369,7 @@ def generate_motor_driven_tasks(student_id: str, date: str, max_tasks: int = 10)
         supabase.table("student_topic_tests")
         .select("*, topics(name_tr, subject_id, subjects(name_tr))")
         .eq("student_id", student_id)
-        .eq("status", "completed")
+        # .eq("status", "completed") ← REMOVED
         .order("test_date", desc=True)
         .execute()
     )
@@ -378,34 +470,74 @@ def generate_motor_driven_tasks(student_id: str, date: str, max_tasks: int = 10)
     for i, topic in enumerate(scored_topics[:5]):
         print(f"  {i+1}. {topic['topic_name'][:40]} | Score: {topic['score']} | {topic['urgency']}")
     
-    # 5️⃣ Create tasks from top N topics
+    # 5️⃣ ✅ Create tasks: 3 TEKRAR + 2 ÇALIŞMA
     tasks_to_create = []
+    used_topic_ids = set()  # Track which topics we've used
     
-    for i, topic in enumerate(scored_topics[:max_tasks]):
-        # First 7 are tests, rest are study sessions
-        task_type = "test" if i < 7 else "study"
-        
-        # Determine source motor
-        if topic["urgency"] in ["HEMEN", "ACİL"]:
-            source_motor = "bs_motor"  # Spaced repetition
-        elif topic["remembering_rate"] < 60:
-            source_motor = "priority"  # Low success rate
-        else:
-            source_motor = "review"  # Regular review
-        
+    # ✅ İLK 3 GÖREV: TEKRAR (retention/urgency based)
+    retention_topics = [t for t in scored_topics if t["urgency"] in ["HEMEN", "ACİL", "YAKIN"]]
+    
+    for i, topic in enumerate(retention_topics[:3]):  # İlk 3
         tasks_to_create.append({
             "student_id": student_id,
             "task_date": date,
-            "task_type": task_type,
+            "task_type": "test",  # Tekrar görevleri test formatında
             "subject_id": topic["subject_id"],
             "topic_id": topic["topic_id"],
             "topic_name": topic["topic_name"],
-            "source_motor": source_motor,
+            "source_motor": "bs_motor",  # Hep BS-Motor
             "priority_level": i + 1,
-            "estimated_time_minutes": 20 if task_type == "test" else 30,
-            "question_count": 12 if task_type == "test" else None,
+            "estimated_time_minutes": 20,
+            "question_count": 12,
             "status": "pending"
         })
+        used_topic_ids.add(topic["topic_id"])  # Mark as used
+    
+    # ✅ SON 2 GÖREV: ÇALIŞMA/GELİŞİM (priority/difficulty based)
+    # Only use topics that haven't been used yet
+    remaining_topics = [t for t in scored_topics if t["topic_id"] not in used_topic_ids]
+    
+    for i, topic in enumerate(remaining_topics[:2]):  # Son 2
+        # ✅ SON 2 GÖREV HER ZAMAN "study" - Çalışma görevleri!
+        tasks_to_create.append({
+            "student_id": student_id,
+            "task_date": date,
+            "task_type": "study",  # ✅ HER ZAMAN STUDY!
+            "subject_id": topic["subject_id"],
+            "topic_id": topic["topic_id"],
+            "topic_name": topic["topic_name"],
+            "source_motor": "priority" if topic["remembering_rate"] < 60 else "difficulty",
+            "priority_level": 3 + i + 1,  # 4 ve 5
+            "estimated_time_minutes": 30,  # Çalışma için daha uzun süre
+            "question_count": None,  # Çalışma görevinde soru sayısı yok
+            "status": "pending"
+        })
+        used_topic_ids.add(topic["topic_id"])  # Mark as used
+    
+    # ✅ EĞER 5'TEN AZ GÖREV VARSA BOŞLUKLARI DOLDUR
+    if len(tasks_to_create) < 5:
+        print(f"⚠️  Only {len(tasks_to_create)} tasks, filling with study tasks...")
+        # Kalan konulardan study task ekle (kullanılmamış konulardan)
+        fill_topics = [t for t in scored_topics if t["topic_id"] not in used_topic_ids]
+        
+        for i in range(5 - len(tasks_to_create)):
+            if i < len(fill_topics):
+                topic = fill_topics[i]
+                tasks_to_create.append({
+                    "student_id": student_id,
+                    "task_date": date,
+                    "task_type": "study",
+                    "subject_id": topic["subject_id"],
+                    "topic_id": topic["topic_id"],
+                    "topic_name": topic["topic_name"],
+                    "source_motor": "review",
+                    "priority_level": len(tasks_to_create) + 1,
+                    "estimated_time_minutes": 25,
+                    "status": "pending"
+                })
+                used_topic_ids.add(topic["topic_id"])
+    
+    print(f"✅ Task distribution: {len([t for t in tasks_to_create if t['source_motor'] == 'bs_motor'])} tekrar + {len([t for t in tasks_to_create if t['source_motor'] != 'bs_motor'])} çalışma")
     
     # 6️⃣ Insert to database
     if tasks_to_create:
@@ -416,6 +548,8 @@ def generate_motor_driven_tasks(student_id: str, date: str, max_tasks: int = 10)
     else:
         print("⚠️  No tasks created, using demo")
         return create_daily_tasks(student_id, date)
+
+
 # ============================================
 # TASK CREATION HELPER
 # ============================================
@@ -584,17 +718,24 @@ async def get_todays_tasks_list(
         )
 
         tasks = tasks_res.data or []
+        
+        # ✅ EĞER 5'TEN FAZLA GÖREV VARSA TEMİZLE (Limit aşımı)
+        if len(tasks) > 5:
+            print(f"🚨 TOO MANY TASKS ({len(tasks)})! Cleaning up...")
+            supabase.table("student_tasks").delete().eq("student_id", student_id).eq("task_date", today_str).execute()
+            tasks = []
         # ✅ EĞER MOCK IZLERİ VARSA TEMİZLE
-        if tasks and any(t.get("source_motor") in ["priority", "repetition", "weakness", "speed"] 
-                        and t.get("topic_name") in ["Limit", "İntegral", "Türev", "Fonksiyonlar"] 
-                        for t in tasks):
+        elif tasks and any(t.get("source_motor") in ["priority", "repetition", "weakness", "speed"] 
+                          and t.get("topic_name") in ["Limit", "İntegral", "Türev", "Fonksiyonlar"] 
+                          for t in tasks):
             print("🚨 MOCK DATA DETECTED! Cleaning up...")
             supabase.table("student_tasks").delete().eq("student_id", student_id).eq("task_date", today_str).execute()
             tasks = []
+        
         # ✅ OTOMATİK TASK CREATION
         if not tasks:
             print(f"⚠️  No tasks for {today_str}, generating motor-driven tasks...")
-            generate_motor_driven_tasks(student_id, today_str, max_tasks=10)  # ✅ DEĞİŞTİ
+            generate_motor_driven_tasks(student_id, today_str, max_tasks=5)
             
             # Yeniden çek
             tasks = (
@@ -604,7 +745,7 @@ async def get_todays_tasks_list(
                 .eq("task_date", today_str)
                 .order("priority_level", desc=False)
                 .execute()
-    ).data or []
+            ).data or []
 
         total_time = sum([t.get("estimated_time_minutes", 0) for t in tasks])
         completed_time = sum([t.get("estimated_time_minutes", 0) for t in tasks if t.get("status") == "completed"])
@@ -623,6 +764,16 @@ async def get_todays_tasks_list(
         at_risk_models = calculate_at_risk_topics(topic_performance, limit=3)
         at_risk = [m.model_dump() for m in at_risk_models]
 
+        # ✅ EKLE: Motivasyon metni generate et
+        dominant_motor = "bs_motor"  # Çoğunluk hangisiyse
+        bs_count = len([t for t in tasks if t.get("source_motor") == "bs_motor"])
+        priority_count = len([t for t in tasks if t.get("source_motor") in ["priority", "difficulty"]])
+
+        if priority_count > bs_count:
+            dominant_motor = "priority"
+
+        motivation = generate_motivation_message(tasks, dominant_motor)
+
         return {
             "success": True,
             "tasks": tasks,
@@ -633,6 +784,7 @@ async def get_todays_tasks_list(
                 "completed_time_minutes": completed_time,
                 "remaining_time_minutes": total_time - completed_time
             },
+            "motivation": motivation,  # ✅ YENİ!
             "at_risk_topics": at_risk,
             "total_at_risk": len(at_risk),
             "date": today_str

@@ -262,7 +262,7 @@ async def get_subject_progress(
             
             test_count = len(tests)
             
-            # ==================== PHASE 1: BASIT MODEL ====================
+# ==================== PHASE 1-2-3: KADEMELI MODEL ====================
             if test_count == 0:
                 progress_percentage = 0.0
                 avg_success_rate = 0.0
@@ -272,28 +272,38 @@ async def get_subject_progress(
                 disclaimer = "Henüz test girilmedi"
                 
             elif test_count < 5:
-                # AŞAMA 1: Sadece başarı
+                # ==================== PHASE 1: Sadece Başarı ====================
                 avg_success_rate = sum(t['success_rate'] for t in tests) / test_count
                 progress_percentage = avg_success_rate
                 phase = "early"
                 disclaimer = "İlerleme test başarına göre hesaplanıyor"
                 
-                # Momentum (3+ test varsa)
+                # Adaptif Momentum (3+ test varsa)
                 if test_count >= 3:
                     sorted_tests = sorted(tests, key=lambda x: x['test_date'])
-                    recent_avg = sum(t['success_rate'] for t in sorted_tests[-3:]) / 3
-                    
-                    if test_count >= 6:
-                        previous_avg = sum(t['success_rate'] for t in sorted_tests[-6:-3]) / 3
+                    window = min(5, len(tests) // 2)
+
+                    if len(tests) >= 2 * window:
+                        recent_avg = sum(t['success_rate'] for t in sorted_tests[-window:]) / window
+                        previous_avg = sum(t['success_rate'] for t in sorted_tests[-2*window:-window]) / window
+                        momentum = recent_avg - previous_avg
                     else:
-                        previous_avg = sum(t['success_rate'] for t in sorted_tests[:-3]) / (test_count - 3) if test_count > 3 else recent_avg
+                        # Yeterli veri yok, trend hesaplanmaz
+                        recent_avg = avg_success_rate
+                        previous_avg = avg_success_rate
+                        momentum = 0
                     
-                    momentum = recent_avg - previous_avg
+                    # Test sayısına göre hassasiyet (tau)
+                    tau = 0.08  # Başlangıç - geniş tolerans
                     
-                    if momentum > 5:
+                    # Adaptif eşikler (kalan gelişim alanına göre)
+                    improving_threshold = (100 - previous_avg) * tau
+                    declining_threshold = previous_avg * tau
+                    
+                    if momentum > improving_threshold:
                         trend = "improving"
                         trend_icon = "🔥"
-                    elif momentum < -5:
+                    elif momentum < -declining_threshold:
                         trend = "declining"
                         trend_icon = "⚠️"
                     else:
@@ -304,38 +314,82 @@ async def get_subject_progress(
                     trend_icon = "→"
                     
             else:
-                # AŞAMA 2: Coverage eklenir (5-15 test)
+                # ==================== PHASE 2-3: Coverage + Ustalık ====================
                 avg_success_rate = sum(t['success_rate'] for t in tests) / test_count
                 
                 # Test edilen konu sayısı
                 tested_topics = len(set(t['topic_id'] for t in tests))
-                topic_coverage = (tested_topics / topics_total) * 100
+                topic_coverage = (tested_topics / topics_total) * 100 if topics_total > 0 else 0
                 
-                # Dinamik ağırlık
-                coverage_weight = min(0.3, test_count / 50)
-                success_weight = 1 - coverage_weight
+                if test_count < 15:
+                    # ==================== PHASE 2: Coverage Eklenir (5-15 test) ====================
+                    # Dinamik ağırlık
+                    coverage_weight = min(0.3, test_count / 50)
+                    success_weight = 1 - coverage_weight
+                    
+                    progress_percentage = (
+                        (topic_coverage * coverage_weight) +
+                        (avg_success_rate * success_weight)
+                    )
+                    
+                    phase = "growing"
+                    disclaimer = f"İlerleme başarı (%{int(success_weight*100)}) + kapsam (%{int(coverage_weight*100)}) göre hesaplanıyor"
+                    
+                else:
+                    # ==================== PHASE 3: Full Model (15+ test) ====================
+                    # Ustalık oranını hesapla
+                    topic_tests_dict_full = defaultdict(list)
+                    for test in tests:
+                        topic_tests_dict_full[test['topic_id']].append(test)
+                    
+                    mastered_count = 0
+                    for topic_id, topic_tests in topic_tests_dict_full.items():
+                        topic_avg = sum(t['success_rate'] for t in topic_tests) / len(topic_tests)
+                        topic_count = len(topic_tests)
+                        
+                        # Evrensel ustalık
+                        if topic_avg >= 80 and topic_count >= 2:
+                            mastered_count += 1
+                    
+                    mastery_ratio = (mastered_count / tested_topics * 100) if tested_topics > 0 else 0
+                    
+                    # Full model weights
+                    progress_percentage = (
+                        (topic_coverage * 0.4) +
+                        (avg_success_rate * 0.4) +
+                        (mastery_ratio * 0.2)
+                    )
+                    
+                    phase = "mature"
+                    disclaimer = "İlerleme başarı (%40) + kapsam (%40) + ustalık (%20) göre hesaplanıyor"
                 
-                progress_percentage = (
-                    (topic_coverage * coverage_weight) +
-                    (avg_success_rate * success_weight)
-                )
-                
-                phase = "growing"
-                disclaimer = "İlerleme test başarısı + kapsama göre hesaplanıyor"
-                
-                # Momentum
+                # ==================== Adaptif Momentum (5+ test) ====================
                 sorted_tests = sorted(tests, key=lambda x: x['test_date'])
                 window = min(5, len(tests) // 2)
                 
-                recent_avg = sum(t['success_rate'] for t in sorted_tests[-window:]) / window
-                previous_avg = sum(t['success_rate'] for t in sorted_tests[-2*window:-window]) / window if len(tests) >= 2*window else avg_success_rate
+                if len(tests) >= 2 * window:
+                    recent_avg = sum(t['success_rate'] for t in sorted_tests[-window:]) / window
+                    previous_avg = sum(t['success_rate'] for t in sorted_tests[-2*window:-window]) / window
+                else:
+                    recent_avg = avg_success_rate
+                    previous_avg = avg_success_rate
                 
                 momentum = recent_avg - previous_avg
                 
-                if momentum > 5:
+                # Test sayısına göre hassasiyet (tau)
+                if test_count < 15:
+                    tau = 0.05  # Gelişim - orta hassasiyet
+                else:
+                    tau = 0.03  # Olgunluk - ince ayar
+                
+                # Adaptif eşikler
+                improving_threshold = (100 - previous_avg) * tau
+                declining_threshold = previous_avg * tau
+                
+                if momentum > improving_threshold:
                     trend = "improving"
                     trend_icon = "🔥"
-                elif momentum < -5:
+                elif momentum < -declining_threshold:
                     trend = "declining"
                     trend_icon = "⚠️"
                 else:
@@ -416,7 +470,7 @@ async def get_progress_trends(
     supabase = Depends(get_supabase_admin)
 ):
     """
-    Haftalık/aylık trend grafiği (GERÇEK HESAPLAMA)
+    Haftalık/aylık trend grafiği (GELİŞTİRİLMİŞ LABEL'LAR)
     """
     try:
         student_id = current_user.get("id")
@@ -431,10 +485,10 @@ async def get_progress_trends(
         if not tests:
             # Boş data
             if period == "weekly":
-                labels = ["8 hafta önce", "7 hafta önce", "6 hafta önce", "5 hafta önce", 
-                         "4 hafta önce", "3 hafta önce", "2 hafta önce", "Geçen hafta"]
+                labels = ["7 hafta önce", "6 hafta önce", "5 hafta önce", 
+                         "4 hafta önce", "3 hafta önce", "2 hafta önce", "Geçen hafta", "Bu hafta"]
             else:
-                labels = ["6 ay önce", "5 ay önce", "4 ay önce", "3 ay önce", "2 ay önce", "Geçen ay"]
+                labels = ["6 ay önce", "5 ay önce", "4 ay önce", "3 ay önce", "2 ay önce", "Geçen ay", "Bu ay"]
             
             return {
                 "success": True,
@@ -449,22 +503,49 @@ async def get_progress_trends(
         # Period gruplama
         if period == "weekly":
             num_periods = 8
-            group_func = get_week_start
             now = datetime.now()
             period_starts = [
                 (now - timedelta(weeks=i)).strftime('%Y-%m-%d')
                 for i in range(num_periods-1, -1, -1)
             ]
-            labels = [f"{num_periods-i} hafta önce" if i > 1 else "Geçen hafta" for i in range(num_periods)]
+                        # ✅ LOG EKLE - DOĞRULAMA İÇİN
+            print(f"\n📅 HAFTALIK PERIOD KONTROLÜ")
+            print(f"Bugün: {now.strftime('%Y-%m-%d %A')}")
+            print(f"Period başlangıçları:")
+            for idx, ps in enumerate(period_starts):
+                print(f"  [{idx}] {ps}")
+            # DOĞRU LABEL'LAR (soldan sağa: eskiden yeniye)
+            labels = []
+            for i in range(num_periods):
+                age = num_periods - 1 - i
+                if age == 0:
+                    labels.append("Bu hafta")
+                elif age == 1:
+                    labels.append("Geçen hafta")
+                else:
+                    labels.append(f"{age} hafta önce")
+            
+            group_func = get_week_start
         else:
-            num_periods = 6
-            group_func = get_month_start
+            num_periods = 7
             now = datetime.now()
             period_starts = [
                 (now - timedelta(days=30*i)).strftime('%Y-%m-01')
                 for i in range(num_periods-1, -1, -1)
             ]
-            labels = [f"{num_periods-i} ay önce" if i > 1 else "Geçen ay" for i in range(num_periods)]
+            
+            # DOĞRU LABEL'LAR (soldan sağa: eskiden yeniye)
+            labels = []
+            for i in range(num_periods):
+                age = num_periods - 1 - i
+                if age == 0:
+                    labels.append("Bu ay")
+                elif age == 1:
+                    labels.append("Geçen ay")
+                else:
+                    labels.append(f"{age} ay önce")
+            
+            group_func = get_month_start
         
         # Test'leri period'lara grupla
         period_tests = defaultdict(list)
@@ -523,6 +604,8 @@ async def get_progress_trends(
     
     except Exception as e:
         print(f"❌ Trends error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")

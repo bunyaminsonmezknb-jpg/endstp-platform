@@ -4,22 +4,47 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ProjectionCard from '../dashboard/components/ProjectionCard';
 import UniversityGoalCard from '../dashboard/components/UniversityGoalCard';
+import ProgressTrendChart from './components/ProgressTrendChart';
+import SubjectProgressList from './components/SubjectProgressList';
+import ProgressSkeleton from './components/ProgressSkeleton';
 
 /**
  * İlerleme & Hedefler Sayfası
  * 
- * - Tahmini Bitiriş Tarihi (Projection)
- * - Üniversite Hedef Tracking
- * - Haftalık/Aylık İlerleme Grafikleri
+ * SORUMLULUKLAR:
+ * - Layout ve auth kontrolü
+ * - Component orchestration
+ * - Data fetching koordinasyonu
  * 
- * Sol menüden erişilebilir
+ * DELEGASYON:
+ * - SubjectProgressList: Ders bazlı UI + loading
+ * - ProgressTrendChart: Grafik UI + period toggle
+ * - Hooks: Data fetching logic
  */
+
+// ==================== TYPES ====================
+
+interface ProgressData {
+  subjects: any[] | null;
+  trends: {
+    weekly: any | null;
+    monthly: any | null;
+  };
+}
+
+// ==================== MAIN PAGE ====================
 
 export default function ProgressPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<ProgressData>({
+    subjects: null,
+    trends: { weekly: null, monthly: null }
+  });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Auth check
     const userStr = localStorage.getItem('user');
     const accessToken = localStorage.getItem('access_token');
     
@@ -28,18 +53,62 @@ export default function ProgressPage() {
       return;
     }
 
-    setIsLoading(false);
+    loadData();
   }, [router]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-700 text-xl mb-2 font-semibold">⏳ Yükleniyor...</p>
-        </div>
-      </div>
-    );
+  async function loadData() {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const token = localStorage.getItem('access_token');
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+      // ✅ Paralel fetch (performans)
+      const [subjectsRes, trendsRes] = await Promise.allSettled([
+        fetch(`${API_BASE}/student/progress/subjects`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/student/progress/trends?period=weekly`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
+      // Subjects data
+      let subjects = null;
+      if (subjectsRes.status === 'fulfilled' && subjectsRes.value.ok) {
+        const result = await subjectsRes.value.json();
+        subjects = result.data;
+      }
+
+      // Trends data (tek endpoint'ten ikisi de gelecek)
+      let trends = { weekly: null, monthly: null };
+      if (trendsRes.status === 'fulfilled' && trendsRes.value.ok) {
+        const result = await trendsRes.value.json();
+        trends.weekly = result.data;
+        
+        // Monthly de ayrıca çek
+        const monthlyRes = await fetch(`${API_BASE}/student/progress/trends?period=monthly`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (monthlyRes.ok) {
+          const monthlyData = await monthlyRes.json();
+          trends.monthly = monthlyData.data;
+        }
+      }
+
+      setData({ subjects, trends });
+    } catch (err) {
+      console.error('Progress data load error:', err);
+      setError('Veriler yüklenirken hata oluştu');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Auth loading
+  if (isLoading && !data.subjects) {
+    return <ProgressSkeleton />;
   }
 
   return (
@@ -63,95 +132,44 @@ export default function ProgressPage() {
           </p>
         </div>
 
+        {/* ERROR STATE */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+            <p className="text-red-600 font-semibold mb-2">❌ {error}</p>
+            <button
+              onClick={loadData}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+            >
+              Tekrar Dene
+            </button>
+          </div>
+        )}
+
         {/* PROJECTION & GOAL CARDS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <ProjectionCard />
           <UniversityGoalCard />
         </div>
 
-        {/* WEEKLY PROGRESS SECTION */}
+        {/* TREND CHART */}
         <div className="bg-white rounded-3xl p-8 shadow-lg mb-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-6">
-            📊 Haftalık İlerleme
+            📊 İlerleme Trendi
           </h2>
-          <div className="h-72 bg-gradient-to-b from-gray-50 to-white rounded-xl flex flex-col items-center justify-center text-gray-400">
-            <div className="text-6xl mb-4">📈</div>
-            <div className="text-lg">Haftalık ilerleme grafiği (Chart.js)</div>
-          </div>
-        </div>
-
-        {/* MONTHLY PROGRESS SECTION */}
-        <div className="bg-white rounded-3xl p-8 shadow-lg mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">
-            📅 Aylık İlerleme
-          </h2>
-          <div className="h-72 bg-gradient-to-b from-gray-50 to-white rounded-xl flex flex-col items-center justify-center text-gray-400">
-            <div className="text-6xl mb-4">📊</div>
-            <div className="text-lg">Aylık ilerleme grafiği (Recharts)</div>
-          </div>
+          <ProgressTrendChart 
+            weeklyData={data.trends.weekly}
+            monthlyData={data.trends.monthly}
+            isLoading={isLoading}
+          />
         </div>
 
         {/* SUBJECT BREAKDOWN */}
         <div className="bg-white rounded-3xl p-8 shadow-lg">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">
-            📚 Ders Bazlı İlerleme
-          </h2>
-          <div className="space-y-4">
-            {/* Placeholder - Backend'den gelecek */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-2xl">
-                  📐
-                </div>
-                <div>
-                  <div className="font-semibold text-gray-900">Matematik</div>
-                  <div className="text-sm text-gray-600">120 konu • %68 tamamlandı</div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-purple-600">68%</div>
-                <div className="text-xs text-gray-500">İlerleme</div>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-2xl">
-                  ⚗️
-                </div>
-                <div>
-                  <div className="font-semibold text-gray-900">Fizik</div>
-                  <div className="text-sm text-gray-600">85 konu • %45 tamamlandı</div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-blue-600">45%</div>
-                <div className="text-xs text-gray-500">İlerleme</div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-2xl">
-                  🧪
-                </div>
-                <div>
-                  <div className="font-semibold text-gray-900">Kimya</div>
-                  <div className="text-sm text-gray-600">92 konu • %52 tamamlandı</div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-green-600">52%</div>
-                <div className="text-xs text-gray-500">İlerleme</div>
-              </div>
-            </div>
-
-            <div className="text-center pt-4">
-              <p className="text-gray-500 text-sm">
-                💡 Gerçek veri backend'den gelecek
-              </p>
-            </div>
-          </div>
+          <SubjectProgressList 
+            subjects={data.subjects}
+            isLoading={isLoading}
+          />
         </div>
       </div>
     </div>

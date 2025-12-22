@@ -1,0 +1,287 @@
+-- Migration 007: Human Summary System + AI Enhancements
+-- Date: 2024-12-18
+-- Status: Production Ready
+
+-- ============================================
+-- 1. INTERACTION PATTERN & AI FIELDS
+-- ============================================
+
+ALTER TABLE feature_flags
+ADD COLUMN IF NOT EXISTS interaction_pattern JSONB DEFAULT '{}'::jsonb,
+ADD COLUMN IF NOT EXISTS failure_mode JSONB DEFAULT '{}'::jsonb,
+ADD COLUMN IF NOT EXISTS human_confidence JSONB DEFAULT '{}'::jsonb,
+ADD COLUMN IF NOT EXISTS ai_analysis JSONB DEFAULT NULL;
+
+COMMENT ON COLUMN feature_flags.interaction_pattern IS 'User interaction patterns that trigger failures';
+COMMENT ON COLUMN feature_flags.failure_mode IS 'Classification of failure type';
+COMMENT ON COLUMN feature_flags.human_confidence IS 'Engineer assessment of root cause';
+COMMENT ON COLUMN feature_flags.ai_analysis IS 'AI-generated diagnostic analysis';
+
+-- ============================================
+-- 2. WEIGHTED HEALTH SCORE
+-- ============================================
+
+ALTER TABLE feature_flags
+ADD COLUMN IF NOT EXISTS impact_modifier DECIMAL(3,2) DEFAULT 1.0;
+
+-- Auto-calculate impact modifier based on user_impact_level
+CREATE OR REPLACE FUNCTION update_impact_modifier()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.impact_modifier := CASE NEW.user_impact_level
+    WHEN 'none' THEN 1.0
+    WHEN 'low' THEN 0.90
+    WHEN 'medium' THEN 0.75
+    WHEN 'high' THEN 0.50
+    WHEN 'critical' THEN 0.20
+    ELSE 1.0
+  END;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_update_impact_modifier ON feature_flags;
+CREATE TRIGGER trg_update_impact_modifier
+  BEFORE INSERT OR UPDATE OF user_impact_level ON feature_flags
+  FOR EACH ROW
+  EXECUTE FUNCTION update_impact_modifier();
+
+-- Effective health score (computed column)
+ALTER TABLE feature_flags
+ADD COLUMN IF NOT EXISTS effective_health_score INT GENERATED ALWAYS AS (
+  CAST((
+    COALESCE(latency_score, 100) * 0.25 +
+    COALESCE(error_score, 100) * 0.25 +
+    COALESCE(freshness_score, 100) * 0.20 +
+    COALESCE(data_volume_score, 100) * 0.15 +
+    100 * 0.15
+  ) * COALESCE(impact_modifier, 1.0) AS INT)
+) STORED;
+
+COMMENT ON COLUMN feature_flags.effective_health_score IS 'True health score with impact weighting';
+
+-- ============================================
+-- 3. HUMAN SUMMARY SYSTEM (15 STATES)
+-- ============================================
+
+ALTER TABLE feature_flags
+ADD COLUMN IF NOT EXISTS human_summary_key TEXT DEFAULT 'unknown_state_fallback';
+
+-- Summary definitions table (TR/EN)
+CREATE TABLE IF NOT EXISTS summary_definitions (
+  summary_key TEXT PRIMARY KEY,
+  severity TEXT NOT NULL CHECK (severity IN ('healthy', 'degraded', 'high_risk', 'disabled', 'recovery', 'unknown')),
+  category TEXT NOT NULL,
+  text_tr TEXT NOT NULL,
+  text_en TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Insert 15 canonical states
+INSERT INTO summary_definitions (summary_key, severity, category, text_tr, text_en) VALUES
+('healthy_operational', 'healthy', 'operational',
+ 'Bu özellik şu anda normal şekilde çalışmaktadır.',
+ 'This feature is currently operating normally.'),
+
+('degraded_performance', 'degraded', 'performance',
+ 'Bu özellik çalışmaya devam etmektedir ancak bazı durumlarda yavaş yanıt verebilir.',
+ 'This feature is operational but may respond slower than expected.'),
+
+('degraded_data_volume', 'degraded', 'performance',
+ 'Bu özellik yüksek veri hacmi nedeniyle daha yavaş çalışmaktadır.',
+ 'This feature is processing high data volumes and operating slower.'),
+
+('degraded_partial_impact', 'degraded', 'operational',
+ 'Bu özellik çalışmaktadır ancak bazı senaryolarda sınırlı etki gösterebilir.',
+ 'This feature is operational but may show limited impact in some scenarios.'),
+
+('disabled_inconsistent_behavior', 'disabled', 'preventive',
+ 'Bu özellik tutarsız sonuçlar üretebileceği için geçici olarak devre dışı bırakılmıştır.',
+ 'This feature has been disabled due to inconsistent behavior.'),
+
+('disabled_preventive', 'disabled', 'preventive',
+ 'Bu özellik önleyici bakım amacıyla devre dışı bırakılmıştır.',
+ 'This feature has been disabled for preventive maintenance.'),
+
+('disabled_dependency_issue', 'disabled', 'dependency',
+ 'Bu özellik, bağımlılık nedeniyle geçici olarak devre dışıdır.',
+ 'This feature is disabled due to dependency issues.'),
+
+('disabled_runtime_error', 'disabled', 'error',
+ 'Bu özellik sistem hatası nedeniyle devre dışıdır.',
+ 'This feature is disabled due to a system error.'),
+
+('disabled_timeout', 'disabled', 'performance',
+ 'Bu özellik yanıt süresi nedeniyle devre dışı bırakılmıştır.',
+ 'This feature has been disabled due to timeout issues.'),
+
+('disabled_data_integrity_risk', 'disabled', 'error',
+ 'Bu özellik veri tutarlılığı riski nedeniyle devre dışıdır.',
+ 'This feature is disabled due to data integrity risks.'),
+
+('high_risk_silent_failure', 'high_risk', 'operational',
+ 'Bu özellik hata vermeden kullanıcı kararlarını olumsuz etkileyebilir.',
+ 'This feature may negatively influence user decisions without errors.'),
+
+('high_risk_logic_anomaly', 'high_risk', 'operational',
+ 'Bu özellikte beklenmedik davranış sapması tespit edilmiştir.',
+ 'An unexpected behavioral deviation has been detected.'),
+
+('fix_applied_pending_verification', 'recovery', 'operational',
+ 'Düzeltmeler uygulanmış, yeniden etkinleştirme değerlendirilmektedir.',
+ 'Fixes applied, re-enablement under consideration.'),
+
+('recovery_in_progress', 'recovery', 'operational',
+ 'Kurtarma işlemleri devam etmektedir.',
+ 'Recovery operations are in progress.'),
+
+('ready_for_reenable', 'recovery', 'operational',
+ 'Bu özellik yeniden etkinleştirilmeye hazırdır.',
+ 'This feature is ready to be re-enabled.'),
+
+('unknown_state_fallback', 'unknown', 'operational',
+ 'Bu özelliğin durumu alışılmadık bir yapılandırma göstermektedir.',
+ 'This feature is exhibiting an unusual configuration.')
+
+ON CONFLICT (summary_key) DO NOTHING;
+
+-- ============================================
+-- 4. DECISION ENGINE
+-- ============================================
+
+CREATE OR REPLACE FUNCTION calculate_human_summary_key(
+  p_is_enabled BOOLEAN,
+  p_error_count INT,
+  p_error_rate_percent DECIMAL,
+  p_user_impact_level TEXT,
+  p_latency_score INT,
+  p_health_score INT
+)
+RETURNS TEXT AS $$
+BEGIN
+  -- DISABLED STATES (Priority 1)
+  IF p_is_enabled = false THEN
+    IF p_error_rate_percent = 0 AND p_user_impact_level IN ('high', 'critical') THEN
+      RETURN 'disabled_inconsistent_behavior';
+    END IF;
+    IF p_error_count > 0 THEN
+      RETURN 'disabled_runtime_error';
+    END IF;
+    IF p_latency_score < 50 THEN
+      RETURN 'disabled_timeout';
+    END IF;
+    IF p_health_score >= 85 THEN
+      RETURN 'ready_for_reenable';
+    END IF;
+    IF p_health_score >= 80 THEN
+      RETURN 'fix_applied_pending_verification';
+    END IF;
+    RETURN 'disabled_preventive';
+  END IF;
+
+  -- HIGH RISK STATES (Priority 2)
+  IF p_is_enabled = true THEN
+    IF p_error_rate_percent = 0 AND p_user_impact_level IN ('high', 'critical') THEN
+      RETURN 'high_risk_silent_failure';
+    END IF;
+  END IF;
+
+  -- DEGRADED STATES (Priority 3)
+  IF p_is_enabled = true THEN
+    IF p_latency_score BETWEEN 50 AND 80 THEN
+      RETURN 'degraded_performance';
+    END IF;
+  END IF;
+
+  -- HEALTHY (Priority 4)
+  IF p_is_enabled = true AND p_error_rate_percent = 0 AND p_latency_score >= 80 AND p_user_impact_level = 'none' THEN
+    RETURN 'healthy_operational';
+  END IF;
+
+  -- FALLBACK
+  RETURN 'unknown_state_fallback';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Auto-update trigger
+CREATE OR REPLACE FUNCTION update_human_summary_key()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.human_summary_key := calculate_human_summary_key(
+    NEW.is_enabled,
+    NEW.error_count,
+    NEW.error_rate_percent,
+    NEW.user_impact_level,
+    COALESCE(NEW.latency_score, 100),
+    NEW.health_score
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_update_human_summary ON feature_flags;
+CREATE TRIGGER trg_update_human_summary
+  BEFORE INSERT OR UPDATE ON feature_flags
+  FOR EACH ROW
+  EXECUTE FUNCTION update_human_summary_key();
+
+-- ============================================
+-- 5. SUPPORTING TABLES
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_analysis_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  flag_key TEXT NOT NULL,
+  analyzed_at TIMESTAMPTZ DEFAULT NOW(),
+  model TEXT,
+  root_cause TEXT,
+  confidence DECIMAL(3,2),
+  suggested_fixes JSONB
+);
+
+CREATE TABLE IF NOT EXISTS feature_control_config (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO feature_control_config (key, value) VALUES
+('ai_integration', '{"enabled": true, "model": "claude-sonnet-4-20250514"}'::jsonb),
+('auto_reenable', '{"enabled": false, "require_approval": true}'::jsonb),
+('alerts', '{"email_enabled": false, "slack_enabled": false}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+-- ============================================
+-- 6. ENHANCED VIEW
+-- ============================================
+
+CREATE OR REPLACE VIEW vw_feature_health_intelligence AS
+SELECT 
+  ff.flag_key,
+  ff.is_enabled,
+  ff.effective_health_score,
+  ff.health_score,
+  ff.human_summary_key,
+  sd.severity,
+  sd.text_tr,
+  sd.text_en,
+  ff.user_impact_level,
+  ff.impact_modifier,
+  ff.disabled_at,
+  ff.disabled_by
+FROM feature_flags ff
+LEFT JOIN summary_definitions sd ON ff.human_summary_key = sd.summary_key;
+
+-- ============================================
+-- 7. INDEXES
+-- ============================================
+
+CREATE INDEX IF NOT EXISTS idx_flags_effective_health ON feature_flags(effective_health_score DESC);
+CREATE INDEX IF NOT EXISTS idx_flags_human_summary ON feature_flags(human_summary_key);
+CREATE INDEX IF NOT EXISTS idx_summary_severity ON summary_definitions(severity);
+
+-- ============================================
+-- MIGRATION COMPLETE ✅
+-- ============================================
+
+SELECT 'Migration 007: Human Summary System - SUCCESS' as status;

@@ -1,0 +1,205 @@
+"""
+Progress & Goals Endpoints
+Mevcut sistem entegrasyonu ile çalışır
+"""
+from fastapi import APIRouter, HTTPException, Depends
+from typing import List, Optional
+from datetime import datetime, date, timedelta
+import os
+
+# ✅ Mevcut sistemden Supabase client'ı kullan
+from app.db.session import get_supabase_admin
+
+router = APIRouter()
+
+# ==================== RESPONSE MODELS ====================
+
+from pydantic import BaseModel
+
+class ProgressProjection(BaseModel):
+    overall_progress: float
+    estimated_completion_date: str
+    days_remaining: int
+    weekly_improvement: float
+    topics_mastered: int
+    topics_in_progress: int
+    topics_not_started: int
+
+class SubjectProgress(BaseModel):
+    subject_id: str
+    subject_name: str
+    subject_code: str
+    progress_percentage: float
+    topics_total: int
+    topics_mastered: int
+    topics_in_progress: int
+    topics_not_started: int
+    avg_success_rate: float
+    trend: str  # 'improving', 'stable', 'declining'
+
+class TrendDataset(BaseModel):
+    label: str
+    data: List[Optional[float]]
+    subject_id: str
+
+class TrendData(BaseModel):
+    labels: List[str]
+    datasets: List[TrendDataset]
+    overall_trend: List[Optional[float]]
+    period: str
+
+# ==================== HELPER FUNCTIONS ====================
+
+def calculate_weighted_progress(tests: List[dict]) -> float:
+    """Calculate progress with recent tests weighted higher"""
+    if not tests:
+        return 0.0
+    
+    total_weight = 0
+    weighted_sum = 0
+    
+    for idx, test in enumerate(tests):
+        weight = 1.0 + (idx * 0.1)  # Recent tests have higher weight
+        success_rate = test.get('success_rate', 0)
+        weighted_sum += success_rate * weight
+        total_weight += weight
+    
+    return weighted_sum / total_weight if total_weight > 0 else 0.0
+
+def predict_completion_date(current_progress: float, weekly_improvement: float) -> tuple:
+    """Predict completion date based on current progress and improvement rate"""
+    if weekly_improvement <= 0:
+        return "Belirsiz", 999
+    
+    remaining_progress = 100 - current_progress
+    weeks_needed = remaining_progress / weekly_improvement
+    days_needed = int(weeks_needed * 7)
+    
+    completion_date = datetime.now() + timedelta(days=days_needed)
+    return completion_date.strftime("%Y-%m-%d"), days_needed
+
+# ==================== ENDPOINTS ====================
+
+@router.get("/student/progress/projection")
+async def get_progress_projection(
+    supabase = Depends(get_supabase_admin)
+):
+    """
+    Overall progress projection with completion date estimate
+    """
+    try:
+        # Mock data (gerçek implementasyon için database query gerekli)
+        return {
+            "success": True,
+            "data": {
+                "overall_progress": 67.5,
+                "estimated_completion_date": "2025-03-15",
+                "days_remaining": 84,
+                "weekly_improvement": 3.2,
+                "topics_mastered": 82,
+                "topics_in_progress": 45,
+                "topics_not_started": 23
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/student/progress/subjects")
+async def get_subject_progress(
+    supabase = Depends(get_supabase_admin)
+):
+    """
+    Per-subject progress breakdown
+    """
+    try:
+        # Supabase'den subjects al
+        subjects_result = supabase.table("subjects").select("*").eq("is_active", True).execute()
+        
+        if not subjects_result.data:
+            return {
+                "success": True,
+                "data": []
+            }
+        
+        subject_progress = []
+        
+        for subject in subjects_result.data:
+            # Mock data (gerçek implementasyon için topic query gerekli)
+            progress_data = {
+                "subject_id": subject["id"],
+                "subject_name": subject.get("name_tr", subject.get("name", "Unknown")),
+                "subject_code": subject.get("code", "UNK"),
+                "progress_percentage": 65.0,  # Mock
+                "topics_total": 50,
+                "topics_mastered": 32,
+                "topics_in_progress": 12,
+                "topics_not_started": 6,
+                "avg_success_rate": 72.5,
+                "trend": "improving"
+            }
+            subject_progress.append(progress_data)
+        
+        return {
+            "success": True,
+            "data": subject_progress
+        }
+    
+    except Exception as e:
+        print(f"❌ Subject progress error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/student/progress/trends")
+async def get_progress_trends(
+    period: str = "weekly",  # 'weekly' or 'monthly'
+    supabase = Depends(get_supabase_admin)
+):
+    """
+    Trend data for charts (weekly or monthly)
+    """
+    try:
+        if period == "weekly":
+            # Last 8 weeks
+            labels = ["8 hafta önce", "7 hafta önce", "6 hafta önce", "5 hafta önce", 
+                     "4 hafta önce", "3 hafta önce", "2 hafta önce", "Geçen hafta"]
+            overall_trend = [45.0, 48.0, 52.0, 55.0, 60.0, 63.0, 65.0, 67.5]
+        else:
+            # Last 6 months
+            labels = ["6 ay önce", "5 ay önce", "4 ay önce", "3 ay önce", "2 ay önce", "Geçen ay"]
+            overall_trend = [30.0, 38.0, 45.0, 52.0, 60.0, 67.5]
+        
+        # Mock subject datasets
+        datasets = [
+            {
+                "label": "Matematik",
+                "data": [50.0, 52.0, 55.0, 58.0, 62.0, 65.0, 68.0, 70.0] if period == "weekly" else [35.0, 42.0, 48.0, 55.0, 62.0, 70.0],
+                "subject_id": "math-id"
+            },
+            {
+                "label": "Fizik",
+                "data": [40.0, 43.0, 47.0, 50.0, 55.0, 58.0, 60.0, 63.0] if period == "weekly" else [25.0, 32.0, 40.0, 48.0, 55.0, 63.0],
+                "subject_id": "physics-id"
+            }
+        ]
+        
+        return {
+            "success": True,
+            "data": {
+                "labels": labels,
+                "datasets": datasets,
+                "overall_trend": overall_trend,
+                "period": period
+            }
+        }
+    
+    except Exception as e:
+        print(f"❌ Trends error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/health")
+async def progress_health():
+    """Health check for progress endpoints"""
+    return {
+        "status": "healthy",
+        "endpoints": 3,
+        "features": ["projection", "subjects", "trends"]
+    }

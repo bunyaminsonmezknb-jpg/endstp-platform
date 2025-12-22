@@ -32,7 +32,7 @@ async def get_public_flags():
     """
     supabase = get_supabase_admin()
     result = (
-        supabase.table("feature_flags")
+        supabase.from_("vw_feature_health_intelligence")
         .select("flag_key, is_enabled")
         .eq("is_enabled", True)
         .execute()
@@ -53,7 +53,7 @@ async def get_admin_flags():
     """Admin - all flags with health metrics"""
     supabase = get_supabase_admin()
     result = (
-        supabase.table("feature_flags")
+        supabase.from_("vw_feature_health_intelligence")
         .select("*")
         .order("phase", desc=False)
         .order("flag_key", desc=False)

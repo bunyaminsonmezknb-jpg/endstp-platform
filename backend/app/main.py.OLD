@@ -2,16 +2,19 @@
 End.STP Backend API
 FastAPI ana uygulama - 4 Motor Sistemi
 """
+from app.api.v1.endpoints import progress
+
+app.include_router(
+    progress.router, 
+    prefix="/api/v1", 
+    tags=["progress"]
+)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.api.v1.student_analysis import router as student_router
 import time
 from contextlib import asynccontextmanager
-
-# ============================================
-# 1. APP TANIMI
-# ============================================
 
 app = FastAPI(
     title="End.STP API",
@@ -22,10 +25,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json"
 )
 
-# ============================================
-# 2. CORS MIDDLEWARE
-# ============================================
-
+# ✅ CORS Middleware EKLE
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -37,9 +37,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================
-# 3. MONITORING MIDDLEWARE
-# ============================================
+# ⭐ YENİ: Response Time Monitoring Middleware
+@app.middleware("http")
+async def monitor_response_time(request, call_next):
+    start_time = time.time()
+    
+    try:
+        response = await call_next(request)
+        process_time = int((time.time() - start_time) * 1000)  # ms
+        response.headers["X-Process-Time"] = str(process_time)
+        
+        # Report slow endpoints (background task)
+        if process_time > 1000:
+            await report_slow_endpoint(request.url.path, process_time)
+        
+        return response
+        
+    except Exception as e:
+        process_time = int((time.time() - start_time) * 1000)
+        await report_endpoint_error(request.url.path, str(e), process_time)
+        raise
 
 async def report_slow_endpoint(path: str, response_time_ms: int):
     """Report slow response time to feature flags"""
@@ -98,51 +115,10 @@ async def report_endpoint_error(path: str, error: str, response_time_ms: int):
     except Exception as e:
         print(f"Error reporting failed: {e}")
 
-@app.middleware("http")
-async def monitor_response_time(request, call_next):
-    start_time = time.time()
-    
-    try:
-        response = await call_next(request)
-        process_time = int((time.time() - start_time) * 1000)  # ms
-        response.headers["X-Process-Time"] = str(process_time)
-        
-        # Report slow endpoints (background task)
-        if process_time > 1000:
-            await report_slow_endpoint(request.url.path, process_time)
-        
-        return response
-        
-    except Exception as e:
-        process_time = int((time.time() - start_time) * 1000)
-        await report_endpoint_error(request.url.path, str(e), process_time)
-        raise
-
-# ============================================
-# 4. ROUTERS (Sıralama önemli!)
-# ============================================
-
-# Eski sistem routers
+# Routers (eski sistem + yeni motorlar)
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(student_router)
-
-# Progress router (YENİ - try-catch ile güvenli)
-try:
-    from app.api.v1.endpoints import progress
-    app.include_router(
-        progress.router, 
-        prefix="/api/v1", 
-        tags=["progress"]
-    )
-    print("✅ Progress router loaded successfully")
-except ImportError as e:
-    print(f"⚠️  Progress router not found: {e}")
-except Exception as e:
-    print(f"❌ Error loading progress router: {e}")
-
-# ============================================
-# 5. ROOT ENDPOINTS
-# ============================================
+app.include_router(progress.router, prefix="/api/v1", tags=["progress"])
 
 @app.get("/")
 async def root():
