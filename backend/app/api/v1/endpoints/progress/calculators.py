@@ -1,3 +1,47 @@
+# =============================================================================
+# GLOBAL-FIRST COMPLIANCE HEADER
+# =============================================================================
+# File: calculators.py
+# Created: 2024-12-24
+# Phase: MVP (Phase 1)
+# Author: End.STP Team
+# 
+# 🌍 LOCALIZATION STATUS:
+#   [X] UTC datetime handling
+#   [ ] Multi-language support (Phase 2)
+#   [X] Database uses _tr/_en columns
+#   [ ] API accepts Accept-Language header (Phase 2)
+#   [ ] No hardcoded text
+#
+# 📋 HARDCODED ITEMS (Temporary):
+#   - TURKISH_MONTHS dict (Line 33) → Phase 2: Database lookup via get_translation()
+#   - format_date_turkish() function (Line 45) → Phase 2: Rename to format_date_localized(dt, language, format_type)
+#   - Phase names (Line 137-145) → Phase 2: Translation keys like "phase.discovery"
+#   - Disclaimer texts (Line 146-148) → Phase 2: Parameterized translations
+#
+# 🚀 MIGRATION NOTES (Phase 2):
+#   - Add language parameter to calculate_trends()
+#   - Replace all format_date_turkish() with format_date_localized()
+#   - Move month names to translations table
+#   - Update all string literals to use get_translation()
+#
+# 📚 RELATED DOCS:
+#   - Guidelines: docs/GLOBAL_FIRST_GUIDE.md
+#   - Migration: docs/PHASE2_MIGRATION_PLAN.md
+# =============================================================================
+
+"""
+calculators.py - Progress Calculation Engine
+
+Core calculation functions for student progress analytics including:
+- Mastery level calculation (mastered/in_progress/not_started)
+- Phase and progress percentage
+- Trend analysis (weekly/monthly)
+- Topic health metrics
+
+All calculations are UTC-aware and prepared for multi-language support.
+"""
+
 from datetime import date
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
@@ -20,7 +64,7 @@ from .helpers import (
 #   2. Implement get_translation(key, language) function
 #   3. Replace this dict with: await get_translation("month.jan.short", language)
 #   4. Update all callers to pass language parameter
-# ALLOWED: Temporary hardcoded solution for MVP
+# TRACKED IN HEADER
 TURKISH_MONTHS = {
     1: "Oca", 2: "Şub", 3: "Mar", 4: "Nis", 5: "May", 6: "Haz",
     7: "Tem", 8: "Ağu", 9: "Eyl", 10: "Eki", 11: "Kas", 12: "Ara"
@@ -30,6 +74,7 @@ TURKISH_MONTHS = {
 # MIGRATION-GUIDE:
 #   Change signature to: async def format_date_localized(dt: date, language: str, format_type: str)
 #   Use database lookups instead of TURKISH_MONTHS dict
+# TRACKED IN HEADER
 def format_date_turkish(dt: date, format_type: str = "short") -> str:
     """
     Tarihi Türkçe formatla
@@ -91,6 +136,7 @@ def calculate_phase_and_progress(tests: list, topics_total: int) -> tuple:
     """
     if not tests:
         # TODO: PHASE-2-I18N - These strings should come from translations
+        # TRACKED IN HEADER
         return (0.0, 0.0, "unknown", "➖", "BAŞLANMAMIŞ", "Henüz test girilmemiş")
     
     test_count = len(tests)
@@ -122,6 +168,7 @@ def calculate_phase_and_progress(tests: list, topics_total: int) -> tuple:
     progress_percentage = (unique_topics_tested / topics_total * 100) if topics_total > 0 else 0
     
     # TODO: PHASE-2-I18N - Phase names and disclaimers should be localized
+    # TRACKED IN HEADER
     # Phase belirleme
     if test_count < 5:
         phase = "PHASE 1: Keşif"
@@ -248,10 +295,12 @@ def calculate_trends(
     if period == "weekly":
         period_starts = generate_week_periods(num_periods)
         # TODO: PHASE-2-I18N - Replace with: labels = [await format_date_localized(p, language, "short") for p in period_starts]
+        # TRACKED IN HEADER
         labels = [format_date_turkish(p, "short") for p in period_starts]
     else:
         period_starts = generate_month_periods(num_periods)
         # TODO: PHASE-2-I18N - Replace with: labels = [await format_date_localized(p, language, "long") for p in period_starts]
+        # TRACKED IN HEADER
         labels = [format_date_turkish(p, "long") for p in period_starts]
 
     # --------------------------
