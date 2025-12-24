@@ -271,8 +271,6 @@ export default function ProgressTrendChart({
       {/* ===== HEADER + TOGGLES ===== */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">📊</span>
-          <h3 className="text-xl font-bold text-gray-900">İlerleme Trendi</h3>
         </div>
         
         <div className="flex gap-3">

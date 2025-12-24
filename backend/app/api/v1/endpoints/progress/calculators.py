@@ -14,14 +14,28 @@ from .helpers import (
 # TÜRKÇE TARİH FORMATLAMA
 # ==================================================
 
+# TODO: PHASE-2-I18N - Replace with database-driven translations
+# MIGRATION-GUIDE:
+#   1. Create translations table with month names
+#   2. Implement get_translation(key, language) function
+#   3. Replace this dict with: await get_translation("month.jan.short", language)
+#   4. Update all callers to pass language parameter
+# ALLOWED: Temporary hardcoded solution for MVP
 TURKISH_MONTHS = {
     1: "Oca", 2: "Şub", 3: "Mar", 4: "Nis", 5: "May", 6: "Haz",
     7: "Tem", 8: "Ağu", 9: "Eyl", 10: "Eki", 11: "Kas", 12: "Ara"
 }
 
+# TODO: PHASE-2-I18N - Rename to format_date_localized and add language parameter
+# MIGRATION-GUIDE:
+#   Change signature to: async def format_date_localized(dt: date, language: str, format_type: str)
+#   Use database lookups instead of TURKISH_MONTHS dict
 def format_date_turkish(dt: date, format_type: str = "short") -> str:
     """
     Tarihi Türkçe formatla
+    
+    TEMPORARY: Hardcoded Turkish-only formatting for MVP
+    FUTURE: Will become format_date_localized(dt, language, format_type)
     
     Args:
         dt: date objesi
@@ -76,6 +90,7 @@ def calculate_phase_and_progress(tests: list, topics_total: int) -> tuple:
         (progress_percentage, avg_success_rate, trend, trend_icon, phase, disclaimer)
     """
     if not tests:
+        # TODO: PHASE-2-I18N - These strings should come from translations
         return (0.0, 0.0, "unknown", "➖", "BAŞLANMAMIŞ", "Henüz test girilmemiş")
     
     test_count = len(tests)
@@ -106,6 +121,7 @@ def calculate_phase_and_progress(tests: list, topics_total: int) -> tuple:
     unique_topics_tested = len(set(t.get('topic_id') for t in tests))
     progress_percentage = (unique_topics_tested / topics_total * 100) if topics_total > 0 else 0
     
+    # TODO: PHASE-2-I18N - Phase names and disclaimers should be localized
     # Phase belirleme
     if test_count < 5:
         phase = "PHASE 1: Keşif"
@@ -231,9 +247,11 @@ def calculate_trends(
     # --------------------------
     if period == "weekly":
         period_starts = generate_week_periods(num_periods)
+        # TODO: PHASE-2-I18N - Replace with: labels = [await format_date_localized(p, language, "short") for p in period_starts]
         labels = [format_date_turkish(p, "short") for p in period_starts]
     else:
         period_starts = generate_month_periods(num_periods)
+        # TODO: PHASE-2-I18N - Replace with: labels = [await format_date_localized(p, language, "long") for p in period_starts]
         labels = [format_date_turkish(p, "long") for p in period_starts]
 
     # --------------------------

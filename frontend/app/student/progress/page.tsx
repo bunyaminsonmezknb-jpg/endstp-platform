@@ -1,5 +1,4 @@
 'use client';
-
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ProjectionCard from '../dashboard/components/ProjectionCard';
@@ -52,24 +51,27 @@ export default function ProgressPage() {
       router.push('/login');
       return;
     }
-
+    
     loadData();
-  }, [router]);
+  }, []); // ✅ Boş dependency array - sadece ilk mount'ta çalışır
 
   async function loadData() {
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const token = localStorage.getItem('access_token');
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-      // ✅ Paralel fetch (performans)
-      const [subjectsRes, trendsRes] = await Promise.allSettled([
+      // ✅ Paralel fetch - 3 endpoint birden (subjects, weekly, monthly)
+      const [subjectsRes, weeklyRes, monthlyRes] = await Promise.allSettled([
         fetch(`${API_BASE}/student/progress/subjects`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
         fetch(`${API_BASE}/student/progress/trends?period=weekly`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/student/progress/trends?period=monthly`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
@@ -81,23 +83,28 @@ export default function ProgressPage() {
         subjects = result.data;
       }
 
-      // Trends data (tek endpoint'ten ikisi de gelecek)
-      let trends = { weekly: null, monthly: null };
-      if (trendsRes.status === 'fulfilled' && trendsRes.value.ok) {
-        const result = await trendsRes.value.json();
-        trends.weekly = result.data;
-        
-        // Monthly de ayrıca çek
-        const monthlyRes = await fetch(`${API_BASE}/student/progress/trends?period=monthly`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (monthlyRes.ok) {
-          const monthlyData = await monthlyRes.json();
-          trends.monthly = monthlyData.data;
-        }
+      // Weekly trends
+      let weeklyData = null;
+      if (weeklyRes.status === 'fulfilled' && weeklyRes.value.ok) {
+        const result = await weeklyRes.value.json();
+        weeklyData = result.data;
       }
 
-      setData({ subjects, trends });
+      // Monthly trends
+      let monthlyData = null;
+      if (monthlyRes.status === 'fulfilled' && monthlyRes.value.ok) {
+        const result = await monthlyRes.value.json();
+        monthlyData = result.data;
+      }
+
+      setData({ 
+        subjects, 
+        trends: { 
+          weekly: weeklyData, 
+          monthly: monthlyData 
+        } 
+      });
+
     } catch (err) {
       console.error('Progress data load error:', err);
       setError('Veriler yüklenirken hata oluştu');
@@ -165,7 +172,6 @@ export default function ProgressPage() {
 
         {/* SUBJECT BREAKDOWN */}
         <div className="bg-white rounded-3xl p-8 shadow-lg">
-
           <SubjectProgressList 
             subjects={data.subjects}
             isLoading={isLoading}

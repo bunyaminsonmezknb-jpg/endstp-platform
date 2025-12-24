@@ -2176,3 +2176,188 @@ curl -H "apikey: YOUR_KEY" YOUR_SUPABASE_URL/rest/v1/
 **Son Güncelleme**: 3 Aralık 2025  
 **Sürüm**: v1.5 (Backend + Frontend + DB integrated)  
 **Durum**: 🚧 Active Development
+
+# 🚀 End.STP Backend API
+
+## 📦 Quick Setup (5 dakika)
+
+### 1. Virtual Environment
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+```
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Environment Variables
+```bash
+cp .env.example .env
+# .env dosyasını düzenle:
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_ROLE_KEY
+# - JWT_SECRET (değiştir!)
+```
+
+### 4. Run Server
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+✅ **Backend çalışıyor:** http://localhost:8000
+📚 **API Docs:** http://localhost:8000/docs
+
+---
+
+## 🎯 Endpoints
+
+### Health Check
+```bash
+GET http://localhost:8000/health
+```
+
+### Student Progress - Subject Breakdown
+```bash
+GET http://localhost:8000/api/v1/student/progress/breakdown?user_id=xxx
+
+Response:
+{
+  "subjects": [
+    {
+      "subject_name": "Matematik",
+      "priority_score": 15.0,  # exam weight uygulanmış ⭐
+      "progress_percentage": 73,
+      "test_count": 19,
+      "exam_weight_multiplier": 2.0  # 80 soru = 2.0x
+    }
+  ]
+}
+```
+
+### Student Progress - Trend History
+```bash
+GET http://localhost:8000/api/v1/student/progress/trends?user_id=xxx&period=6m
+
+Response:
+{
+  "weekly": [
+    {"week": "2024-W30", "avg_progress": 65}
+  ],
+  "monthly": [
+    {"month": "2024-07", "avg_progress": 67}
+  ],
+  "subjects": [
+    {
+      "subject_name": "Matematik",
+      "history": [
+        {"date": "2024-07-15", "score": 70}
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## 🗂️ Project Structure
+
+```
+backend/
+├── app/
+│   ├── main.py                    # FastAPI entry point
+│   ├── config.py                  # Environment config
+│   ├── database.py                # Supabase client
+│   │
+│   ├── api/
+│   │   └── v1/
+│   │       └── endpoints/
+│   │           └── progress.py    # Progress endpoints ⭐
+│   │
+│   ├── models/                    # Database models
+│   ├── schemas/                   # Pydantic schemas
+│   ├── services/                  # Business logic
+│   │   └── motors/                # Analytics engines
+│   └── utils/                     # Helper functions
+│
+├── migrations/                    # Database migrations
+├── requirements.txt
+├── .env.example
+└── README.md
+```
+
+---
+
+## 🔥 Key Features
+
+### ⭐ Exam Weight Multiplier (Priority Score)
+```python
+# Matematik: 80 soru → 2.0x çarpan
+# Tarih: 5 soru → 0.5x çarpan
+final_priority = base_priority * exam_weight_multiplier
+```
+
+**Result:** Matematik > Fizik > Tarih (sıralama doğru!)
+
+### 📊 Trend Analysis
+- Weekly/Monthly aggregation
+- Subject-specific history
+- 6-month default period
+
+---
+
+## ✅ Testing
+
+```bash
+# Test endpoints
+curl http://localhost:8000/health
+
+# Test progress endpoint (user_id gerekli)
+curl "http://localhost:8000/api/v1/student/progress/breakdown?user_id=your-uuid"
+
+# Test trends endpoint
+curl "http://localhost:8000/api/v1/student/progress/trends?user_id=your-uuid&period=6m"
+```
+
+---
+
+## 🌐 CORS Configuration
+
+Frontend origin allowed: `http://localhost:3000`
+
+Production'da `.env` dosyasında güncelle:
+```
+ALLOWED_ORIGINS=https://your-frontend-domain.com,http://localhost:3000
+```
+
+---
+
+## 🚀 Production Deployment
+
+### Railway / Render
+1. Push to GitHub
+2. Connect repository
+3. Set environment variables
+4. Auto-deploy
+
+### Vercel (Serverless)
+```bash
+npm install -g vercel
+vercel
+```
+
+---
+
+## 📝 Notes
+
+- JWT authentication (Week 2'de eklenecek)
+- Rate limiting (Week 3'te eklenecek)
+- Caching with Redis (Week 4'te eklenecek)
+
+---
+
+**Version:** 1.0  
+**Last Updated:** 2024-12-25  
+**Status:** MVP Phase (Week 2) ✅

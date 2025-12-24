@@ -127,13 +127,15 @@ app.include_router(api_router, prefix="/api/v1")
 app.include_router(student_router)
 
 # Progress router (YENİ - try-catch ile güvenli)
+# Progress router (MODULAR)
 try:
-    from app.api.v1.endpoints import progress
+    from app.api.v1.endpoints.progress import router as progress_router
     app.include_router(
-        progress.router, 
-        prefix="/api/v1", 
+        progress_router, 
+        prefix="/api/v1",  # ← BU DOĞRU
         tags=["progress"]
     )
+    
     print("✅ Progress router loaded successfully")
 except ImportError as e:
     print(f"⚠️  Progress router not found: {e}")
