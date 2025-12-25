@@ -209,7 +209,7 @@ export default function FeedbackButtons({
           >
             <span
               className={`${iconSizes[size]} ${
-                feedback && star <= feedback
+                feedback && star <= Number(feedback)
                   ? 'text-yellow-400'
                   : 'text-gray-300 hover:text-yellow-200'
               }`}

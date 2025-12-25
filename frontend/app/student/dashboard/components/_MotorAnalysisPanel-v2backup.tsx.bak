@@ -182,7 +182,8 @@ export default function MotorAnalysisPanel() {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                📊 Zorluk (>%60)
+                📊 Zorluk ({'>'}%60)
+
               </button>
               <button
                 onClick={() => setSelectedMotor('time')}
