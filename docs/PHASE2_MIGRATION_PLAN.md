@@ -1,61 +1,77 @@
 ======================================================================
-PHASE 2 I18N MIGRATION REPORT
-Generated: 2025-12-24 22:11:26 UTC
+PHASE 2 I18N MIGRATION REPORT (Enhanced)
+Generated: 2025-12-24 22:24:42 UTC
 ======================================================================
 
-📊 SUMMARY
+�� STATISTICS
 ----------------------------------------------------------------------
-Total items found: 6
-  - DATE_FORMATTING: 3
-  - GENERAL: 3
+Total files analyzed: 1
+Files with compliance headers: 1 (100%)
+Files needing migration: 1
+Total hardcoded items: 0
+Total TODO tags: 6
 
-📋 MIGRATION ITEMS
+📋 FILES REQUIRING MIGRATION
 ----------------------------------------------------------------------
 
-1. [GENERAL] backend/app/api/v1/endpoints/progress/calculators.py:17
-   # TODO: PHASE-2-I18N - Replace with database-driven translations
-
-
-2. [DATE_FORMATTING] backend/app/api/v1/endpoints/progress/calculators.py:29
-   # TODO: PHASE-2-I18N - Rename to format_date_localized and add language parameter
-
-
-3. [GENERAL] backend/app/api/v1/endpoints/progress/calculators.py:93
-   # TODO: PHASE-2-I18N - These strings should come from translations
-
-
-4. [GENERAL] backend/app/api/v1/endpoints/progress/calculators.py:124
-   # TODO: PHASE-2-I18N - Phase names and disclaimers should be localized
-
-
-5. [DATE_FORMATTING] backend/app/api/v1/endpoints/progress/calculators.py:250
-   # TODO: PHASE-2-I18N - Replace with: labels = [await format_date_localized(p, language, "short") for p in period_starts]
-
-
-6. [DATE_FORMATTING] backend/app/api/v1/endpoints/progress/calculators.py:254
-   # TODO: PHASE-2-I18N - Replace with: labels = [await format_date_localized(p, language, "long") for p in period_starts]
-
+1. backend/app/api/v1/endpoints/progress/calculators.py
+   ✅ Has compliance header
+   🏷️  TODO tags (6):
+      Line 61: # TODO: PHASE-2-I18N - Replace with database-driven translat...
+      Line 73: # TODO: PHASE-2-I18N - Rename to format_date_localized and a...
+      Line 138: # TODO: PHASE-2-I18N - These strings should come from transl...
+      ... and 3 more
 
 ======================================================================
-🚀 MIGRATION STEPS (Phase 2)
+✅ PHASE 2 MIGRATION CHECKLIST
 ======================================================================
 
-BACKEND:
-  1. Create database migration (languages + translations tables)
-  2. Implement get_translation() function
-  3. Replace TURKISH_MONTHS with database lookups
-  4. Add language parameter to all affected functions
-  5. Update API endpoints with Accept-Language header
+PREPARATION:
+  [ ] Review this migration report
+  [ ] Add headers to 0 files without them
+  [ ] Update existing headers with current items
+  [ ] Create Phase 2 branch: git checkout -b phase-2-i18n
 
-FRONTEND:
-  6. Install next-intl
-  7. Create locales/ directory structure
-  8. Implement LanguageProvider context
-  9. Create LanguageSwitcher component
-  10. Replace all hardcoded text with t() calls
+DATABASE (Week 1):
+  [ ] Create migration: 010_i18n_system.sql
+  [ ] Add languages table (tr, en, ko, ja, ar, es, fr, de)
+  [ ] Add translations table
+  [ ] Seed Turkish translations
+  [ ] Seed English translations
 
-TESTING:
-  11. Test all date displays in tr/en
-  12. Test language switching
-  13. Test API responses with different Accept-Language
-  14. Performance test (database lookups)
+BACKEND HELPERS (Week 1):
+  [ ] Create helpers/i18n.py
+  [ ] Implement get_user_language()
+  [ ] Implement get_translation()
+  [ ] Implement format_date_localized()
+  [ ] Add language detection middleware
+
+BACKEND FILES (1 files - Week 2):
+  [ ] Update function signatures (add language param)
+  [ ] Replace TURKISH_MONTHS with database lookups
+  [ ] Replace format_date_turkish() calls
+  [ ] Update API endpoints (Accept-Language)
+  [ ] Add language parameter to responses
+
+FRONTEND (Week 2-3):
+  [ ] Install: npm install next-intl
+  [ ] Create locales/tr/ and locales/en/
+  [ ] Create translation JSON files
+  [ ] Implement LanguageProvider
+  [ ] Create LanguageSwitcher component
+  [ ] Replace hardcoded text with t() calls
+  [ ] Test language switching
+
+TESTING (Week 3):
+  [ ] Unit tests for translation helpers
+  [ ] API tests with Accept-Language header
+  [ ] Frontend tests for language switching
+  [ ] Visual regression tests
+  [ ] Performance benchmarks
+
+DEPLOYMENT (Week 4):
+  [ ] Staging deployment
+  [ ] UAT with Turkish/English users
+  [ ] Production deployment
+  [ ] Monitor translation performance
+  [ ] Update documentation
