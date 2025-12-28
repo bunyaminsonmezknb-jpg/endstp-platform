@@ -158,3 +158,35 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "motors": 4}
+# ============================================
+# 6. MOTOR ROUTER (YENİ!)
+# ============================================
+
+try:
+    from app.api.v1.endpoints import motors, motor_health, motor_test
+    
+    # Motor Health Endpoints
+    app.include_router(
+        motor_health.router,
+        prefix="/api/v1/motors",
+        tags=["motor-health"]
+    )
+    
+    # Motor Test Endpoints (Logging Test)
+    app.include_router(
+        motor_test.router,
+        prefix="/api/v1/motors",
+        tags=["motors-test"]
+    )
+    
+    # Main Motors Endpoints
+    app.include_router(
+        motors.router,
+        prefix="/api/v1/motors",
+        tags=["motors"]
+    )
+    print("✅ Motors router loaded successfully")
+except ImportError as e:
+    print(f"⚠️  Motors router not found: {e}")
+except Exception as e:
+    print(f"❌ Error loading motors router: {e}")

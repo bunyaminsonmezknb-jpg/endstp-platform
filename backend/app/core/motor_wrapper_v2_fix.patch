@@ -1,0 +1,35 @@
+    async def _execute_v2(self, config, **kwargs) -> Dict[str, Any]:
+        """Execute v2 motor with tier-based features"""
+        if self.motor_type == MotorType.DIFFICULTY:
+            from .difficulty_engine_v2 import MasterDifficultyEngine
+            from datetime import datetime, timezone
+            
+            # Enable features based on tier
+            feature_flags = {
+                "enable_prerequisite": "prerequisite" in config.enabled_features,
+                "enable_bs_model": "bs_model" in config.enabled_features,
+                "enable_course_context": "course_context" in config.enabled_features,
+                "enable_speed": "speed" in config.enabled_features,
+                "enable_metacognition": "metacognition" in config.enabled_features,
+                "enable_digital_exhaust": "digital_exhaust" in config.enabled_features,
+                "enable_circadian": "circadian" in config.enabled_features,
+            }
+            
+            # Create mock test data for v2
+            mock_tests = [{
+                "test_id": "mock-test-1",
+                "attempt_date": datetime.now(timezone.utc),
+                "questions_total": 10,
+                "questions_correct": 7,
+                "questions_wrong": 2,
+                "questions_blank": 1,
+                "time_spent_seconds": 480,
+                "success_rate": 70.0
+            }]
+            
+            engine = MasterDifficultyEngine(**feature_flags)
+            result = engine.calculate_difficulty(
+                student_id=kwargs.get("student_id"),
+                topic_id=kwargs.get("topic_id"),
+                tests=mock_tests
+            )

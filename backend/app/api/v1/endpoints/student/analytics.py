@@ -7,6 +7,8 @@ Student Analytics Endpoints
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
+from app.core.motor_wrapper import MotorWrapper
+from app.core.motor_registry import MotorType, SubscriptionTier
 from app.db.session import get_supabase_admin
 from app.core.auth import get_current_user  # ← EKLE
 from pydantic import BaseModel
@@ -411,14 +413,27 @@ async def analyze_student_performance(current_user: dict = Depends(get_current_u
         recent_tests = tests[:3]
         avg_success = sum([t["success_rate"] for t in recent_tests]) / len(recent_tests)
         
-        difficulty_score = 0
-        
-        if avg_success < 50:
-            difficulty_score = 80 + (50 - avg_success)
-        elif avg_success < 70:
-            difficulty_score = 60 + (70 - avg_success)
-        else:
-            difficulty_score = max(0, 60 - (avg_success - 70))
+        # ✅ YENİ: MotorWrapper ile dene (tier-based v1/v2)
+        try:
+            wrapper = MotorWrapper()
+            user_tier = current_user.get("tier", "free")
+            motor_result = wrapper.calculate_difficulty(
+                motor_type="difficulty",
+                user_tier=user_tier,
+                topic_id=topic_id,
+                user_id=student_id
+            )
+            difficulty_score = motor_result["difficulty_percentage"]
+        except:
+            # ✅ ESKİ: Manuel hesaplama (fallback)
+            difficulty_score = 0
+            
+            if avg_success < 50:
+                difficulty_score = 80 + (50 - avg_success)
+            elif avg_success < 70:
+                difficulty_score = 60 + (70 - avg_success)
+            else:
+                difficulty_score = max(0, 60 - (avg_success - 70))
         
         if len(tests) < 3 and avg_success < 60:
             difficulty_score += 20
