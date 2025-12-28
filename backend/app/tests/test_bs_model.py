@@ -4,7 +4,7 @@ Test field mapping ve calculation accuracy
 """
 import pytest
 from datetime import date, timedelta
-from app.core.bs_model import BSModel, ReviewInput
+from app.core.bs_model_engine import BSModel, ReviewInput
 
 class TestBSModelFieldMapping:
     """BS-Model field mapping testleri"""

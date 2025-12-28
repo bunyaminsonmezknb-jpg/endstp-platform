@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 
 # Motor importları - DOĞRU isimler!
-from app.core.bs_model import BSModel, ReviewInput
+from app.core.bs_model_engine import BSModel, ReviewInput
 from app.core.difficulty_engine import DifficultyEngine, StatMetrics, DifficultyResult
-from app.core.time_analyzer import TimeAnalyzer
+from app.core.time_engine import TimeAnalyzer
 from app.core.priority_engine import PriorityEngine, TopicInput
 
 router = APIRouter(prefix="/api/v1/student", tags=["Student Analysis"])
