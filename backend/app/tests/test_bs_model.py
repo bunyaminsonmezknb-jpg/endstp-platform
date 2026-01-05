@@ -4,7 +4,7 @@ Test field mapping ve calculation accuracy
 """
 import pytest
 from datetime import date, timedelta
-from app.core.bs_model_engine import BSModel, ReviewInput
+from app.core.bs_model_engine_v1 import BSModelV1, ReviewInput
 
 class TestBSModelFieldMapping:
     """BS-Model field mapping testleri"""
@@ -28,7 +28,7 @@ class TestBSModelFieldMapping:
     
     def test_calculate_next_review_basic(self):
         """BS-Model basit next review hesaplaması"""
-        bs_model = BSModel()
+        bs_model = BSModelV1()
         
         # İlk review (yeni konu)
         review = ReviewInput(
@@ -61,7 +61,7 @@ class TestBSModelFieldMapping:
     
     def test_high_success_increases_interval(self):
         """Yüksek başarı interval'ı artırmalı"""
-        bs_model = BSModel()
+        bs_model = BSModelV1()
         
         # Yüksek başarılı review
         review_high = ReviewInput(
@@ -109,7 +109,7 @@ class TestBSModelIntegration:
     
     def test_multiple_reviews_progression(self):
         """Ardışık review'lar interval'ı artırmalı"""
-        bs_model = BSModel()
+        bs_model = BSModelV1()
         
         reviews = []
         for i in range(3):

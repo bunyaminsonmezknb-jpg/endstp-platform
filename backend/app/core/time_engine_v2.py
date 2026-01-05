@@ -1,0 +1,307 @@
+"""
+Time Analyzer v2.0.0 - SIGNAL-ONLY CONTEXT ENRICHER
+Enriches v1 with context signals (NO decisions, NO recommendations)
+
+PHILOSOPHY:
+- Context Enricher, NOT Decision Maker
+- Produces signals, NOT recommendations
+- Provides measurements, NOT judgments
+- Archetype/segment are IDENTITY, not interpretation
+- Orchestrator interprets signals
+
+CRITICAL RULES:
+1. NO "recommendation" fields
+2. NO "urgency" labels
+3. NO "note" with advice
+4. ONLY raw signals + measurements
+
+DEPENDENCY: v1, Context Layer, Segmentation Engine
+
+LOCK DATE: 2025-01-02
+VERSION: 2.0.0 FINAL (SIGNAL-ONLY)
+"""
+
+from typing import Optional, Dict, List
+from .time_engine_v1 import TimeAnalyzerV1, TimeConfig, TimeAnalysisResult
+
+
+class TimeAnalyzerV2:
+    """
+    Context-aware timing signal generator
+    
+    ROLE: Signal producer, NOT decision maker
+    
+    Produces:
+    - Raw measurements (slowdown_ratio, pace_deviation)
+    - Context signals (slow_pace_expected, fatigue_signal)
+    - Cohort comparisons (percentile, deviation)
+    - Archetype/segment identifiers (NOT interpretations)
+    
+    Does NOT produce:
+    - Recommendations
+    - Urgency labels
+    - Action suggestions
+    - Interpretive notes
+    """
+    
+    def __init__(self, context_service, segmentation_engine):
+        self.v1_analyzer = TimeAnalyzerV1()
+        self.context_service = context_service
+        self.segmentation_engine = segmentation_engine
+    
+    def analyze(
+        self,
+        total_duration: Optional[float],
+        total_questions: int,
+        success_rate: Optional[float],
+        student_id: str,
+        topic_id: str,
+        subject_code: str,
+        exam_type: Optional[str] = None,
+        question_times: Optional[List[float]] = None,
+        config: Optional[TimeConfig] = None
+    ) -> Dict:
+        """
+        Signal-only context-aware timing analysis
+        
+        Returns:
+            {
+                **v1_result,  # Base timing (untouched)
+                "archetype_signals": {...},   # Signals only
+                "cohort_signals": {...},      # Measurements only
+                "subject_baseline": {...},    # Reference data only
+                "fatigue_signals": {...},     # Detection only
+                "exam_baseline": {...},       # Reference only
+                "segment_id": str             # Identity only
+            }
+        """
+        
+        # 1. Get v1 baseline (never touch)
+        v1_result = self.v1_analyzer.analyze(
+            total_duration, total_questions, success_rate, config
+        )
+        
+        # 2. Get identifiers (no interpretation)
+        segment_level = self.segmentation_engine.get_level(student_id)["level"]
+        context = self.context_service.get_topic_context(topic_id)
+        archetype = context.get("archetype", "foundational")
+        
+        # 3. Generate signals (no decisions)
+        archetype_signals = self._generate_archetype_signals(
+            archetype, v1_result
+        )
+        
+        cohort_signals = self._generate_cohort_signals(
+            topic_id, segment_level, total_duration, total_questions
+        )
+        
+        subject_baseline = self._get_subject_baseline(subject_code)
+        
+        fatigue_signals = None
+        if question_times and len(question_times) >= 8:
+            fatigue_signals = self._generate_fatigue_signals(question_times)
+        
+        exam_baseline = None
+        if exam_type:
+            exam_baseline = self._get_exam_baseline(exam_type)
+        
+        return {
+            **v1_result.dict(),  # v1 untouched
+            "archetype_signals": archetype_signals,
+            "cohort_signals": cohort_signals,
+            "subject_baseline": subject_baseline,
+            "fatigue_signals": fatigue_signals,
+            "exam_baseline": exam_baseline,
+            "segment_id": segment_level,  # Identity only
+            "motor_version": "v2.0.0"
+        }
+    
+    def _generate_archetype_signals(
+        self,
+        archetype: str,
+        v1_result: TimeAnalysisResult
+    ) -> Dict:
+        """
+        Archetype-based signals (NO interpretation)
+        
+        Signals:
+        - archetype identifier
+        - slow_pace_expected (bool)
+        - speed_importance (categorical)
+        """
+        
+        # Archetype characteristics (NOT interpretations)
+        if archetype == "foundational":
+            slow_pace_expected = True
+            speed_importance = "low"  # Accuracy > speed
+        elif archetype == "synthesis":
+            slow_pace_expected = False
+            speed_importance = "high"  # Speed matters
+        else:
+            slow_pace_expected = False
+            speed_importance = "medium"
+        
+        return {
+            "archetype": archetype,
+            "slow_pace_expected": slow_pace_expected,
+            "speed_importance": speed_importance,
+            "is_slow": v1_result.is_slow,
+            "is_fast": v1_result.is_fast
+        }
+    
+    def _generate_cohort_signals(
+        self,
+        topic_id: str,
+        segment_level: str,
+        duration: Optional[float],
+        total_questions: int
+    ) -> Optional[Dict]:
+        """
+        Cohort comparison signals (NO labels like "top/bottom")
+        
+        Signals:
+        - percentile (numerical)
+        - deviation_from_median (numerical)
+        - cohort reference data
+        """
+        
+        if not duration or total_questions <= 0:
+            return None
+        
+        # Fetch cohort statistics
+        cohort_stats = self._get_cohort_statistics(topic_id, segment_level)
+        
+        if not cohort_stats:
+            return None
+        
+        # Calculate per-question time
+        student_per_q = duration / total_questions
+        
+        # Calculate percentile (numerical signal)
+        if student_per_q < cohort_stats["p25"]:
+            percentile = 25  # Faster than 75% of cohort
+        elif student_per_q < cohort_stats["p50"]:
+            percentile = 50
+        elif student_per_q < cohort_stats["p75"]:
+            percentile = 75
+        else:
+            percentile = 90  # Slower than 75% of cohort
+        
+        # Deviation (numerical signal)
+        deviation = student_per_q - cohort_stats["p50"]
+        deviation_percentage = (deviation / cohort_stats["p50"]) * 100
+        
+        return {
+            "cohort_level": segment_level,
+            "student_time_per_q": round(student_per_q, 2),
+            "cohort_p25": cohort_stats["p25"],
+            "cohort_p50": cohort_stats["p50"],
+            "cohort_p75": cohort_stats["p75"],
+            "percentile": percentile,
+            "deviation_from_median": round(deviation, 2),
+            "deviation_percentage": round(deviation_percentage, 1),
+            "cohort_size": cohort_stats["n"]
+        }
+    
+    def _get_subject_baseline(self, subject_code: str) -> Dict:
+        """
+        Subject-specific baseline (reference data only)
+        
+        NO interpretation, just reference values
+        """
+        
+        # Subject baselines (per question in minutes)
+        SUBJECT_BASELINES = {
+            "MAT": 1.8,  # Calculation-heavy
+            "FIZ": 1.6,  # Mixed
+            "KIM": 1.5,  # Moderate
+            "BIO": 1.3,  # Reading-heavy
+            "TUR": 1.2,  # Reading-fast
+            "TRH": 1.0,  # Knowledge recall
+        }
+        
+        ideal_per_q = SUBJECT_BASELINES.get(subject_code, 1.5)
+        
+        return {
+            "subject_code": subject_code,
+            "baseline_time_per_q": ideal_per_q
+        }
+    
+    def _generate_fatigue_signals(self, question_times: List[float]) -> Dict:
+        """
+        Fatigue detection signals (NO recommendations)
+        
+        Signals:
+        - fatigue_detected (bool)
+        - slowdown_ratio (float)
+        - first_half_avg vs second_half_avg
+        """
+        
+        first_3_avg = sum(question_times[:3]) / 3
+        last_3_avg = sum(question_times[-3:]) / 3
+        
+        if first_3_avg <= 0:
+            return {
+                "fatigue_detected": False,
+                "insufficient_data": True
+            }
+        
+        slowdown_ratio = last_3_avg / first_3_avg
+        
+        # Signal only (NO "take a break" recommendation)
+        return {
+            "fatigue_detected": slowdown_ratio > 1.5,
+            "slowdown_ratio": round(slowdown_ratio, 2),
+            "first_3_avg_seconds": round(first_3_avg, 1),
+            "last_3_avg_seconds": round(last_3_avg, 1)
+        }
+    
+    def _get_exam_baseline(self, exam_type: str) -> Dict:
+        """
+        Exam baseline reference (data only)
+        
+        NO interpretation, just reference values
+        """
+        
+        # Exam baselines
+        EXAM_BASELINES = {
+            "TYT": {
+                "total_questions": 120,
+                "total_time_minutes": 135,
+                "baseline_per_q": 1.125
+            },
+            "AYT-MAT": {
+                "total_questions": 40,
+                "total_time_minutes": 80,
+                "baseline_per_q": 2.0
+            },
+            "AYT-FEN": {
+                "total_questions": 40,
+                "total_time_minutes": 80,
+                "baseline_per_q": 2.0
+            }
+        }
+        
+        baseline = EXAM_BASELINES.get(exam_type)
+        
+        if not baseline:
+            return {"exam_type": exam_type, "baseline_available": False}
+        
+        return {
+            "exam_type": exam_type,
+            "baseline_available": True,
+            **baseline
+        }
+    
+    def _get_cohort_statistics(self, topic_id: str, level: str) -> Optional[Dict]:
+        """
+        Get cohort timing statistics (placeholder)
+        
+        TODO: Fetch from database
+        """
+        return {
+            "p25": 1.0,
+            "p50": 1.5,
+            "p75": 2.0,
+            "n": 100
+        }

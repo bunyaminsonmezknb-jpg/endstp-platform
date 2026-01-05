@@ -1,0 +1,355 @@
+-- =============================================
+-- VALIDATION QUERIES: Mathematics 3rd Batch
+-- Migration 008
+-- Date: 2024-12-30
+-- =============================================
+
+-- =============================================
+-- QUERY 1: Verify 7 new topics inserted
+-- =============================================
+
+SELECT 
+    t.code,
+    t.name_tr,
+    tc.metadata->>'archetype' as archetype,
+    tc.metadata->>'format_version' as format_version,
+    CASE 
+        WHEN tc.id IS NULL THEN '❌ NO CONTEXT'
+        ELSE '✅ HAS CONTEXT'
+    END as status
+FROM topics t
+LEFT JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN (
+    'MAT-INT-01', 'MAT-GEO-01', 'MAT-KOMB-01', 'MAT-OLAS-01',
+    'MAT-IST-01', 'MAT-VEK-01', 'MAT-MATRIS-01'
+)
+ORDER BY t.code;
+
+-- Expected: 7 rows, all with status='✅ HAS CONTEXT', format_version='1.0'
+
+-- =============================================
+-- QUERY 2: Cumulative math topics count
+-- =============================================
+
+SELECT 
+    COUNT(*) as total_topics,
+    COUNT(tc.id) as topics_with_context,
+    CASE 
+        WHEN COUNT(*) = COUNT(tc.id) THEN '✅ ALL COVERED'
+        ELSE '❌ GAPS EXIST'
+    END as coverage_status
+FROM topics t
+LEFT JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code LIKE 'MAT-%';
+
+-- Expected: total_topics=17, topics_with_context=17, coverage_status='✅ ALL COVERED'
+
+-- =============================================
+-- QUERY 3: Archetype distribution (cumulative)
+-- =============================================
+
+SELECT 
+    tc.metadata->>'archetype' as archetype,
+    COUNT(*) as count,
+    ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM topics WHERE code LIKE 'MAT-%'), 1) as percentage,
+    array_agg(t.code ORDER BY t.code) as topic_codes
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code LIKE 'MAT-%'
+GROUP BY tc.metadata->>'archetype'
+ORDER BY archetype;
+
+-- Expected: foundational=9 (52.9%), synthesis=8 (47.1%)
+-- Note: Near 50/50 balance, slightly more foundational (expected)
+
+-- =============================================
+-- QUERY 4: Prerequisite chains (3rd batch)
+-- =============================================
+
+SELECT 
+    t.code as topic_code,
+    t.name_tr as topic_name,
+    tc.metadata->'prerequisites' as prerequisites,
+    jsonb_array_length(tc.metadata->'prerequisites') as prereq_count
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN ('MAT-INT-01', 'MAT-OLAS-01', 'MAT-VEK-01')
+ORDER BY t.code;
+
+-- Expected:
+-- MAT-INT-01: prerequisites = ["MAT-TUREV-01", "MAT-FONK-01", "MAT-LIMIT-01"], count=3
+-- MAT-OLAS-01: prerequisites = ["MAT-KOMB-01"], count=1
+-- MAT-VEK-01: prerequisites = ["MAT-GEO-01"], count=1
+
+-- =============================================
+-- QUERY 5: Difficulty range check
+-- =============================================
+
+SELECT 
+    t.code,
+    t.name_tr,
+    t.difficulty_level,
+    tc.metadata->'exam_context'->>'difficulty_range' as context_difficulty,
+    tc.metadata->>'archetype' as archetype
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN (
+    'MAT-INT-01', 'MAT-GEO-01', 'MAT-KOMB-01', 'MAT-OLAS-01',
+    'MAT-IST-01', 'MAT-VEK-01', 'MAT-MATRIS-01'
+)
+ORDER BY t.difficulty_level;
+
+-- Expected: Difficulty range 3-9 (İstatistik easiest, İntegral hardest)
+
+-- =============================================
+-- QUERY 6: Splitting recommendations
+-- =============================================
+
+SELECT 
+    t.code,
+    t.name_tr,
+    tc.metadata->>'archetype' as archetype,
+    (tc.metadata->'splitting_guidance'->>'recommended')::boolean as splitting_recommended,
+    jsonb_array_length(
+        COALESCE(tc.metadata->'splitting_guidance'->'suggested_splits', '[]'::jsonb)
+    ) as split_count
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN (
+    'MAT-INT-01', 'MAT-GEO-01', 'MAT-KOMB-01', 'MAT-OLAS-01',
+    'MAT-IST-01', 'MAT-VEK-01', 'MAT-MATRIS-01'
+)
+ORDER BY splitting_recommended DESC, t.code;
+
+-- Expected: Synthesis topics have splitting_recommended=true
+
+-- =============================================
+-- QUERY 7: ROI guidance (3rd batch synthesis)
+-- =============================================
+
+SELECT 
+    t.code,
+    t.name_tr,
+    tc.metadata->'splitting_guidance'->'roi_notes'->'high_roi' as high_roi,
+    tc.metadata->'splitting_guidance'->'roi_notes'->'medium_roi' as medium_roi
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN ('MAT-INT-01', 'MAT-GEO-01', 'MAT-OLAS-01')
+  AND tc.metadata->>'archetype' = 'synthesis'
+ORDER BY t.code;
+
+-- Expected: All 3 synthesis topics have ROI guidance
+
+-- =============================================
+-- QUERY 8: 20min suitability
+-- =============================================
+
+SELECT 
+    t.code,
+    tc.metadata->>'archetype' as archetype,
+    (tc.metadata->'measurement_notes'->>'20min_suitable')::boolean as suitable_20min,
+    tc.metadata->'measurement_notes'->>'suitable_for' as suitable_for
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN (
+    'MAT-INT-01', 'MAT-GEO-01', 'MAT-KOMB-01', 'MAT-OLAS-01',
+    'MAT-IST-01', 'MAT-VEK-01', 'MAT-MATRIS-01'
+)
+ORDER BY suitable_20min DESC, t.code;
+
+-- Expected: Foundational topics mostly TRUE, synthesis mostly FALSE
+
+-- =============================================
+-- QUERY 9: Exam frequency distribution
+-- =============================================
+
+SELECT 
+    tc.metadata->'exam_context'->>'frequency' as exam_frequency,
+    COUNT(*) as topic_count,
+    array_agg(t.code ORDER BY t.code) as topics
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN (
+    'MAT-INT-01', 'MAT-GEO-01', 'MAT-KOMB-01', 'MAT-OLAS-01',
+    'MAT-IST-01', 'MAT-VEK-01', 'MAT-MATRIS-01'
+)
+GROUP BY tc.metadata->'exam_context'->>'frequency'
+ORDER BY 
+    CASE tc.metadata->'exam_context'->>'frequency'
+        WHEN 'Çok Yüksek' THEN 1
+        WHEN 'Yüksek' THEN 2
+        WHEN 'Orta' THEN 3
+        ELSE 4
+    END;
+
+-- Expected: Distribution across 3 tiers (Çok Yüksek, Yüksek, Orta)
+
+-- =============================================
+-- QUERY 10: Complete metadata validation
+-- =============================================
+
+SELECT 
+    t.code,
+    t.name_tr,
+    tc.metadata->>'format_version' as format_version,
+    tc.metadata->>'archetype' as archetype,
+    jsonb_array_length(tc.metadata->'learning_objectives') as objectives,
+    jsonb_array_length(tc.metadata->'prerequisites') as prerequisites,
+    jsonb_array_length(tc.metadata->'tags') as tags,
+    jsonb_array_length(tc.metadata->'common_mistakes') as mistakes,
+    CASE 
+        WHEN tc.metadata->'splitting_guidance' IS NOT NULL THEN 'YES'
+        ELSE 'NO'
+    END as has_splitting,
+    CASE 
+        WHEN tc.metadata->'measurement_notes' IS NOT NULL THEN 'YES'
+        ELSE 'NO'
+    END as has_measurement,
+    CASE 
+        WHEN tc.metadata->'exam_context' IS NOT NULL THEN 'YES'
+        ELSE 'NO'
+    END as has_exam_context
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code IN (
+    'MAT-INT-01', 'MAT-GEO-01', 'MAT-KOMB-01', 'MAT-OLAS-01',
+    'MAT-IST-01', 'MAT-VEK-01', 'MAT-MATRIS-01'
+)
+ORDER BY t.code;
+
+-- Expected: All rows with complete metadata (all 'YES')
+
+-- =============================================
+-- QUERY 11: CUMULATIVE SUMMARY (All Math Topics)
+-- =============================================
+
+SELECT 
+    'Total Topics' as metric,
+    COUNT(*)::text as value
+FROM topics t
+WHERE t.code LIKE 'MAT-%'
+
+UNION ALL
+
+SELECT 
+    'With Context' as metric,
+    COUNT(*)::text as value
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code LIKE 'MAT-%'
+
+UNION ALL
+
+SELECT 
+    'Foundational' as metric,
+    COUNT(*)::text as value
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code LIKE 'MAT-%'
+  AND tc.metadata->>'archetype' = 'foundational'
+
+UNION ALL
+
+SELECT 
+    'Synthesis' as metric,
+    COUNT(*)::text as value
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code LIKE 'MAT-%'
+  AND tc.metadata->>'archetype' = 'synthesis'
+
+UNION ALL
+
+SELECT 
+    'With Prerequisites' as metric,
+    COUNT(*)::text as value
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code LIKE 'MAT-%'
+  AND jsonb_array_length(tc.metadata->'prerequisites') > 0
+
+UNION ALL
+
+SELECT 
+    'Completion %' as metric,
+    ROUND(COUNT(*) * 100.0 / 40, 1)::text || '%' as value
+FROM topics t
+JOIN topic_contexts tc ON t.id = tc.topic_id
+WHERE t.code LIKE 'MAT-%';
+
+-- Expected:
+-- Total Topics: 17
+-- With Context: 17
+-- Foundational: 9
+-- Synthesis: 8
+-- With Prerequisites: ~6-7
+-- Completion %: 42.5%
+
+-- =============================================
+-- FINAL HEALTH CHECK
+-- =============================================
+
+DO $$
+DECLARE
+    v_batch3_count INT;
+    v_total_count INT;
+    v_foundational INT;
+    v_synthesis INT;
+    v_prereq_chains INT;
+BEGIN
+    -- Count 3rd batch topics
+    SELECT COUNT(*) INTO v_batch3_count
+    FROM topics t
+    JOIN topic_contexts tc ON t.id = tc.topic_id
+    WHERE t.code IN (
+        'MAT-INT-01', 'MAT-GEO-01', 'MAT-KOMB-01', 'MAT-OLAS-01',
+        'MAT-IST-01', 'MAT-VEK-01', 'MAT-MATRIS-01'
+    );
+    
+    -- Count all math topics
+    SELECT COUNT(*) INTO v_total_count
+    FROM topics t
+    JOIN topic_contexts tc ON t.id = tc.topic_id
+    WHERE t.code LIKE 'MAT-%';
+    
+    -- Count archetypes
+    SELECT COUNT(*) INTO v_foundational
+    FROM topics t
+    JOIN topic_contexts tc ON t.id = tc.topic_id
+    WHERE t.code LIKE 'MAT-%'
+      AND tc.metadata->>'archetype' = 'foundational';
+    
+    SELECT COUNT(*) INTO v_synthesis
+    FROM topics t
+    JOIN topic_contexts tc ON t.id = tc.topic_id
+    WHERE t.code LIKE 'MAT-%'
+      AND tc.metadata->>'archetype' = 'synthesis';
+    
+    -- Count prerequisite chains
+    SELECT COUNT(*) INTO v_prereq_chains
+    FROM topics t
+    JOIN topic_contexts tc ON t.id = tc.topic_id
+    WHERE t.code LIKE 'MAT-%'
+      AND jsonb_array_length(tc.metadata->'prerequisites') > 0;
+    
+    RAISE NOTICE '============================================';
+    RAISE NOTICE 'MIGRATION 008 - FINAL VALIDATION';
+    RAISE NOTICE '============================================';
+    RAISE NOTICE '3rd Batch Topics: %', v_batch3_count;
+    RAISE NOTICE 'Total Math Topics: %', v_total_count;
+    RAISE NOTICE 'Foundational: %', v_foundational;
+    RAISE NOTICE 'Synthesis: %', v_synthesis;
+    RAISE NOTICE 'Prerequisite Chains: %', v_prereq_chains;
+    RAISE NOTICE 'Completion: % %% (out of ~40)', ROUND(v_total_count * 100.0 / 40, 1);
+    RAISE NOTICE '============================================';
+    
+    IF v_batch3_count = 7 AND v_total_count = 17 THEN
+        RAISE NOTICE '✅ 3RD BATCH: SUCCESS';
+        RAISE NOTICE '✅ Mathematics: 42.5%% complete (17/40)';
+        RAISE NOTICE '✅ Balance: % foundational, % synthesis', v_foundational, v_synthesis;
+    ELSE
+        RAISE NOTICE '❌ UNEXPECTED COUNT';
+    END IF;
+    
+    RAISE NOTICE '============================================';
+END $$;

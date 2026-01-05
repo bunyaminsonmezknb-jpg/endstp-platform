@@ -1,0 +1,252 @@
+"""
+Motor Wrapper
+Automatic v1/v2 selection with fallback mechanism
+
+Responsibilities:
+- Select motor version based on user tier
+- Handle v2 errors → auto fallback to v1
+- Log performance metrics
+- Ensure seamless user experience
+"""
+
+import logging
+from typing import Dict, Optional, List
+from enum import Enum
+
+
+logger = logging.getLogger(__name__)
+
+
+class UserTier(str, Enum):
+    """User subscription tiers"""
+    FREE = "free"
+    BASIC = "basic"
+    MEDIUM = "medium"
+    PREMIUM = "premium"
+    INSTITUTION = "institution"
+
+
+class MotorWrapper:
+    """
+    Motor version orchestration with fallback
+    
+    Rules:
+    - FREE/BASIC → v1 only
+    - PREMIUM/INSTITUTION → v2 (with v1 fallback)
+    - v2 error → silent v1 fallback
+    """
+    
+    def __init__(
+        self,
+        difficulty_v1,
+        difficulty_v2,
+        bs_model_v1,
+        bs_model_v2,
+        priority_v1,
+        priority_v2,
+        time_v1,
+        time_v2
+    ):
+        """
+        Initialize with all motor instances
+        """
+        self.difficulty_v1 = difficulty_v1
+        self.difficulty_v2 = difficulty_v2
+        self.bs_model_v1 = bs_model_v1
+        self.bs_model_v2 = bs_model_v2
+        self.priority_v1 = priority_v1
+        self.priority_v2 = priority_v2
+        self.time_v1 = time_v1
+        self.time_v2 = time_v2
+    
+    # ========================================
+    # DIFFICULTY MOTOR
+    # ========================================
+    
+    def calculate_difficulty(
+        self,
+        input_data,
+        student_id: Optional[str] = None,
+        user_tier: UserTier = UserTier.FREE,
+        config: Optional[object] = None
+    ) -> Dict:
+        """
+        Calculate difficulty with automatic v1/v2 selection
+        
+        Args:
+            input_data: DifficultyInput
+            student_id: Student UUID (required for v2)
+            user_tier: User subscription tier
+            config: Optional config
+        
+        Returns:
+            Difficulty result (v1 or v2 format)
+        """
+        
+        # v2 for premium users
+        if user_tier in [UserTier.PREMIUM, UserTier.INSTITUTION] and student_id:
+            try:
+                result = self.difficulty_v2.calculate(
+                    input_data, student_id, config
+                )
+                result["motor_version"] = "v2"
+                return result
+            except Exception as e:
+                logger.error(f"Difficulty v2 failed: {e}, falling back to v1")
+        
+        # v1 fallback or default
+        result = self.difficulty_v1.calculate(input_data, config)
+        result_dict = result.dict()
+        result_dict["motor_version"] = "v1"
+        return result_dict
+    
+    # ========================================
+    # BS-MODEL MOTOR
+    # ========================================
+    
+    def calculate_bs_model(
+        self,
+        input_data,
+        student_id: Optional[str] = None,
+        topic_id: Optional[str] = None,
+        user_tier: UserTier = UserTier.FREE,
+        config: Optional[object] = None
+    ) -> Dict:
+        """
+        Calculate spaced repetition interval
+        
+        Args:
+            input_data: BSModelInput
+            student_id: Student UUID (required for v2)
+            topic_id: Topic UUID (required for v2)
+            user_tier: User subscription tier
+            config: Optional config
+        
+        Returns:
+            BS-Model result (v1 or v2 format)
+        """
+        
+        # v2 for premium users
+        if (user_tier in [UserTier.PREMIUM, UserTier.INSTITUTION] 
+            and student_id and topic_id):
+            try:
+                result = self.bs_model_v2.calculate(
+                    input_data, student_id, topic_id, config
+                )
+                result["motor_version"] = "v2"
+                return result
+            except Exception as e:
+                logger.error(f"BS-Model v2 failed: {e}, falling back to v1")
+        
+        # v1 fallback or default
+        result = self.bs_model_v1.calculate(input_data, config)
+        result_dict = result.dict()
+        result_dict["motor_version"] = "v1"
+        return result_dict
+    
+    # ========================================
+    # PRIORITY MOTOR
+    # ========================================
+    
+    def calculate_priority(
+        self,
+        topics: List,
+        student_id: Optional[str] = None,
+        user_tier: UserTier = UserTier.FREE,
+        config: Optional[object] = None
+    ) -> Dict:
+        """
+        Calculate topic priorities
+        
+        Args:
+            topics: List[TopicInput]
+            student_id: Student UUID (required for v2)
+            user_tier: User subscription tier
+            config: Optional config
+        
+        Returns:
+            Priority result (v1 or v2 format)
+        """
+        
+        # v2 for premium users
+        if user_tier in [UserTier.PREMIUM, UserTier.INSTITUTION] and student_id:
+            try:
+                result = self.priority_v2.analyze(topics, student_id, config)
+                result["motor_version"] = "v2"
+                return result
+            except Exception as e:
+                logger.error(f"Priority v2 failed: {e}, falling back to v1")
+        
+        # v1 fallback or default
+        results = self.priority_v1.analyze(topics, config)
+        return {
+            "priorities": [r.dict() for r in results],
+            "motor_version": "v1"
+        }
+    
+    # ========================================
+    # TIME ANALYZER MOTOR
+    # ========================================
+    
+    def analyze_time(
+        self,
+        total_duration: Optional[float],
+        total_questions: int,
+        success_rate: Optional[float] = None,
+        student_id: Optional[str] = None,
+        topic_id: Optional[str] = None,
+        subject_code: Optional[str] = None,
+        user_tier: UserTier = UserTier.FREE,
+        exam_type: Optional[str] = None,
+        question_times: Optional[List[float]] = None,
+        config: Optional[object] = None
+    ) -> Dict:
+        """
+        Analyze timing
+        
+        Args:
+            total_duration: Total time in minutes
+            total_questions: Number of questions
+            success_rate: Success rate 0-1
+            student_id: Student UUID (required for v2)
+            topic_id: Topic UUID (required for v2)
+            subject_code: Subject code (required for v2)
+            user_tier: User subscription tier
+            exam_type: Exam type (optional for v2)
+            question_times: Question-level timings (optional for v2)
+            config: Optional config
+        
+        Returns:
+            Time analysis result (v1 or v2 format)
+        """
+        
+        # v2 for premium users
+        if (user_tier in [UserTier.PREMIUM, UserTier.INSTITUTION] 
+            and student_id and topic_id and subject_code):
+            try:
+                result = self.time_v2.analyze(
+                    total_duration,
+                    total_questions,
+                    success_rate,
+                    student_id,
+                    topic_id,
+                    subject_code,
+                    exam_type,
+                    question_times,
+                    config
+                )
+                result["motor_version"] = "v2"
+                return result
+            except Exception as e:
+                logger.error(f"Time v2 failed: {e}, falling back to v1")
+        
+        # v1 fallback or default
+        result = self.time_v1.analyze(
+            total_duration,
+            total_questions,
+            success_rate,
+            config
+        )
+        result_dict = result.dict()
+        result_dict["motor_version"] = "v1"
+        return result_dict

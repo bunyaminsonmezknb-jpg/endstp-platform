@@ -1,0 +1,77 @@
+.
+├── CHANGELOG.md:Zone.Identifier
+├── ENDSTP_MASTER_CONTEXT.md
+├── ENDSTP_MASTER_CONTEXT.md:Zone.Identifier
+├── PROGRESS_LOG.md
+├── PROGRESS_LOG.md:Zone.Identifier
+├── README.md
+├── README.md:Zone.Identifier
+├── _archive_docs_20241228
+│   ├── CHANGELOG.md
+│   ├── DAILY-REPORT-2024-11-30.md
+│   ├── ROADMAP.md
+│   ├── proje-agaci.txt
+│   └── project_structure.txt
+├── backend
+│   ├── README.md
+│   ├── _archive_20241228
+│   ├── app
+│   ├── benchmark_v1.py
+│   ├── check_questions.py
+│   ├── logs
+│   ├── migrations
+│   ├── pytest.ini
+│   ├── requirements.txt
+│   └── scripts
+├── backend_structure.txt
+├── backup
+│   └── student.py.old
+├── database
+│   ├── ROADMAP.md
+│   ├── derskonular.xlsx
+│   ├── generate_smart_match_sql.py
+│   ├── generate_smart_match_sql.py:Zone.Identifier
+│   ├── generate_sql_from_excel.py
+│   ├── migrations
+│   ├── update_topics_from_excel.py
+│   └── update_topics_year_data.sql
+├── docs
+│   ├── CHANGELOG_DIFFICULTY_ENGINE.md
+│   ├── DEPLOYMENT_GUIDE.md
+│   ├── DEPLOYMENT_GUIDE.md:Zone.Identifier
+│   ├── GLOBAL_FIRST_GUIDE.md
+│   ├── MIGRATIONS_COMPLETE_SUMMARY.md
+│   ├── MIGRATIONS_COMPLETE_SUMMARY.md:Zone.Identifier
+│   ├── MOTOR_VERSION_STRATEGY.md
+│   ├── PHASE2_MIGRATION_PLAN.md
+│   ├── UI_INTEGRATION_GUIDE.md
+│   ├── UI_INTEGRATION_GUIDE.md:Zone.Identifier
+│   └── VERSION_GOVERNANCE.md
+├── frontend
+│   ├── app
+│   ├── components
+│   ├── end-stp-frontend@0.1.0
+│   ├── frontend@0.1.0
+│   ├── hooks
+│   ├── lib
+│   ├── middleware
+│   ├── middleware.ts
+│   ├── middleware.ts.backup
+│   ├── next
+│   ├── next-env.d.ts
+│   ├── next.config.js
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── public
+│   ├── tailwind.config.js
+│   └── tsconfig.json
+├── frontend_structure.txt
+├── next
+├── package-lock.json
+├── package.json
+├── project_root.txt
+└── scripts
+    └── migrate_to_i18n.py
+
+19 directories, 55 files

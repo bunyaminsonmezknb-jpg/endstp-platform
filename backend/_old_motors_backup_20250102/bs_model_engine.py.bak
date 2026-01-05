@@ -1,5 +1,5 @@
 """
-BS-Model v2025 - WITH OPTIONAL FIELDS
+BS-Model v2025 - WITH OPTIONAL FIELDS v1
 """
 
 from typing import Optional

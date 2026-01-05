@@ -9,10 +9,10 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 
 # Motor importları - DOĞRU isimler!
-from app.core.bs_model_engine import BSModel, ReviewInput
-from app.core.difficulty_engine import DifficultyEngine, StatMetrics, DifficultyResult
-from app.core.time_engine import TimeAnalyzer
-from app.core.priority_engine import PriorityEngine, TopicInput
+from app.core.bs_model_engine_v1 import BSModelV1, ReviewInput
+from app.core.difficulty_engine_v1 import DifficultyEngineV1, DifficultyInput, DifficultyOutput
+from app.core.time_engine_v1 import TimeAnalyzerV1
+from app.core.priority_engine_v1 import PriorityEngineV1, TopicInput
 
 router = APIRouter(prefix="/api/v1/student", tags=["Student Analysis"])
 
@@ -115,7 +115,7 @@ async def analyze_student_topics(request: AnalyzeRequest):
     
     for topic in request.topics:
         # BS-MODEL
-        bs_result = BSModel.calculate(ReviewInput(
+        bs_result = BSModelV1.calculate(ReviewInput(
             correct=topic.correct,
             incorrect=topic.incorrect,
             blank=topic.blank,
@@ -138,14 +138,14 @@ async def analyze_student_topics(request: AnalyzeRequest):
             net=topic.correct - (topic.incorrect * 0.25)
         )
         
-        diff_result = DifficultyEngine.calculate(
+        diff_result = DifficultyEngineV1.calculate(
             topic_stats=topic_stats,
             course_total_stats=course_stats
         )
         
         # TIME ANALYZER
         success_rate = topic.correct / topic.total_questions
-        time_result = TimeAnalyzer.analyze(
+        time_result = TimeAnalyzerV1.calculate(
             total_duration=topic.duration_minutes,
             total_questions=topic.total_questions,
             ideal_time_per_question=1.5,
@@ -175,7 +175,7 @@ async def analyze_student_topics(request: AnalyzeRequest):
         })
     
     # PRIORITY ENGINE
-    priority_results = PriorityEngine.analyze(priority_inputs)
+    priority_results = PriorityEngineV1.calculate(priority_inputs)
     priority_map = {p.topic_id: p for p in priority_results}
     
     final_topics = []

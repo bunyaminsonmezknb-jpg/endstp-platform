@@ -1,0 +1,93 @@
+backend/
+├── README.md
+├── _archive_20241228
+│   ├── README_old.md
+│   ├── main.py.OLD
+│   ├── models
+│   │   ├── __init__.py
+│   │   └── schemas.py
+│   └── services
+│       ├── __init__.py
+│       └── analytics_service.py
+├── app
+│   ├── __init__.py
+│   ├── api
+│   │   ├── __init__.py
+│   │   ├── deps.py
+│   │   ├── v1
+│   │   └── v2
+│   ├── core
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── bs_model_engine.py
+│   │   ├── config.py
+│   │   ├── difficulty_engine.py
+│   │   ├── difficulty_engine_v1.0.0_backup.py
+│   │   ├── difficulty_engine_v2.py
+│   │   ├── motor_logger.py
+│   │   ├── motor_registry.py
+│   │   ├── motor_wrapper.py
+│   │   ├── motor_wrapper_fix.py
+│   │   ├── motor_wrapper_v2_fix.patch
+│   │   ├── priority_engine.py
+│   │   ├── segmentation_engine_v1_mini.py
+│   │   └── time_engine.py
+│   ├── db
+│   │   ├── __init__.py
+│   │   └── session.py
+│   ├── jobs
+│   │   └── generate_daily_tasks.py
+│   ├── main.py
+│   ├── main.py.backup
+│   ├── models
+│   │   ├── __init__.py
+│   │   └── user.py
+│   ├── schemas
+│   │   └── difficulty_v2.py
+│   ├── services
+│   │   ├── difficulty_service.py
+│   │   └── motors
+│   └── tests
+│       ├── quick_test.py
+│       ├── test_bs_model.py
+│       ├── test_difficulty_v2.py
+│       ├── test_motor_integration.py
+│       ├── test_motor_integration_sync.py
+│       ├── test_motor_strategy.py
+│       ├── test_motors.py
+│       └── test_motors_simple.py
+├── benchmark_v1.py
+├── check_questions.py
+├── logs
+│   └── motor_activity.log
+├── migrations
+│   ├── 001_feature_flags_table.sql
+│   ├── 001_multi_curriculum.sql
+│   ├── 002_initial_flags.sql
+│   ├── 003_sample_metadata.sql
+│   ├── 006_smart_mistake_analyzer_v3.4.1_FINAL_POLISH.sql
+│   ├── 006_smart_mistake_analyzer_v3.4.1_FINAL_POLISH.sql:Zone.Identifier
+│   ├── 007_human_summary_system.sql.save
+│   ├── 007_human_summary_system.sql.save.1
+│   ├── 007_ui_reflex_bridge_v1_SAFE.sql
+│   ├── 007_ui_reflex_bridge_v1_SAFE.sql:Zone.Identifier
+│   ├── 20241128_add_5_motors.sql
+│   ├── TABLE_CREATION_ANAYASA.sql
+│   ├── api_commercial_columns.sql
+│   ├── check_policies.sql
+│   ├── fix_rls_policy.sql
+│   ├── fix_rls_policy_v2.sql
+│   └── table_template.sql
+├── pytest.ini
+├── requirements.txt
+└── scripts
+    ├── inspect_tables.py
+    ├── list_tables.py
+    ├── run_migration.py
+    ├── seed_curriculum_data.py
+    ├── seed_subjects.py
+    ├── test_motor_mock.py
+    ├── test_real_motor.py
+    └── view_motor_stats.py
+
+18 directories, 72 files

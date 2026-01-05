@@ -1,0 +1,164 @@
+"""
+Student Segmentation Engine v1 Mini
+Temporary simple version for motor integration testing
+
+NOTE: Uses mock data for now, real DB integration in Phase 3
+"""
+
+from typing import Dict, Optional
+from datetime import datetime, timedelta
+
+class SegmentationEngineV1Mini:
+    """
+    Simplified segmentation for motor development
+    Uses mock data for testing (no DB dependency)
+    """
+    
+    # Segment level definitions
+    LEVELS = ["L1", "L2", "L3", "L4", "L5", "L6", "L7"]
+    
+    # Default segment when data insufficient
+    DEFAULT_SEGMENT = {
+        "level": "L4",
+        "score": 50.0,
+        "confidence": 0.5,
+        "version": "v1-mini",
+        "reason": "insufficient_data"
+    }
+    
+    # Mock user data for testing (temporary)
+    MOCK_USER_DATA = {
+        "test-cold-start": {
+            "test_count": 1,
+            "avg_success_rate": 0.50,
+            "active_days": 1
+        },
+        "test-struggling": {
+            "test_count": 8,
+            "avg_success_rate": 0.35,
+            "active_days": 6
+        },
+        "test-average": {
+            "test_count": 15,
+            "avg_success_rate": 0.65,
+            "active_days": 10
+        },
+        "test-elite": {
+            "test_count": 25,
+            "avg_success_rate": 0.92,
+            "active_days": 14
+        },
+        # Generic fallback for any user
+        "default": {
+            "test_count": 5,
+            "avg_success_rate": 0.60,
+            "active_days": 4
+        }
+    }
+    
+    def get_segment(self, user_id: str, window_days: int = 14) -> Dict:
+        """Calculate student segment level"""
+        try:
+            data = self._get_user_data(user_id, window_days)
+            
+            if not data:
+                return self._return_default("no_data")
+            
+            test_count = data.get('test_count', 0)
+            avg_success_rate = data.get('avg_success_rate', 0.0)
+            
+            # Cold start detection
+            if test_count < 3:
+                return self._create_segment(
+                    level="L1",
+                    score=20.0,
+                    confidence=0.3,
+                    signals={
+                        "test_count": test_count,
+                        "avg_success_rate": avg_success_rate,
+                        "reason": "cold_start"
+                    }
+                )
+            
+            level = self._map_success_to_level(avg_success_rate)
+            score = self._calculate_score(avg_success_rate, test_count)
+            confidence = self._calculate_confidence(test_count, window_days)
+            
+            return self._create_segment(
+                level=level,
+                score=score,
+                confidence=confidence,
+                signals={
+                    "test_count": test_count,
+                    "avg_success_rate": avg_success_rate,
+                    "window_days": window_days
+                }
+            )
+            
+        except Exception as e:
+            print(f"Segmentation error: {e}")
+            return self._return_default("error")
+    
+    def _get_user_data(self, user_id: str, window_days: int) -> Optional[Dict]:
+        """Fetch user test data (mock for now)"""
+        if user_id in self.MOCK_USER_DATA:
+            return self.MOCK_USER_DATA[user_id]
+        return self.MOCK_USER_DATA["default"]
+    
+    def _map_success_to_level(self, success_rate: float) -> str:
+        """Map success rate to segment level"""
+        if success_rate < 0.40:
+            return "L2"
+        elif success_rate < 0.55:
+            return "L3"
+        elif success_rate < 0.70:
+            return "L4"
+        elif success_rate < 0.80:
+            return "L5"
+        elif success_rate < 0.90:
+            return "L6"
+        else:
+            return "L7"
+    
+    def _calculate_score(self, success_rate: float, test_count: int) -> float:
+        """Calculate segment score (0-100)"""
+        base_score = success_rate * 100
+        test_bonus = min(test_count / 10.0, 1.0) * 10
+        total_score = base_score + test_bonus
+        return round(min(total_score, 100.0), 2)
+    
+    def _calculate_confidence(self, test_count: int, window_days: int) -> float:
+        """Calculate confidence in segment assignment"""
+        test_factor = min(test_count / 10.0, 1.0)
+        window_factor = min(window_days / 14.0, 1.0)
+        confidence = 0.3 + (test_factor * 0.5) + (window_factor * 0.2)
+        return round(min(confidence, 1.0), 2)
+    
+    def _create_segment(self, level: str, score: float, confidence: float, signals: Dict) -> Dict:
+        """Create standard segment response"""
+        return {
+            "level": level,
+            "score": score,
+            "confidence": confidence,
+            "version": "v1-mini-mock",
+            "signals": signals,
+            "computed_at": datetime.utcnow().isoformat()
+        }
+    
+    def _return_default(self, reason: str) -> Dict:
+        """Return default segment with reason"""
+        default = self.DEFAULT_SEGMENT.copy()
+        default["reason"] = reason
+        default["computed_at"] = datetime.utcnow().isoformat()
+        return default
+
+
+# Singleton instance
+_segmentation_engine = None
+
+def get_segmentation_engine() -> SegmentationEngineV1Mini:
+    """Get or create segmentation engine instance"""
+    global _segmentation_engine
+    if _segmentation_engine is None:
+        _segmentation_engine = SegmentationEngineV1Mini()
+    return _segmentation_engine

@@ -5,10 +5,10 @@ pytest ile çalıştırılır: pytest app/tests/test_motors.py -v
 
 import pytest
 from datetime import datetime, timedelta
-from app.core.bs_model_engine import BSModel, ReviewInput
-from app.core.difficulty_engine import DifficultyEngine, StatMetrics
-from app.core.time_engine import TimeAnalyzer
-from app.core.priority_engine import PriorityEngine, TopicInput
+from app.core.bs_model_engine_v1 import BSModelV1, ReviewInput
+from app.core.difficulty_engine_v1 import DifficultyEngineV1, StatMetrics
+from app.core.time_engine_v1 import TimeAnalyzerV1
+from app.core.priority_engine_v1 import PriorityEngineV1, TopicInput
 
 
 class TestBSModel:
@@ -16,7 +16,7 @@ class TestBSModel:
     
     def test_new_topic(self):
         """Yeni konu testi"""
-        result = BSModel.calculate(ReviewInput(
+        result = BSModelV1.calculate(ReviewInput(
             correct=7, incorrect=2, blank=1, total=10,
             difficulty=3, repetitions=0
         ))
@@ -27,7 +27,7 @@ class TestBSModel:
     
     def test_hero_mode(self):
         """Hero mode testi"""
-        result = BSModel.calculate(ReviewInput(
+        result = BSModelV1.calculate(ReviewInput(
             correct=8, incorrect=1, blank=1, total=10,
             difficulty=3, current_ef=2.2, current_ia=7,
             actual_gap=20, repetitions=3
@@ -38,7 +38,7 @@ class TestBSModel:
     
     def test_reset_mode(self):
         """Reset mode testi"""
-        result = BSModel.calculate(ReviewInput(
+        result = BSModelV1.calculate(ReviewInput(
             correct=3, incorrect=5, blank=2, total=10,
             difficulty=4, current_ef=2.0, current_ia=7,
             actual_gap=25, repetitions=3
@@ -50,7 +50,7 @@ class TestBSModel:
     
     def test_normal_mode(self):
         """Normal mode testi"""
-        result = BSModel.calculate(ReviewInput(
+        result = BSModelV1.calculate(ReviewInput(
             correct=7, incorrect=2, blank=1, total=10,
             difficulty=3, current_ef=2.2, current_ia=6,
             actual_gap=7, repetitions=2
@@ -65,7 +65,7 @@ class TestDifficultyEngine:
     
     def test_high_blank_rate(self):
         """Yüksek boş oranı testi"""
-        result = DifficultyEngine.calculate(StatMetrics(
+        result = DifficultyEngineV1.calculate(StatMetrics(
             total_questions=10, correct=4, wrong=2, blank=4, net=3.0
         ))
         assert result.difficulty_level >= 2
@@ -73,14 +73,14 @@ class TestDifficultyEngine:
     
     def test_high_wrong_rate(self):
         """Yüksek yanlış oranı testi"""
-        result = DifficultyEngine.calculate(StatMetrics(
+        result = DifficultyEngineV1.calculate(StatMetrics(
             total_questions=10, correct=2, wrong=8, blank=0, net=-4.0
         ))
         assert result.difficulty_level >= 2
     
     def test_perfect_score(self):
         """Mükemmel skor testi"""
-        result = DifficultyEngine.calculate(StatMetrics(
+        result = DifficultyEngineV1.calculate(StatMetrics(
             total_questions=10, correct=10, wrong=0, blank=0, net=10.0
         ))
         assert result.difficulty_level == 1
@@ -94,7 +94,7 @@ class TestDifficultyEngine:
         course = StatMetrics(
             total_questions=100, correct=60, wrong=20, blank=20, net=50.0
         )
-        result = DifficultyEngine.calculate(topic, course)
+        result = DifficultyEngineV1.calculate(topic, course)
         assert result.factors["context_stress"] > 0
 
 
@@ -103,7 +103,7 @@ class TestTimeAnalyzer:
     
     def test_fast_and_successful(self):
         """Hızlı ve başarılı testi"""
-        result = TimeAnalyzer.analyze(
+        result = TimeAnalyzerV1.analyze(
             total_duration=10, total_questions=10,
             ideal_time_per_question=1.5, success_rate=0.9
         )
@@ -112,7 +112,7 @@ class TestTimeAnalyzer:
     
     def test_fast_but_failed(self):
         """Hızlı ama başarısız testi"""
-        result = TimeAnalyzer.analyze(
+        result = TimeAnalyzerV1.analyze(
             total_duration=10, total_questions=10,
             ideal_time_per_question=1.5, success_rate=0.4
         )
@@ -121,7 +121,7 @@ class TestTimeAnalyzer:
     
     def test_slow(self):
         """Yavaş testi"""
-        result = TimeAnalyzer.analyze(
+        result = TimeAnalyzerV1.analyze(
             total_duration=25, total_questions=10,
             ideal_time_per_question=1.5
         )
@@ -130,7 +130,7 @@ class TestTimeAnalyzer:
     
     def test_no_duration(self):
         """Süre yok testi"""
-        result = TimeAnalyzer.analyze(
+        result = TimeAnalyzerV1.analyze(
             total_duration=None, total_questions=10
         )
         assert result.time_modifier == 1.0
@@ -154,7 +154,7 @@ class TestPriorityEngine:
                 topic_weight=0.03, course_importance=40
             )
         ]
-        results = PriorityEngine.analyze(topics)
+        results = PriorityEngineV1.analyze(topics)
         assert len(results) == 2
         assert results[0].topic_name == "Fonksiyonlar"  # En yüksek öncelik
         assert results[0].priority_score > results[1].priority_score
@@ -169,7 +169,7 @@ class TestPriorityEngine:
                 topic_weight=0.1, course_importance=40
             )
         ]
-        results = PriorityEngine.analyze(topics)
+        results = PriorityEngineV1.analyze(topics)
         assert results[0].analysis["speed_factor"] == 1.25
         assert "hız" in results[0].suggestion.lower()
     
@@ -188,7 +188,7 @@ class TestPriorityEngine:
                 topic_weight=0.03, course_importance=40
             )
         ]
-        results = PriorityEngine.analyze(topics)
+        results = PriorityEngineV1.analyze(topics)
         # İyi öğrenci için LOW çıkmalı
         assert any(r.priority_level == "LOW" for r in results)
 

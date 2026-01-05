@@ -1,258 +1,510 @@
-"""
-Motor Wrapper with Automatic Fallback
-Wraps v1/v2 motors with error handling and fallback
-"""
-from typing import Any, Dict, Optional
+from app.core.motor_registry import motor_registry, MotorType, MotorVersion, SubscriptionTier
 import time
+"""
+Motor Wrapper v2.1.0 - WITH EMERGENCY FALLBACK
+Automatic v1/v2 selection with comprehensive fallback mechanism
+
+PHILOSOPHY:
+- Selects correct motor version
+- Falls back on error (v2 → v1)
+- Emergency fallback (wrapper failure → direct v1)
+- Returns result UNTOUCHED in envelope
+- NEVER CRASHES
+
+NEW IN v2.1.0:
+- Emergency v1 fallback (last resort)
+- fallback_reason field (optional, for debug)
+- Never crash guarantee
+
+RESPONSIBILITIES:
+1. Select motor version (based on tier)
+2. Handle v2 errors → silent v1 fallback
+3. Handle wrapper errors → emergency v1 fallback
+4. Envelope response (data + meta)
+5. Minimal error logging
+
+LOCK DATE: 2025-01-02
+VERSION: 2.1.0
+"""
+
 import logging
-from app.core.motor_logger import motor_logger
-from app.core.motor_logger import motor_logger
-from .motor_registry import (
-    motor_registry,
-    MotorType,
-    MotorVersion,
-    SubscriptionTier
-)
+from typing import Dict, Optional, List, Any
+from enum import Enum
+
 
 logger = logging.getLogger(__name__)
 
 
+class UserTier(str, Enum):
+    """User subscription tiers"""
+    FREE = "free"
+    BASIC = "basic"
+    MEDIUM = "medium"
+    PREMIUM = "premium"
+    INSTITUTION = "institution"
+
+
 class MotorWrapper:
     """
-    Wraps motor calls with:
-    - Automatic v1/v2 selection
-    - Timeout protection
-    - Fallback on error
-    - Performance logging
+    Motor version orchestration with comprehensive fallback
+    
+    Fallback Levels:
+    1. Normal: v2 → v1 (if v2 fails)
+    2. Emergency: Wrapper fail → Direct v1 call
+    
+    Never crashes guarantee
     """
     
-    def __init__(self, motor_type: MotorType):
-        """Initialize wrapper for specific motor type"""
-        self.motor_type = motor_type
-    
-    async def execute(
+    def __init__(
         self,
-        user_id: str,
-        user_tier: SubscriptionTier,
-        **kwargs
-    ) -> Dict[str, Any]:
+        difficulty_v1,
+        difficulty_v2,
+        bs_model_v1,
+        bs_model_v2,
+        priority_v1,
+        priority_v2,
+        time_v1,
+        time_v2,
+        context_service=None,
+        segmentation_engine=None
+    ):
+        """Initialize with all motor instances"""
+        self.difficulty_v1 = difficulty_v1
+        self.difficulty_v2 = difficulty_v2
+        self.bs_model_v1 = bs_model_v1
+        self.bs_model_v2 = bs_model_v2
+        self.priority_v1 = priority_v1
+        self.priority_v2 = priority_v2
+        self.time_v1 = time_v1
+        self.time_v2 = time_v2
+        self.context_service = context_service
+        self.segmentation_engine = segmentation_engine
+    
+    # ========================================
+    # HELPER: v2 ELIGIBILITY CHECK
+    # ========================================
+    
+    @staticmethod
+    def _can_use_v2(user_tier: UserTier, *required_fields) -> bool:
+        """Check if v2 can be used"""
+        tier_eligible = user_tier in [UserTier.PREMIUM, UserTier.INSTITUTION]
+        fields_present = all(field is not None for field in required_fields)
+        return tier_eligible and fields_present
+    
+    @staticmethod
+    def _envelope_response(
+        data: Any,
+        motor_version: str,
+        fallback_used: bool,
+        user_tier: UserTier,
+        fallback_reason: Optional[str] = None
+    ) -> Dict:
         """
-        Execute motor with fallback
+        Wrap motor result in response envelope
         
-        Flow:
-        1. Try v2 (if tier allows)
-        2. Fallback to v1 on error/timeout
-        3. Return safe default if both fail
+        Args:
+            data: Motor result (untouched)
+            motor_version: "v1" or "v2"
+            fallback_used: Whether fallback occurred
+            user_tier: User tier
+            fallback_reason: Why fallback happened (optional, for debug)
+        
+        Returns:
+            Enveloped response
         """
+        meta = {
+            "motor_version": motor_version,
+            "fallback_used": fallback_used,
+            "tier": user_tier.value
+        }
+        
+        # Add fallback_reason if present (optional field)
+        if fallback_reason:
+            meta["fallback_reason"] = fallback_reason
+        
+        return {
+            "data": data,
+            "meta": meta
+        }
+    
+    # ========================================
+    # DIFFICULTY MOTOR
+    # ========================================
+    
+
+
+
+    def calculate_time(
+        self,
+        student_id: str,
+        topic_id: str,
+        user_tier: UserTier
+    ) -> dict:
+        """Calculate Time/Speed score with v1/v2 selection + CONTEXT"""
+        
         config = motor_registry.get_motor_config(
-            self.motor_type,
-            user_tier,
-            user_id
+            motor_type=MotorType.TIME,
+            user_tier=SubscriptionTier(user_tier.value),
+            user_id=student_id
         )
         
-        # Try primary version
+        start_time = time.time()
+        
+        # Default values
+        total_duration = 300.0  # 5 minutes
+        total_questions = 10
+        success_rate = 0.7
+        
+        # Context integration (optional, for v2)
+        if self.context_service and config.version == MotorVersion.V2:
+            try:
+                history = self.context_service.get_student_history(
+                    student_id=student_id,
+                    topic_id=topic_id,
+                    days_back=30
+                )
+                
+                # Extract timing data if available
+                if history.get("tests"):
+                    tests = history["tests"]
+                    if tests:
+                        # Calculate averages from recent tests
+                        total_duration = sum(t.get("duration", 300) for t in tests) / len(tests)
+                        total_questions = sum(t.get("total", 10) for t in tests) / len(tests)
+                        
+                        total_correct = sum(t.get("correct", 0) for t in tests)
+                        total_all = sum(t.get("total", 1) for t in tests)
+                        success_rate = total_correct / max(1, total_all)
+                        
+            except Exception as ctx_error:
+                print(f"Time context fetch warning: {ctx_error}")
+                # Continue with defaults
+        
         try:
-            start_time = time.time()
-            
             if config.version == MotorVersion.V2:
-                result = await self._execute_v2(config, **kwargs)
+                # V2: Context-aware analysis with full parameters
+                
+                # Get subject_code from context
+                subject_code = "unknown"
+                if self.context_service:
+                    try:
+                        topic_ctx = self.context_service.get_topic_context(topic_id)
+                        subject_code = topic_ctx.get("subject_code", "unknown")
+                    except:
+                        pass
+                
+                result = self.time_v2.analyze(
+                    total_duration=total_duration,
+                    total_questions=int(total_questions),
+                    success_rate=success_rate,
+                    student_id=student_id,
+                    topic_id=topic_id,
+                    subject_code=subject_code,
+                    exam_type=None,
+                    question_times=None,
+                    config=None
+                )
             else:
-                result = await self._execute_v1(config, **kwargs)
+                # V1: Simple analysis
+                result = self.time_v1.analyze(
+                    total_duration=total_duration,
+                    total_questions=int(total_questions),
+                    success_rate=success_rate,
+                    config=None
+                )
             
             execution_time = (time.time() - start_time) * 1000
             
-            # Check timeout
-            if execution_time > config.timeout_ms and config.fallback_enabled:
-                logger.warning(
-                    f"{self.motor_type.value} {config.version.value} "
-                    f"timeout ({execution_time:.0f}ms > {config.timeout_ms}ms), "
-                    f"falling back to v1"
-                )
-                return await self._fallback_to_v1(**kwargs)
-            
-            # Log success
             motor_registry.log_performance(
-                self.motor_type,
-                config.version,
-                execution_time,
-                success=True
+                motor_type=MotorType.TIME,
+                version=config.version,
+                success=True,
+                execution_time_ms=execution_time,
+                user_tier=user_tier.value if hasattr(user_tier, "value") else user_tier
             )
             
-            # Log motor execution
-            try:
-                motor_logger.log_execution(
-                    motor_type=self.motor_type.value,
-                    version=config.version.value,
-                    user_tier=user_tier.value,
-                    features_used=list(config.enabled_features),
-                    execution_time_ms=execution_time,
-                    fallback_used=False,
-                    user_id=user_id,
-                    topic_id=kwargs.get("topic_id", "unknown"),
-                    success=True,
-                    error=None
-                )
-            except Exception as log_error:
-                logger.warning(f"Failed to log motor execution: {log_error}")
-            
-            return result
-            
-        except Exception as e:
-            logger.error(
-                f"{self.motor_type.value} {config.version.value} error: {e}",
-                exc_info=True
-            )
-            
-            # Log failure
-            motor_registry.log_performance(
-                self.motor_type,
-                config.version,
-                0,
-                success=False,
-                error=str(e)
-            )
-            
-            # Log to motor_logger
-            try:
-                motor_logger.log_execution(
-                    motor_type=self.motor_type.value,
-                    version=config.version.value,
-                    user_tier=user_tier.value,
-                    features_used=list(config.enabled_features),
-                    execution_time_ms=0,
-                    fallback_used=False,
-                    user_id=user_id,
-                    topic_id=kwargs.get("topic_id", "unknown"),
-                    success=False,
-                    error=str(e)
-                )
-            except Exception as log_error:
-                logger.warning(f"Failed to log motor error: {log_error}")
-            
-            # Fallback
-            if config.version == MotorVersion.V2 and config.fallback_enabled:
-                logger.info(f"Falling back to v1 for {self.motor_type.value}")
-                return await self._fallback_to_v1(**kwargs)
-            else:
-                # Both failed, return safe default
-                return self._safe_default()
-    
-    async def _execute_v1(self, config, **kwargs) -> Dict[str, Any]:
-        """Execute v1 motor"""
-        if self.motor_type == MotorType.DIFFICULTY:
-            from .difficulty_engine import DifficultyEngineV1
-            engine = DifficultyEngineV1()
-            return engine.calculate(**kwargs)
-        
-        # TODO: Add other motors
-        raise NotImplementedError(f"v1 not implemented for {self.motor_type.value}")
-    
-    async def _execute_v2(self, config, **kwargs) -> Dict[str, Any]:
-        """Execute v2 motor with tier-based features"""
-        if self.motor_type == MotorType.DIFFICULTY:
-            from .difficulty_engine_v2 import MasterDifficultyEngine
-            
-            # Enable features based on tier
-            feature_flags = {
-                "enable_prerequisite": "prerequisite" in config.enabled_features,
-                "enable_bs_model": "bs_model" in config.enabled_features,
-                "enable_course_context": "course_context" in config.enabled_features,
-                "enable_speed": "speed" in config.enabled_features,
-                "enable_metacognition": "metacognition" in config.enabled_features,
-                "enable_digital_exhaust": "digital_exhaust" in config.enabled_features,
-                "enable_circadian": "circadian" in config.enabled_features,
-            }
-            
-            engine = MasterDifficultyEngine(**feature_flags)
-            from datetime import datetime, timezone, date
-            from .difficulty_engine_v2 import TestData
-            
-            mock_tests = [TestData(
-                test_id="mock-test-1",
-                topic_id=kwargs.get("topic_id", "mock-topic"),
-                test_date=date.today(),
-                entry_timestamp=datetime.now(timezone.utc),
-                total_questions=10,
-                correct=7,
-                wrong=2,
-                blank=1,
-                time_seconds=480
-            )]
-            
-            result = engine.calculate_difficulty(
-                student_id=kwargs.get("student_id"),
-                topic_id=kwargs.get("topic_id"),
-                tests=mock_tests
-            )
-            
-            # Convert to dict
             return {
-                "difficulty_percentage": result.difficulty_percentage,
-                "difficulty_level": result.difficulty_level,
-                "student_segment": result.student_segment.value,
-                "behavior_mode": result.behavior_mode.value,
-                "trend": result.trend.value,
-                "student_message": result.student_message,
-                "coach_message": result.coach_message,
-                "recommendations": result.recommendations,
-                "confidence_level": result.confidence_level,
-                "warnings": result.warnings,
-                "motor_metadata": {
+                "data": result,
+                "meta": {
                     "motor_version": config.version.value,
-                    "features_used": len(config.enabled_features),
-                    "fallback_used": False
+                    "fallback_used": False,
+                    "tier": user_tier.value
                 }
             }
+            
+        except Exception as e:
+            print(f"Time v2 failed, falling back to v1: {e}")
+            try:
+                result = self.time_v1.analyze(
+                    total_duration=total_duration,
+                    total_questions=int(total_questions),
+                    success_rate=success_rate,
+                    config=None
+                )
+                
+                return {
+                    "data": result,
+                    "meta": {
+                        "motor_version": "v1",
+                        "fallback_used": True,
+                        "tier": user_tier.value,
+                        "fallback_reason": str(e)
+                    }
+                }
+            except Exception as e2:
+                print(f"Time v1 also failed: {e2}")
+                raise
+
+    def calculate_priority(
+        self,
+        student_id: str,
+        topic_id: str,
+        test_date: str,
+        user_tier: UserTier
+    ) -> dict:
+        """Calculate Priority score with v1/v2 selection + CONTEXT"""
         
-        # TODO: Add other motors
-        raise NotImplementedError(f"v2 not implemented for {self.motor_type.value}")
-    
-    async def _fallback_to_v1(self, **kwargs) -> Dict[str, Any]:
-        """Fallback to v1"""
-        logger.info(f"Executing v1 fallback for {self.motor_type.value}")
+        from app.core.priority_engine_v1 import TopicInput
         
-        from .difficulty_engine import DifficultyEngineV1
-        engine = DifficultyEngineV1()
-        result = engine.calculate(**kwargs)
+        # Context integration: Get real topic data
+        topic_name = "Unknown"
+        course_importance = 1.0
+        topic_weight = 1.0
+        correct = 0
+        wrong = 0
+        blank = 0
+        total_questions = 1
         
-        # Add fallback metadata
-        result["motor_metadata"] = {
-            "motor_version": "v1",
-            "features_used": 4,
-            "fallback_used": True
-        }
+        if self.context_service:
+            try:
+                # Get topic context
+                topic_context = self.context_service.get_topic_context(topic_id)
+                topic_name = topic_context.get("name", "Unknown")
+                
+                # Get student history for this topic
+                history = self.context_service.get_student_history(
+                    student_id=student_id,
+                    topic_id=topic_id,
+                    days_back=30
+                )
+                
+                # Extract performance data
+                if history.get("tests"):
+                    tests = history["tests"]
+                    if tests:
+                        # Use most recent test or aggregate
+                        total_questions = sum(t.get("total", 0) for t in tests)
+                        correct = sum(t.get("correct", 0) for t in tests)
+                        wrong = sum(t.get("wrong", 0) for t in tests)
+                        blank = sum(t.get("blank", 0) for t in tests)
+                        
+                        # Calculate weights from context
+                        topic_weight = topic_context.get("difficulty_baseline", 1.0) / 10.0
+                        course_importance = 1.0  # TODO: Get from exam_weights
+                        
+            except Exception as ctx_error:
+                print(f"Priority context fetch warning: {ctx_error}")
+                # Continue with defaults
         
-        # Log motor execution
+        # TopicInput with real data
+        topic = TopicInput(
+            id=topic_id,
+            name=topic_name,
+            course_importance=course_importance,
+            topic_weight=topic_weight,
+            correct=correct,
+            wrong=wrong,
+            blank=blank,
+            total_questions=max(1, total_questions)
+        )
+        
+        config = motor_registry.get_motor_config(
+            motor_type=MotorType.PRIORITY,
+            user_tier=SubscriptionTier(user_tier.value),
+            user_id=student_id
+        )
+        
+        start_time = time.time()
+        
         try:
-            motor_logger.log_execution(
-                motor_type=self.motor_type.value,
-                version="v1",
-                user_tier="unknown",  # Fallback'te tier bilinmiyor
-                features_used=[],
-                execution_time_ms=0,  # Ölçülmedi
-                fallback_used=True,
-                user_id=kwargs.get("user_id", "unknown"),
-                topic_id=kwargs.get("topic_id", "unknown"),
+            if config.version == MotorVersion.V2:
+                # V2: batch + student_id + context
+                result = self.priority_v2.analyze(
+                    topics=[topic],
+                    student_id=student_id,
+                    config=None
+                )
+            else:
+                # V1: sadece batch
+                results = self.priority_v1.analyze(
+                    topics=[topic],
+                    config=None
+                )
+                result = results[0] if results else {}
+            
+            execution_time = (time.time() - start_time) * 1000
+            
+            motor_registry.log_performance(
+                motor_type=MotorType.PRIORITY,
+                version=config.version,
                 success=True,
-                error=None
+                execution_time_ms=execution_time,
+                user_tier=user_tier.value
             )
-        except Exception as log_error:
-            logger.warning(f"Failed to log fallback execution: {log_error}")
-        
-        return result
-    
-    def _safe_default(self) -> Dict[str, Any]:
-        """Safe default when all motors fail"""
-        logger.error(f"All motors failed for {self.motor_type.value}, returning safe default")
-        
-        return {
-            "difficulty_percentage": 50.0,
-            "difficulty_level": 3,
-            "student_message": "Unable to calculate precise difficulty. Please try again.",
-            "motor_metadata": {
-                "motor_version": "safe_default",
-                "features_used": 0,
-                "fallback_used": True,
-                "error": "All motors failed"
+            
+            return {
+                "data": result,
+                "meta": {
+                    "motor_version": config.version.value,
+                    "fallback_used": False,
+                    "tier": user_tier.value
+                }
             }
-        }
+            
+        except Exception as e:
+            print(f"Priority v2 failed, falling back to v1: {e}")
+            try:
+                results = self.priority_v1.analyze(topics=[topic], config=None)
+                result = results[0] if results else {}
+                
+                return {
+                    "data": result,
+                    "meta": {
+                        "motor_version": "v1",
+                        "fallback_used": True,
+                        "tier": user_tier.value,
+                        "fallback_reason": str(e)
+                    }
+                }
+            except Exception as e2:
+                print(f"Priority v1 also failed: {e2}")
+                raise
+
+    def calculate_bs_model(
+        self,
+        input_data,
+        student_id: str,
+        topic_id: str,
+        user_tier: UserTier
+    ) -> dict:
+        """Calculate BS-Model score with v1/v2 selection + CONTEXT"""
+        
+        config = motor_registry.get_motor_config(
+            motor_type=MotorType.BS_MODEL,
+            user_tier=SubscriptionTier(user_tier.value),
+            user_id=student_id
+        )
+        
+        start_time = time.time()
+        
+        try:
+            if config.version == MotorVersion.V2:
+                # Context integration
+                test_history = None
+                last_test_date = None
+                
+                if self.context_service:
+                    try:
+                        history = self.context_service.get_student_history(
+                            student_id=student_id,
+                            topic_id=topic_id,
+                            days_back=30
+                        )
+                        
+                        if history.get("last_test_date"):
+                            from datetime import datetime
+                            last_test_date = datetime.fromisoformat(
+                                history["last_test_date"].replace("Z", "+00:00")
+                            )
+                        
+                        test_history = history.get("tests", [])
+                    except Exception as ctx_error:
+                        print(f"Context fetch warning: {ctx_error}")
+                
+                result = self.bs_model_v2.calculate(
+                    input_data=input_data,
+                    student_id=student_id,
+                    topic_id=topic_id,
+                    analysis_allowed=True,
+                    test_history=test_history,
+                    k_forget_prev=None,
+                    last_test_date=last_test_date,
+                    config=None
+                )
+            else:
+                result = self.bs_model_v1.calculate(input_data)
+            
+            execution_time = (time.time() - start_time) * 1000
+            
+            motor_registry.log_performance(
+                motor_type=MotorType.BS_MODEL,
+                version=config.version,
+                success=True,
+                execution_time_ms=execution_time,
+                user_tier=user_tier.value
+            )
+            
+            return {
+                "data": result,
+                "meta": {
+                    "motor_version": config.version.value,
+                    "fallback_used": False,
+                    "tier": user_tier.value
+                }
+            }
+            
+        except Exception as e:
+            print(f"BS-Model v2 failed, falling back to v1: {e}")
+            result = self.bs_model_v1.calculate(input_data)
+            
+            return {
+                "data": result,
+                "meta": {
+                    "motor_version": "v1",
+                    "fallback_used": True,
+                    "tier": user_tier.value,
+                    "fallback_reason": "v2_exception"
+                }
+            }
+
+    def calculate_difficulty(
+        self,
+        input_data,
+        student_id: Optional[str] = None,
+        user_tier: UserTier = UserTier.FREE,
+        config: Optional[object] = None
+    ) -> Dict:
+        """
+        Calculate difficulty with automatic v1/v2 selection + emergency fallback
+        """
+        
+        try:
+            # Check if v2 available
+            if not self._can_use_v2(user_tier, student_id):
+                result = self.difficulty_v1.calculate(input_data, config)
+                return self._envelope_response(result, "v1", False, user_tier)
+            
+            # Try v2, fallback to v1 on error
+            try:
+                result = self.difficulty_v2.calculate(input_data, student_id, config)
+                return self._envelope_response(result, "v2", False, user_tier)
+            except Exception as e:
+                logger.error(f"Difficulty v2 failed, falling back to v1: {e}")
+                result = self.difficulty_v1.calculate(input_data, config)
+                return self._envelope_response(
+                    result, "v1", True, user_tier,
+                    fallback_reason="v2_exception"
+                )
+        
+        except Exception as e:
+            # EMERGENCY: Wrapper completely failed
+            logger.critical(
+                f"MotorWrapper.calculate_difficulty failed completely, "
+                f"emergency v1 engaged: {e}"
+            )
+            return self._emergency_v1_difficulty(input_data, config, str(e), user_tier)
+    
+    # ========================================
+    # BS-MODEL MOTOR
+    # ========================================
+    

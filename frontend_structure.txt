@@ -1,0 +1,82 @@
+frontend/
+├── app
+│   ├── admin
+│   │   ├── exams
+│   │   ├── osym
+│   │   └── page.tsx
+│   ├── components
+│   │   ├── FeedbackWidget.tsx
+│   │   ├── Logo.tsx
+│   │   └── Sidebar.tsx
+│   ├── globals.css
+│   ├── internal
+│   │   └── feature-control
+│   ├── layout.tsx
+│   ├── login
+│   │   └── page.tsx
+│   ├── page.tsx
+│   ├── past-tests
+│   │   └── page.tsx
+│   ├── providers.tsx
+│   ├── register
+│   │   └── page.tsx
+│   ├── reports
+│   │   └── page.tsx
+│   └── student
+│       ├── dashboard
+│       ├── layout.tsx
+│       ├── past-tests
+│       ├── progress
+│       └── test-entry
+├── components
+│   ├── FloatingFeatureMonitor.tsx
+│   ├── NotificationBell.tsx
+│   ├── ReflexNotificationCard.tsx
+│   ├── ReflexNotificationContainer.tsx
+│   ├── SafeExternalLink.tsx
+│   └── SubjectIcon.tsx
+├── end-stp-frontend@0.1.0
+├── frontend@0.1.0
+├── hooks
+│   ├── useFeatureFlag.tsx
+│   └── useReflexNotifications.ts
+├── lib
+│   ├── api
+│   │   ├── client.ts
+│   │   └── useTodaysTasks.ts
+│   ├── api-client.ts
+│   ├── api-client.ts.BACKUP
+│   ├── api-client.ts.OLD_20251129
+│   ├── api-client2911.ts
+│   ├── constants.ts
+│   ├── icons
+│   │   └── subjectIcons.tsx
+│   ├── security-meta.ts
+│   ├── store
+│   │   ├── studentDashboardStore copy.ts
+│   │   ├── studentDashboardStore.ts
+│   │   ├── studentDashboardStore.ts.OLD_20251129
+│   │   └── studentDashboardStore.ts.backup
+│   ├── supabase
+│   │   └── client.ts
+│   ├── supabase.ts
+│   ├── types
+│   │   └── todaysTasks.ts
+│   └── utils
+│       ├── timezone.ts
+│       └── type-guards.ts
+├── middleware
+├── middleware.ts
+├── middleware.ts.backup
+├── next
+├── next-env.d.ts
+├── next.config.js
+├── package-lock.json
+├── package.json
+├── postcss.config.js
+├── public
+│   └── logo.png
+├── tailwind.config.js
+└── tsconfig.json
+
+27 directories, 52 files

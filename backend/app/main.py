@@ -2,15 +2,43 @@
 End.STP Backend API
 FastAPI ana uygulama - 4 Motor Sistemi
 """
+# ============================================
+# CRITICAL: Load .env FIRST, before ANY imports
+# ============================================
+from pathlib import Path
+from dotenv import load_dotenv
+import os
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_PATH = BASE_DIR / ".env"
+
+load_dotenv(dotenv_path=ENV_PATH, override=True)
+
+# Fail-fast if env not loaded
+assert os.getenv("SUPABASE_URL"), "❌ SUPABASE_URL not loaded!"
+assert os.getenv("SUPABASE_SERVICE_ROLE_KEY"), "❌ SERVICE_ROLE_KEY not loaded!"
+
+print("✅ Environment variables loaded successfully")
+
+# ============================================
+# Now safe to import app modules
+# ============================================
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.api.v1.student_analysis import router as student_router
 import time
 from contextlib import asynccontextmanager
+from app.api.v1.endpoints import (
+    motors, 
+    motor_health, 
+    motor_test,
+    segmentation  # YENİ!
+)
 
 # ============================================
-# 1. APP TANIMI
+# 1. APP TANIMI (ÖNCELİKLE BU!)
 # ============================================
 
 app = FastAPI(
@@ -119,52 +147,29 @@ async def monitor_response_time(request, call_next):
         raise
 
 # ============================================
-# 4. ROUTERS (Sıralama önemli!)
+# 4. ROUTERS (SIRALAMA ÖNEMLİ!)
 # ============================================
 
 # Eski sistem routers
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(student_router)
 
-# Progress router (YENİ - try-catch ile güvenli)
 # Progress router (MODULAR)
 try:
     from app.api.v1.endpoints.progress import router as progress_router
     app.include_router(
         progress_router, 
-        prefix="/api/v1",  # ← BU DOĞRU
+        prefix="/api/v1",
         tags=["progress"]
     )
-    
     print("✅ Progress router loaded successfully")
 except ImportError as e:
     print(f"⚠️  Progress router not found: {e}")
 except Exception as e:
     print(f"❌ Error loading progress router: {e}")
 
-# ============================================
-# 5. ROOT ENDPOINTS
-# ============================================
-
-@app.get("/")
-async def root():
-    return {
-        "message": "End.STP API - 4 Motors",
-        "version": "1.0.0",
-        "docs": "/api/docs",
-        "motors": ["BS-Model", "Difficulty", "Time", "Priority"]
-    }
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "motors": 4}
-# ============================================
-# 6. MOTOR ROUTER (YENİ!)
-# ============================================
-
+# Motor Routers
 try:
-    from app.api.v1.endpoints import motors, motor_health, motor_test
-    
     # Motor Health Endpoints
     app.include_router(
         motor_health.router,
@@ -172,7 +177,7 @@ try:
         tags=["motor-health"]
     )
     
-    # Motor Test Endpoints (Logging Test)
+    # Motor Test Endpoints
     app.include_router(
         motor_test.router,
         prefix="/api/v1/motors",
@@ -185,8 +190,40 @@ try:
         prefix="/api/v1/motors",
         tags=["motors"]
     )
+    
     print("✅ Motors router loaded successfully")
 except ImportError as e:
     print(f"⚠️  Motors router not found: {e}")
 except Exception as e:
     print(f"❌ Error loading motors router: {e}")
+
+# Segmentation Router (YENİ!)
+try:
+    app.include_router(
+        segmentation.router, 
+        prefix="/api/v1/segmentation", 
+        tags=["segmentation"]
+    )
+    print("✅ Segmentation router loaded successfully")
+except ImportError as e:
+    print(f"⚠️  Segmentation router not found: {e}")
+except Exception as e:
+    print(f"❌ Error loading segmentation router: {e}")
+
+# ============================================
+# 5. ROOT ENDPOINTS
+# ============================================
+
+@app.get("/")
+async def root():
+    return {
+        "message": "End.STP API - 4 Motors + Segmentation",
+        "version": "1.0.0",
+        "docs": "/api/docs",
+        "motors": ["BS-Model", "Difficulty", "Time", "Priority"],
+        "meta_motor": "Segmentation"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "motors": 4, "meta_motor": "segmentation"}
