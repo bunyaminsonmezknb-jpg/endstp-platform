@@ -1,185 +1,87 @@
 'use client';
+
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api/client';
-import { useSearchParams } from 'next/navigation';
+import { calculateAllMotors } from '@/lib/api/endpoints/motors';
 
 interface Subject {
   id: string;
   code: string;
   name_tr: string;
-  icon: string;
-  color: string;
+  icon?: string;
+  color?: string;
 }
 
 interface Topic {
   id: string;
   code: string;
   name_tr: string;
-  difficulty_level?: number;
-  exam_weight?: number;
 }
 
-export default function TestEntryPage() {
-  const router = useRouter();
+export default function TestEntry() {
+  // State management
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingSubjects, setLoadingSubjects] = useState(true);
-  const [loadingTopics, setLoadingTopics] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Form state
-  const [testDateTime, setTestDateTime] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('');
-  const [correctCount, setCorrectCount] = useState<string>('');
-  const [wrongCount, setWrongCount] = useState<string>('');
-  const [emptyCount, setEmptyCount] = useState<string>('');
-  const [testDuration, setTestDuration] = useState<string>(''); // ✅ EKLE - Test süresi (dakika)
+  const [testDateTime, setTestDateTime] = useState('');
+  const [correct, setCorrect] = useState('');
+  const [wrong, setWrong] = useState('');
+  const [empty, setEmpty] = useState('');
+  const [testDuration, setTestDuration] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [motorResults, setMotorResults] = useState<any>(null);
+  const [lastTest, setLastTest] = useState<any>(null);
 
-  // Hesaplanan değerler
-  const correct = parseInt(correctCount) || 0;
-  const wrong = parseInt(wrongCount) || 0;
-  const empty = parseInt(emptyCount) || 0;
-  const totalQuestions = correct + wrong + empty;
-  const net = Math.max(0, correct - (wrong / 4));
-  const successRate = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0;
-  
-  // ✅ TOPLAM SORU KONTROLÜ (EditTestModal gibi)
-  const isValidTotal = () => totalQuestions === 12;
-
-  // Max datetime
-  const getTurkeyDateTime = () => {
-    const now = new Date();
-    return now.toISOString().slice(0, 16);
-  };
-
-  // LocalStorage'dan son seçimleri yükle
-  useEffect(() => {
-    const lastSubject = localStorage.getItem('last_subject_id');
-    const lastTopic = localStorage.getItem('last_topic_id');
-    
-    if (lastSubject) setSelectedSubject(lastSubject);
-    if (lastTopic) setSelectedTopic(lastTopic);
-  }, []);
-
-  // Subjects yükle
+  // Load subjects
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
-const response = await api.get('/subjects') as any;
-console.log('🔍 Subjects response:', response);
-console.log('🔍 response.data:', response.data);
-setSubjects(response.data || response); // Backend direkt array dönüyor olabilir
-      } catch (err) {
+        const response = await fetch('http://localhost:8000/api/v1/subjects');
+        const data = await response.json();
+        setSubjects(data);
+      } catch (err: any) {
         console.error('Subjects fetch error:', err);
         setError('Dersler yüklenemedi');
-      } finally {
-        setLoadingSubjects(false);
       }
     };
-
     fetchSubjects();
   }, []);
-const searchParams = useSearchParams();
 
-// ✅ Pre-fill from query params (subjects yüklendikten sonra)
-useEffect(() => {
-  const subjectId = searchParams.get('subject_id');
-  const topicId = searchParams.get('topic_id');
-  
-  // Subjects yüklenene kadar bekle
-  if (!subjectId || !topicId || subjects.length === 0) {
-    return;
-  }
-  
-  console.log('🎯 Pre-filling test entry:', { 
-    subjectId, 
-    topicId, 
-    subjectsLoaded: subjects.length 
-  });
-  
-  // Subject seç
-  setSelectedSubject(subjectId);
-  
-  // Topics yükle ve topic seç
-  const loadTopics = async () => {
-    try {
-      setLoadingTopics(true);
-      
-      const response = await api.get(`/subjects/${subjectId}/topics`) as any;
-      const topicsData = response.data || response;
-      setTopics(topicsData);
-      
-      // Topic seç
-      setTimeout(() => {
-        setSelectedTopic(topicId);
-        console.log('✅ Pre-filled successfully');
-        
-        // Form'a scroll (optional)
-        setTimeout(() => {
-          document.getElementById('test-form')?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-          });
-        }, 300);
-      }, 100);
-      
-    } catch (error) {
-      console.error('Topics fetch error:', error);
-      setError('Konular yüklenemedi');
-    } finally {
-      setLoadingTopics(false);
-    }
-  };
-  
-  loadTopics();
-}, [searchParams, subjects]); // ✅ subjects dependency
-
-  // Subject değişince topics yükle
+  // Load topics when subject changes
   useEffect(() => {
     if (!selectedSubject) {
       setTopics([]);
       return;
     }
 
-    localStorage.setItem('last_subject_id', selectedSubject);
-
     const fetchTopics = async () => {
-      setLoadingTopics(true);
       try {
-const response = await api.get(`/subjects/${selectedSubject}/topics`) as any;
-setTopics(response.data || response);
-      } catch (err) {
+        const response = await fetch(
+          `http://localhost:8000/api/v1/subjects/${selectedSubject}/topics`
+        );
+        const data = await response.json();
+        setTopics(data);
+      } catch (err: any) {
         console.error('Topics fetch error:', err);
         setError('Konular yüklenemedi');
-      } finally {
-        setLoadingTopics(false);
       }
     };
-
     fetchTopics();
   }, [selectedSubject]);
 
-  // Konu seçildiğinde kaydet
-  useEffect(() => {
-    if (selectedTopic) {
-      localStorage.setItem('last_topic_id', selectedTopic);
-    }
-  }, [selectedTopic]);
+  // Calculate totals
+  const total = parseInt(correct || '0') + parseInt(wrong || '0') + parseInt(empty || '0');
+  const net = parseFloat(correct || '0') - parseFloat(wrong || '0') / 4;
+  const successRate = total > 0 ? (parseFloat(correct || '0') / total) * 100 : 0;
 
-  const handleReset = () => {
-    setCorrectCount('');
-    setWrongCount('');
-    setEmptyCount('');
-  };
+  // Validation
+  const isValidTotal = () => total === 12;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // ✅ TOPLAM SORU KONTROLÜ
     if (!isValidTotal()) {
       setError('Toplam soru sayısı tam olarak 12 olmalıdır!');
       return;
@@ -188,17 +90,9 @@ setTopics(response.data || response);
     setLoading(true);
     setError(null);
     setSuccess(false);
+    setMotorResults(null);
 
     try {
-      // Gelecek tarih kontrolü
-      const selectedDateTime = new Date(testDateTime);
-      const now = new Date();
-      
-      if (selectedDateTime > now) {
-        throw new Error('⚠️ Gelecek tarih seçilemez! Test zaten çözülmüş olmalı.');
-      }
-
-      // 👇 KULLANICI BİLGİSİNİ BURADA AL
       const userStr = localStorage.getItem('user');
       const accessToken = localStorage.getItem('access_token');
 
@@ -208,340 +102,277 @@ setTopics(response.data || response);
 
       const user = JSON.parse(userStr);
 
+      // 1. Save test result
+      const testData = {
+        student_id: user.id,
+        subject_id: selectedSubject,
+        topic_id: selectedTopic,
+        test_date: testDateTime + ':00',
+        correct_count: parseInt(correct),
+        wrong_count: parseInt(wrong),
+        empty_count: parseInt(empty),
+        net_score: parseFloat(net.toFixed(2)),
+        success_rate: parseFloat(successRate.toFixed(2)),
+        test_duration_minutes: testDuration ? parseInt(testDuration) : null,
+      };
 
-const response: any = await api.post('/test-results', {
-  student_id: user.id,
-  subject_id: selectedSubject,
-  topic_id: selectedTopic,
-  test_date: testDateTime + ':00',
-  correct_count: correct,
-  wrong_count: wrong,
-  empty_count: empty,
-  net_score: parseFloat(net.toFixed(2)),
-  success_rate: parseFloat(successRate.toFixed(2)),
-  test_duration_minutes: testDuration ? parseInt(testDuration) : undefined,
-});
+      const response = await fetch('http://localhost:8000/api/v1/test-results', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(testData),
+      });
 
-// ✅ fetch/axios/custom hepsini destekler
-const data =
-  response?.data ??
-  (typeof response?.json === 'function' ? await response.json() : response);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Test kaydedilemedi');
+      }
 
-// ✅ fetch ise status kontrolü, axios ise zaten catch’e düşer
-if (typeof response?.ok === 'boolean' && !response.ok) {
-  throw new Error(data?.detail || 'Test kaydedilemedi');
-}
+      const result = await response.json();
+      setLastTest(result);
 
-setSuccess(true);
-setTimeout(() => {
-  router.push('/past-tests');
-}, 2000);
+      // 2. Calculate motors (parallel)
+      try {
+        const motors = await calculateAllMotors({
+          student_id: user.id,
+          topic_id: selectedTopic,
+          correct: parseInt(correct),
+          incorrect: parseInt(wrong),
+          blank: parseInt(empty),
+          total: 12,
+          time_spent: testDuration ? parseInt(testDuration) * 60 : 900,
+          test_date: testDateTime,
+          user_tier: 'premium',
+        });
 
+        setMotorResults(motors);
+      } catch (motorError) {
+        console.error('Motor calculation error:', motorError);
+        // Don't fail the whole operation if motors fail
+      }
 
+      setSuccess(true);
+
+      // Clear form after 5 seconds
+      setTimeout(() => {
+        setCorrect('');
+        setWrong('');
+        setEmpty('');
+        setTestDuration('');
+        setSuccess(false);
+        setMotorResults(null);
+      }, 5000);
     } catch (err: any) {
-      console.error('Test entry error:', err);
-      setError(err.message || 'Test kaydı sırasında hata oluştu');
+      console.error('Submit error:', err);
+      setError(err.message || 'Bir hata oluştu');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    document.cookie = 'access_token=; path=/; max-age=0';
-    router.push('/login');
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-purple-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push('/student/dashboard')}>
-            <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              End.STP
-            </span>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => router.push('/student/dashboard')}
-              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition"
-            >
-              ← Dashboard
-            </button>
-            <button 
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
-            >
-              Çıkış
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-8">
+      <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">📝 Konu Öğrenme Testi</h1>
+        <p className="text-gray-600 mb-6">Çözdüğünüz 12 soruluk test sonucunu girin</p>
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
-        {/* Success Message */}
-        {success && (
-          <div className="bg-green-100 border-2 border-green-500 text-green-800 px-6 py-4 rounded-2xl mb-6 animate-pulse">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">✅</span>
-              <div>
-                <div className="font-bold">Test başarıyla kaydedildi!</div>
-                <div className="text-sm">Net: {net.toFixed(2)} 🎉</div>
-                <div className="text-xs mt-1">Geçmiş testlere yönlendiriliyorsunuz...</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error Message */}
+        {/* Error message */}
         {error && (
-          <div className="bg-red-100 border-2 border-red-500 text-red-800 px-6 py-4 rounded-2xl mb-6">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">❌</span>
-              <div>
-                <div className="font-bold">Hata!</div>
-                <div className="text-sm">{error}</div>
-              </div>
-            </div>
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+            <p className="text-red-700">❌ {error}</p>
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-2xl p-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">📝 Konu Öğrenme Testi</h1>
-          <p className="text-gray-600 mb-6">Çözdüğünüz 12 soruluk test sonucunu girin</p>
+        {/* Success message */}
+        {success && (
+          <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-6">
+            <p className="text-green-700 font-semibold">✅ Test başarıyla kaydedildi!</p>
+            
+            {lastTest?.task_auto_completed && (
+              <p className="text-green-600 mt-2">
+                🎉 Görev otomatik tamamlandı: {lastTest.completed_task?.task_name}
+              </p>
+            )}
 
-          {/* Tarih ve Saat */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              📅 Test Tarihi ve Saati
-            </label>
-            <input
-              type="datetime-local"
-              value={testDateTime}
-              onChange={(e) => setTestDateTime(e.target.value)}
-              max={getTurkeyDateTime()}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              required
-              disabled={loading}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              ⏰ Unutma eğrisi analizi için test çözme zamanı önemlidir
-            </p>
-          </div>
+            {motorResults && (
+              <div className="mt-4 space-y-2">
+                {motorResults.bsModel?.data && (
+                  <div className="bg-white p-3 rounded-lg border border-green-200">
+                    <p className="text-sm font-medium text-gray-700">
+                      {motorResults.bsModel.data.analysis}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Motor: {motorResults.bsModel.meta.motor_version} | 
+                      Archetype: {motorResults.bsModel.data.v2_features?.archetype}
+                    </p>
+                  </div>
+                )}
 
-          {/* Subject Dropdown */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              📚 Ders
-            </label>
-            {loadingSubjects ? (
-              <div className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl bg-gray-50 text-gray-500">
-                Dersler yükleniyor...
+                {motorResults.difficulty?.data && (
+                  <div className="bg-white p-3 rounded-lg border border-green-200">
+                    <p className="text-sm font-medium text-gray-700">
+                      {motorResults.difficulty.data.analysis}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Seviye: {motorResults.difficulty.data.difficulty_level}
+                    </p>
+                  </div>
+                )}
+
+                {motorResults.priority?.data && motorResults.priority.data.priorities?.[0] && (
+                  <div className="bg-white p-3 rounded-lg border border-green-200">
+                    <p className="text-sm font-medium text-gray-700">
+                      {motorResults.priority.data.priorities[0].suggestion}
+                    </p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <select
-                value={selectedSubject}
-                onChange={(e) => {
-                  setSelectedSubject(e.target.value);
-                  setSelectedTopic('');
-                }}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                required
-                disabled={loading}
-              >
-                <option value="">Ders seçin...</option>
-                {subjects?.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.icon} {subject.name_tr}
-                  </option>
-                ))}
-              </select>
             )}
           </div>
+        )}
 
-          {/* Topic Dropdown */}
-          {selectedSubject && (
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                📖 Konu
-              </label>
-              {loadingTopics ? (
-                <div className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl bg-gray-50 text-gray-500">
-                  Konular yükleniyor...
-                </div>
-              ) : (
-                <select
-                  value={selectedTopic}
-                  onChange={(e) => setSelectedTopic(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  required
-                  disabled={loading}
-                >
-                  <option value="">Konu seçin...</option>
-                  {topics?.map((topic) => (
-                    <option key={topic.id} value={topic.id}>
-                      {topic.name_tr}
-                      {topic.difficulty_level && ` (⭐${topic.difficulty_level})`}
-                    </option>
-                  ))}
-                </select>
-              )}
+        {/* Test Date */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            📅 Test Tarihi ve Saati
+          </label>
+          <input
+            type="datetime-local"
+            value={testDateTime}
+            onChange={(e) => setTestDateTime(e.target.value)}
+            max={new Date().toISOString().slice(0, 16)}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          />
+        </div>
+
+        {/* Subject Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">📚 Ders</label>
+          <select
+            value={selectedSubject}
+            onChange={(e) => {
+              setSelectedSubject(e.target.value);
+              setSelectedTopic('');
+            }}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500"
+          >
+            <option value="">Ders seçin...</option>
+            {subjects.map((subject) => (
+              <option key={subject.id} value={subject.id}>
+                {subject.icon || '📖'} {subject.name_tr}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Topic Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">📖 Konu</label>
+          <select
+            value={selectedTopic}
+            onChange={(e) => setSelectedTopic(e.target.value)}
+            required
+            disabled={!selectedSubject}
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 disabled:bg-gray-100"
+          >
+            <option value="">Konu seçin...</option>
+            {topics.map((topic) => (
+              <option key={topic.id} value={topic.id}>
+                {topic.name_tr}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Answer counts */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-semibold text-green-600 mb-2">✅ Doğru</label>
+            <input
+              type="number"
+              value={correct}
+              onChange={(e) => setCorrect(e.target.value)}
+              min="0"
+              max="12"
+              required
+              className="w-full px-4 py-3 border-2 border-green-200 rounded-xl focus:border-green-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-red-600 mb-2">❌ Yanlış</label>
+            <input
+              type="number"
+              value={wrong}
+              onChange={(e) => setWrong(e.target.value)}
+              min="0"
+              max="12"
+              required
+              className="w-full px-4 py-3 border-2 border-red-200 rounded-xl focus:border-red-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-600 mb-2">⚪ Boş</label>
+            <input
+              type="number"
+              value={empty}
+              onChange={(e) => setEmpty(e.target.value)}
+              min="0"
+              max="12"
+              required
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-gray-500"
+            />
+          </div>
+        </div>
+
+        {/* Duration */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            ⏱️ Süre (dakika) <span className="text-xs text-gray-500">(Opsiyonel - daha iyi analiz için önerilir)</span>
+          </label>
+          <input
+            type="number"
+            value={testDuration}
+            onChange={(e) => setTestDuration(e.target.value)}
+            min="1"
+            placeholder="Örn: 15"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500"
+          />
+        </div>
+
+        {/* Summary */}
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-2xl mb-6">
+          <div className="flex justify-between items-center">
+            <div className="text-center">
+              <p className="text-sm text-gray-600">Toplam</p>
+              <p className={`text-3xl font-bold ${total === 12 ? 'text-green-600' : 'text-red-600'}`}>
+                {total}/12
+              </p>
             </div>
-          )}
-
-          {/* Soru Sayıları */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div>
-              <label className="block text-sm font-semibold text-green-700 mb-2">
-                ✅ Doğru
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value={correctCount}
-                onChange={(e) => setCorrectCount(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent text-center text-xl font-bold"
-                placeholder="0"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-red-700 mb-2">
-                ❌ Yanlış
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value={wrongCount}
-                onChange={(e) => setWrongCount(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-red-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-center text-xl font-bold"
-                placeholder="0"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                ⭕ Boş
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value={emptyCount}
-                onChange={(e) => setEmptyCount(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-500 focus:border-transparent text-center text-xl font-bold"
-                placeholder="0"
-                required
-                disabled={loading}
-              />
+            <div className="text-center">
+              <p className="text-sm text-gray-600">Net</p>
+              <p className="text-3xl font-bold text-blue-600">{net.toFixed(2)}</p>
             </div>
           </div>
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              ⏱️ Test Süresi (Opsiyonel)
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min="1"
-                max="120"
-                value={testDuration}
-                onChange={(e) => setTestDuration(e.target.value)}
-                className="w-32 px-4 py-3 border-2 border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-xl font-bold"
-                placeholder="0"
-                disabled={loading}
-              />
-              <span className="text-gray-600 font-semibold">dakika</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              💡 12 soruyu kaç dakikada çözdüğünüzü girin. Hız analizi için kullanılacak (isteğe bağlı)
+          {total !== 12 && (
+            <p className="text-red-600 text-sm mt-2 text-center">
+              ⚠️ Toplam tam 12 olmalı!
             </p>
-          </div>
-          
-          {/* ✅ HESAPLANAN DEĞERLER - EditTestModal Tarzı */}
-          <div className={`rounded-2xl p-6 mb-6 border-2 ${
-            isValidTotal() 
-              ? 'bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200' 
-              : 'bg-gradient-to-br from-red-50 to-orange-50 border-red-300'
-          }`}>
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center justify-center gap-2">
-              📊 Hesaplanan Değerler
-              {!isValidTotal() && totalQuestions > 0 && (
-                <span className="text-sm bg-red-500 text-white px-3 py-1 rounded-full animate-pulse">
-                  ⚠️ Toplam 12 soru olmalı!
-                </span>
-              )}
-            </h3>
-            
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="text-center">
-                <div className="text-sm text-gray-600 mb-1">Toplam Soru</div>
-                <div className={`text-3xl font-bold ${
-                  totalQuestions === 12 ? 'text-green-600' : 
-                  totalQuestions < 12 ? 'text-orange-600' : 
-                  'text-red-600'
-                }`}>
-                  {totalQuestions} / 12
-                </div>
-              </div>
-              
-              <div className="text-center">
-                <div className="text-sm text-gray-600 mb-1">📊 Net</div>
-                <div className="text-3xl font-bold text-purple-600">
-                  {net.toFixed(2)}
-                </div>
-              </div>
-              
-              <div className="text-center">
-                <div className="text-sm text-gray-600 mb-1">📈 Başarı %</div>
-                <div className="text-3xl font-bold text-blue-600">
-                  {successRate.toFixed(0)}%
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
+        </div>
 
-          {/* Butonlar */}
-          <div className="flex gap-4 mb-4">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl hover:bg-gray-300 transition font-semibold"
-              disabled={loading}
-            >
-              🔄 Temizle
-            </button>
-
-            <button
-              type="submit"
-              disabled={loading || !selectedSubject || !selectedTopic || !testDateTime || !isValidTotal()}
-              className={`flex-1 py-3 rounded-xl text-white font-semibold transition-all ${
-                loading || !selectedSubject || !selectedTopic || !testDateTime || !isValidTotal()
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:scale-105 shadow-lg'
-              }`}
-            >
-              {loading ? '⏳ Kaydediliyor...' : 
-               !isValidTotal() ? '❌ Toplam 12 soru olmalı' : 
-               '💾 Test Sonucunu Kaydet'}
-            </button>
-          </div>
-
-          <p className="text-xs text-center text-gray-500">
-            💡 İpucu: Son seçtiğiniz ders ve konu otomatik hatırlanır
-          </p>
-        </form>
-      </main>
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={loading || !isValidTotal()}
+          className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+        >
+          {loading ? '⏳ Kaydediliyor...' : '💾 Kaydet ve Analiz Et'}
+        </button>
+      </form>
     </div>
   );
 }

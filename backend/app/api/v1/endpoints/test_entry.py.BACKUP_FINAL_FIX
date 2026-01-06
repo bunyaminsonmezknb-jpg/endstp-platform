@@ -3,18 +3,39 @@ Test Entry Endpoints
 Öğrenci test girişi için API'ler
 """
 
+import os
 import uuid
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header, status, Depends
+from app.core.auth import get_current_user
 from pydantic import BaseModel
-from app.db.session import get_supabase_admin
+from dotenv import load_dotenv
+from supabase import create_client, Client
+
+load_dotenv()
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# ============================================
+# SERVICE ROLE CLIENT
+# ============================================
+def get_force_admin_client() -> Client:
+    """Admin yetkili client"""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY")
+    
+    if not url or not key:
+        logger.error("Supabase credentials eksik! .env dosyasını kontrol et.")
+        raise HTTPException(
+            status_code=500, 
+            detail="Sunucu yapılandırma hatası: Admin anahtarı bulunamadı."
+        )
+        
+    return create_client(url, key)
 
 # ============================================
 # REQUEST/RESPONSE MODELS
@@ -30,7 +51,7 @@ class TestResultSubmit(BaseModel):
     empty_count: int
     net_score: float
     success_rate: float
-    test_duration_minutes: Optional[int] = None
+    test_duration_minutes: Optional[int] = None  # Test süresi (dakika) - opsiyonel
 
 
 # ============================================
@@ -38,9 +59,9 @@ class TestResultSubmit(BaseModel):
 # ============================================
 
 @router.get("/subjects")
-async def get_subjects():
-    """Tüm dersleri listele (PUBLIC - AUTH GEREKMİYOR)"""
-    supabase = get_supabase_admin()
+async def get_subjects(current_user: dict = Depends(get_current_user)):
+    """Tüm dersleri listele"""
+    supabase = get_force_admin_client()
     
     try:
         result = supabase.table("subjects").select(
@@ -59,8 +80,8 @@ async def get_subjects():
 
 @router.get("/subjects/{subject_id}/topics")
 async def get_topics_by_subject(subject_id: str):
-    """Bir derse ait konuları listele (PUBLIC - AUTH GEREKMİYOR)"""
-    supabase = get_supabase_admin()
+    """Bir derse ait konuları listele"""
+    supabase = get_force_admin_client()
     
     try:
         result = supabase.table("topics").select(
@@ -77,12 +98,10 @@ async def get_topics_by_subject(subject_id: str):
 # AUTO-COMPLETE TASK HELPER
 # ============================================
 
-def auto_complete_task_if_exists(student_id: str, topic_id: str, test_result_id: str):
+def auto_complete_task_if_exists(supabase: Client, student_id: str, topic_id: str, test_result_id: str):
     """
     Bugünkü görevlerde bu konu varsa otomatik tamamla
     """
-    supabase = get_supabase_admin()
-    
     try:
         today = datetime.now(timezone.utc).date().isoformat()
         
@@ -104,7 +123,7 @@ def auto_complete_task_if_exists(student_id: str, topic_id: str, test_result_id:
             update_data = {
                 "status": "completed",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
-                "manual_completion": False,
+                "manual_completion": False,  # Otomatik tamamlama
                 "test_result_id": test_result_id
             }
             
@@ -123,6 +142,7 @@ def auto_complete_task_if_exists(student_id: str, topic_id: str, test_result_id:
             
     except Exception as e:
         logger.error(f"Auto-complete task error: {str(e)}")
+        # Hata olsa bile test kaydı başarılı olduğu için görev tamamlama hatası dönmemeliyiz
         return {"auto_completed": False, "error": str(e)}
 
 
@@ -131,14 +151,17 @@ def auto_complete_task_if_exists(student_id: str, topic_id: str, test_result_id:
 # ============================================
 
 @router.post("/test-results")
-async def submit_test_result(test_data: TestResultSubmit):
+async def submit_test_result(
+    test_data: TestResultSubmit,
+    
+):
     """
     Test sonucu kaydet + Otomatik görev tamamlama
     """
-    supabase = get_supabase_admin()
+    supabase = get_force_admin_client()
     
     try:
-        logger.info(f"�� Test girişi başlıyor: student={test_data.student_id}, topic={test_data.topic_id}")
+        logger.info(f"📝 Test girişi başlıyor: student={test_data.student_id}, topic={test_data.topic_id}")
         
         # Test record hazırla
         test_record = {
@@ -174,18 +197,19 @@ async def submit_test_result(test_data: TestResultSubmit):
                 "task_auto_completed": False
             }
         
-        # Test başarıyla kaydedildi
+        # Test başarıyla kaydedildi, şimdi otomatik görev tamamlama
         test_id = result.data[0].get("id")
         logger.info(f"✅ Test kaydedildi: test_id={test_id}")
         
-        # Otomatik görev tamamlama
+        # Otomatik görev tamamlama dene
         task_result = auto_complete_task_if_exists(
+            supabase=supabase,
             student_id=test_data.student_id,
             topic_id=test_data.topic_id,
             test_result_id=test_id
         )
         
-        # Response
+        # Response hazırla
         response = {
             "success": True,
             "message": "Test başarıyla kaydedildi",
@@ -194,6 +218,7 @@ async def submit_test_result(test_data: TestResultSubmit):
             "task_auto_completed": task_result.get("auto_completed", False)
         }
         
+        # Eğer görev otomatik tamamlandıysa bilgi ekle
         if task_result.get("auto_completed"):
             response["completed_task"] = {
                 "task_id": task_result.get("task_id"),
