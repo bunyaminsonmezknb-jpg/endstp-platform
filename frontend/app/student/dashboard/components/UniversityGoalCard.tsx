@@ -64,9 +64,6 @@ export default function UniversityGoalCard() {
     setError(null);
 
     try {
-      const userStr = localStorage.getItem('user');
-      const accessToken = localStorage.getItem('access_token');
-
       if (!userStr || !accessToken) {
         throw new Error('Lütfen giriş yapın');
       }

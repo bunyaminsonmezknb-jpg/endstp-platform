@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 
 interface HeroStatsProps {
   dailyGoal: {
@@ -13,7 +13,7 @@ interface HeroStatsProps {
   weeklyQuestions: number;
   weeklyIncrease: number;
   tasksList?: any[];
-  weeklySubjects?: {  // ✅ YENİ
+  weeklySubjects?: {
     worst_subjects: any[];
     best_subjects: any[];
     all_subjects: any[];
@@ -34,70 +34,92 @@ interface HeroStatsProps {
   };
 }
 
-export default function HeroStats({ 
-  dailyGoal, 
-  weeklySuccess, 
-  weeklyTarget, 
-  studyTimeToday, 
+function HeroStats({
+  dailyGoal,
+  weeklySuccess,
+  weeklyTarget,
+  studyTimeToday,
   weeklyQuestions,
   weeklyIncrease,
   tasksList = [],
-  weeklySubjects = { worst_subjects: [], best_subjects: [], all_subjects: [] }, // ✅ YENİ
+  weeklySubjects = { worst_subjects: [], best_subjects: [], all_subjects: [] },
   projection
 }: HeroStatsProps) {
   const [flippedCard, setFlippedCard] = useState<string | null>(null);
-  const formatTime = (minutes: number): string => {
+
+  const toggleFlip = useCallback((cardId: string) => {
+    setFlippedCard(prev => (prev === cardId ? null : cardId));
+  }, []);
+
+  const formatTime = useCallback((minutes: number): string => {
     if (minutes === 0) return '0 dk';
     if (minutes < 60) return `${minutes} dk`;
-    
+
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    
+
     if (mins === 0) return `${hours} sa`;
     return `${hours} sa ${mins} dk`;
-  };
-  const dailyProgress = (dailyGoal.current / dailyGoal.target) * 100;
-  const weeklyProgress = (weeklySuccess / weeklyTarget) * 100;
+  }, []);
 
-  const toggleFlip = (cardId: string) => {
-    setFlippedCard(flippedCard === cardId ? null : cardId);
-  };
+  const dailyProgress = useMemo(
+    () => (dailyGoal.current / dailyGoal.target) * 100,
+    [dailyGoal.current, dailyGoal.target]
+  );
 
-  // Dinamik hedef hesaplama
-  const calculateDynamicGoal = () => {
+  const weeklyProgress = useMemo(
+    () => (weeklySuccess / weeklyTarget) * 100,
+    [weeklySuccess, weeklyTarget]
+  );
+
+  const dynamicGoal = useMemo(() => {
     const currentWeeklySuccess = weeklySuccess;
-    const dynamicGoal = Math.min(currentWeeklySuccess + 10, 100);
-    const gap = dynamicGoal - currentWeeklySuccess;
-    
-    let goalMessage = '';
+    const dynamicTarget = Math.min(currentWeeklySuccess + 10, 100);
+    const gap = dynamicTarget - currentWeeklySuccess;
+
+    let message = '';
     if (gap <= 5) {
-      goalMessage = `Hedefine çok yakınsın! ${gap} puan kaldı 🎯`;
+      message = `Hedefine çok yakınsın! ${gap} puan kaldı 🎯`;
     } else if (gap <= 10) {
-      goalMessage = `Bu hafta ${gap} puan daha iyisini hedefle! 💪`;
+      message = `Bu hafta ${gap} puan daha iyisini hedefle! 💪`;
     } else {
-      goalMessage = `${gap} puanlık gelişim için hazır mısın? 🚀`;
+      message = `${gap} puanlık gelişim için hazır mısın? 🚀`;
     }
-    
+
     return {
       current: currentWeeklySuccess,
-      target: dynamicGoal,
-      message: goalMessage,
+      target: dynamicTarget,
+      message,
       isRealistic: gap <= 15
     };
-  };
+  }, [weeklySuccess]);
 
-  const dynamicGoal = calculateDynamicGoal();
-  const pendingTasks = tasksList.filter(t => t.status === 'pending');
-  const completedTasks = tasksList.filter(t => t.status === 'completed');
+  const pendingTasks = useMemo(
+    () => tasksList.filter(t => t.status === 'pending'),
+    [tasksList]
+  );
 
-    // Test ve study süreleri
-  const testTime = completedTasks
-    .filter(t => t.task_type === 'test')
-    .reduce((sum, t) => sum + t.estimated_time_minutes, 0);
-  
-  const studyTime = completedTasks
-    .filter(t => t.task_type === 'study')
-    .reduce((sum, t) => sum + t.estimated_time_minutes, 0);
+  const completedTasks = useMemo(
+    () => tasksList.filter(t => t.status === 'completed'),
+    [tasksList]
+  );
+
+  const testTime = useMemo(
+    () =>
+      completedTasks
+        .filter(t => t.task_type === 'test')
+        .reduce((sum, t) => sum + t.estimated_time_minutes, 0),
+    [completedTasks]
+  );
+
+  const studyTime = useMemo(
+    () =>
+      completedTasks
+        .filter(t => t.task_type === 'study')
+        .reduce((sum, t) => sum + t.estimated_time_minutes, 0),
+    [completedTasks]
+  );
+
   return (
     <div className="mb-6">
       <div className="bg-white rounded-3xl p-8 shadow-lg">
@@ -345,3 +367,4 @@ export default function HeroStats({
     </div>
   );
 }
+export default React.memo(HeroStats);

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useReflexNotifications } from '@/hooks/useReflexNotifications'
+import { useReflexNotifications } from '@/lib/hooks/useReflexNotifications'
 import { ReflexNotificationCard } from './ReflexNotificationCard'
 import { Bell, BellOff, ChevronDown, ChevronUp } from 'lucide-react'
 

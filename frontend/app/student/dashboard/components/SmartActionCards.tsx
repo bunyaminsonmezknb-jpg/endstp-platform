@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '@/lib/api/client';
 import FeedbackButtons from './FeedbackButtons';
 import SideDrawer from './SideDrawer';
@@ -19,153 +19,141 @@ interface MotorAction {
 interface MotorData {
   name: string;
   icon: string;
-  color: string;       // gradient class
-  borderColor: string; // tailwind border class
+  color: string;
+  borderColor: string;
   actions: MotorAction[];
 }
 
 export default function SmartActionCards() {
   const [motorsData, setMotorsData] = useState<MotorData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Drawer state
   const [openMotorName, setOpenMotorName] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchActions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // ✅ KRİTİK: UI helper (EKSİKTİ)
+  const getUrgencyColor = useCallback((urgency: MotorAction['urgency']) => {
+    switch (urgency) {
+      case 'critical':
+        return 'bg-red-500 text-white';
+      case 'high':
+        return 'bg-orange-500 text-white';
+      case 'medium':
+        return 'bg-yellow-500 text-white';
+      case 'low':
+        return 'bg-green-500 text-white';
+      default:
+        return 'bg-gray-500 text-white';
+    }
   }, []);
 
-  const fetchActions = async () => {
+  const fetchActions = useCallback(async () => {
     try {
-      const userStr = localStorage.getItem('user');
-      const accessToken = localStorage.getItem('access_token');
-      if (!userStr || !accessToken) {
-        setIsLoading(false);
-        return;
-      }
-
       const data = (await api.post('/student/analyze')) as any;
       const motors: MotorData[] = [];
 
-      // 1) BS-MODEL (Akıllı Tekrar)
+      // 1) BS-MODEL
       if (data.bs_model?.urgent_topics?.length > 0) {
-        const actions: MotorAction[] = data.bs_model.urgent_topics.map((topic: any) => {
-          const urgency =
-            topic.next_review_urgency === 'HEMEN' ? 'critical' :
-            topic.next_review_urgency === 'ACİL' ? 'high' : 'medium';
-
-          return {
-            topic_name: topic.topic_name,
-            subject_name: topic.subject_name,
-            urgency,
-            urgency_text: topic.next_review_urgency,
-            subtitle: `${topic.days_since_last_test} gün geçti • Hatırlama: %${topic.remembering_rate}`,
-            action: 'Hemen Tekrar Et',
-            days_since: topic.days_since_last_test,
-            score: topic.urgency_score,
-          };
-        });
-
         motors.push({
           name: 'Akıllı Tekrar',
           icon: '⏰',
           color: 'from-orange-500 to-orange-600',
           borderColor: 'border-orange-300',
-          actions,
+          actions: data.bs_model.urgent_topics.map((topic: any) => ({
+            topic_name: topic.topic_name,
+            subject_name: topic.subject_name,
+            urgency:
+              topic.next_review_urgency === 'HEMEN'
+                ? 'critical'
+                : topic.next_review_urgency === 'ACİL'
+                ? 'high'
+                : 'medium',
+            urgency_text: topic.next_review_urgency,
+            subtitle: `${topic.days_since_last_test} gün geçti • Hatırlama: %${topic.remembering_rate}`,
+            action: 'Hemen Tekrar Et',
+            days_since: topic.days_since_last_test,
+            score: topic.urgency_score,
+          })),
         });
       }
 
       // 2) PRIORITY ENGINE
       if (data.priority_engine?.this_week_topics?.length > 0) {
-        const actions: MotorAction[] = data.priority_engine.this_week_topics.map((topic: any) => {
-          const urgency =
-            topic.priority_level === 'CRITICAL' ? 'critical' :
-            topic.priority_level === 'HIGH' ? 'high' : 'medium';
-
-          return {
-            topic_name: topic.topic_name,
-            subject_name: topic.subject_name,
-            urgency,
-            urgency_text:
-              topic.priority_level === 'CRITICAL' ? 'KRİTİK' :
-              topic.priority_level === 'HIGH' ? 'YÜKSEK' : 'ORTA',
-            subtitle: `Öncelik Skoru: ${topic.priority_score} • Hatırlama: %${topic.remembering_rate}`,
-            action: 'Plan Yap',
-            score: topic.priority_score,
-          };
-        });
-
         motors.push({
           name: 'Öncelik Motoru',
           icon: '⚡',
           color: 'from-purple-500 to-purple-600',
           borderColor: 'border-purple-300',
-          actions,
+          actions: data.priority_engine.this_week_topics.map((topic: any) => ({
+            topic_name: topic.topic_name,
+            subject_name: topic.subject_name,
+            urgency:
+              topic.priority_level === 'CRITICAL'
+                ? 'critical'
+                : topic.priority_level === 'HIGH'
+                ? 'high'
+                : 'medium',
+            urgency_text:
+              topic.priority_level === 'CRITICAL'
+                ? 'KRİTİK'
+                : topic.priority_level === 'HIGH'
+                ? 'YÜKSEK'
+                : 'ORTA',
+            subtitle: `Öncelik Skoru: ${topic.priority_score} • Hatırlama: %${topic.remembering_rate}`,
+            action: 'Plan Yap',
+            score: topic.priority_score,
+          })),
         });
       }
 
       // 3) DIFFICULTY ENGINE
       if (data.difficulty_engine?.struggling_topics?.length > 0) {
-        const actions: MotorAction[] = data.difficulty_engine.struggling_topics.map((topic: any) => ({
-          topic_name: topic.topic_name,
-          subject_name: topic.subject_name,
-          urgency: 'medium',
-          urgency_text: 'ZORLUK',
-          subtitle: `Ortalama Başarı: %${Math.round(topic.average_success)} • ${topic.total_tests} test`,
-          action: 'Kaynak Değiştir',
-          score: topic.difficulty_score,
-        }));
-
         motors.push({
           name: 'Zorluk Analizi',
           icon: '📊',
           color: 'from-red-500 to-red-600',
           borderColor: 'border-red-300',
-          actions,
+          actions: data.difficulty_engine.struggling_topics.map((topic: any) => ({
+            topic_name: topic.topic_name,
+            subject_name: topic.subject_name,
+            urgency: 'medium',
+            urgency_text: 'ZORLUK',
+            subtitle: `Ortalama Başarı: %${Math.round(topic.average_success)} • ${topic.total_tests} test`,
+            action: 'Kaynak Değiştir',
+            score: topic.difficulty_score,
+          })),
         });
       }
 
       // 4) TIME ANALYZER
       if (data.time_analyzer?.slow_topics?.length > 0) {
-        const actions: MotorAction[] = data.time_analyzer.slow_topics.map((topic: any) => ({
-          topic_name: topic.topic_name,
-          subject_name: topic.subject_name,
-          urgency: 'medium',
-          urgency_text: 'YAVAŞ',
-          subtitle: `${Math.round(topic.average_interval_days)} gün ara • ${topic.total_tests} test`,
-          action: 'Daha Sık Çöz',
-          score: topic.average_interval_days,
-        }));
-
         motors.push({
           name: 'Hız Analizi',
           icon: '🐢',
           color: 'from-yellow-500 to-yellow-600',
           borderColor: 'border-yellow-300',
-          actions,
+          actions: data.time_analyzer.slow_topics.map((topic: any) => ({
+            topic_name: topic.topic_name,
+            subject_name: topic.subject_name,
+            urgency: 'medium',
+            urgency_text: 'YAVAŞ',
+            subtitle: `${Math.round(topic.average_interval_days)} gün ara • ${topic.total_tests} test`,
+            action: 'Daha Sık Çöz',
+            score: topic.average_interval_days,
+          })),
         });
       }
 
       setMotorsData(motors);
-    } catch (error) {
-      console.error('Action cards fetch error:', error);
+    } catch (err) {
+      console.error('Action cards fetch error:', err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const getUrgencyColor = (urgency: string) => {
-    switch (urgency) {
-      case 'critical': return 'bg-red-500 text-white';
-      case 'high': return 'bg-orange-500 text-white';
-      case 'medium': return 'bg-yellow-500 text-white';
-      case 'low': return 'bg-green-500 text-white';
-      default: return 'bg-gray-500 text-white';
-    }
-  };
+  useEffect(() => {
+    fetchActions();
+  }, [fetchActions]);
 
-  // ✅ Dynamic grid columns (no empty slots)
   const gridClass = useMemo(() => {
     const count = motorsData.length;
     if (count <= 1) return 'grid-cols-1';
@@ -175,6 +163,7 @@ export default function SmartActionCards() {
   }, [motorsData.length]);
 
   const openMotor = motorsData.find(m => m.name === openMotorName) ?? null;
+
 
   if (isLoading) {
     return (

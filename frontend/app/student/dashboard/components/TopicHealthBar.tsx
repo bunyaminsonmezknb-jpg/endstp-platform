@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Topic } from '@/lib/store/studentDashboardStore';
 
@@ -8,17 +8,22 @@ interface TopicHealthBarProps {
   topics: Topic[];
 }
 
-export default function TopicHealthBar({ topics }: TopicHealthBarProps) {
+function TopicHealthBar({ topics }: TopicHealthBarProps) {
   const router = useRouter();
   const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
 
-  // Mock dataları filtrele
-  const realTopics = topics.filter((t) => !t.id.startsWith('mock-'));
+  // ✅ FİLTRE useMemo
+  const realTopics = useMemo(
+    () => topics.filter(t => !t.id.startsWith('mock-')),
+    [topics]
+  );
+
   const hasRealTopics = realTopics.length > 0;
 
-  const toggleExpand = (topicId: string) => {
-    setExpandedTopicId(expandedTopicId === topicId ? null : topicId);
-  };
+  // ✅ HANDLER useCallback
+  const toggleExpand = useCallback((topicId: string) => {
+    setExpandedTopicId(prev => (prev === topicId ? null : topicId));
+  }, []);
 
   const getBarColorClass = (status: string) => {
     if (status === 'critical') return 'bg-gradient-to-r from-red-500 to-red-700 animate-pulse';
@@ -280,3 +285,4 @@ const getNextReviewText = (
     </div>
   );
 }
+export default React.memo(TopicHealthBar);

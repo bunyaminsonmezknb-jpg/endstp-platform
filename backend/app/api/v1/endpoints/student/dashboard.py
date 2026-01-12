@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 from app.db.session import get_supabase_admin
 from app.core.auth import get_current_user
 from .utils import calculate_remembering_rate, format_turkish_date, calculate_next_review_date, calculate_status, get_mock_topics, calculate_realistic_projection, EXAM_DATE
+from .performance import get_student_performance
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ router = APIRouter()
 def get_mock_dashboard():
     """Mock dashboard data"""
     return {
+        "topic_counts": topic_counts,
         "success": True,
         "message": "Mock data - henüz test girişi yok",
         "topics": []
@@ -25,74 +27,47 @@ def get_mock_dashboard():
 
 @router.get("/dashboard")
 async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
+    """Öğrenci dashboard verisi (Cache'li performans modülü ile)"""
     student_id = current_user["id"]
-    """Öğrenci dashboard verisi"""
     
-    supabase = get_supabase_admin()
+    # Cache'li performans modülü
+    perf_data = get_student_performance(student_id, use_cache=True)
+    topic_performance = perf_data["topic_performance"]
+    all_tests = perf_data.get("all_tests", [])
     
-    all_tests = supabase.table("student_topic_tests").select(
-        "*, topics(name_tr, subjects(name_tr, icon))"
-    ).eq("student_id", student_id).order("test_date", desc=True).execute()
-    
-    if not all_tests.data:
+    if not all_tests:
         return get_mock_dashboard()
     
-    topic_performance = {}
-    
-    for test in all_tests.data:
-        topic_id = test["topic_id"]
-        
-        if topic_id not in topic_performance:
-            topic_performance[topic_id] = {
-                "topic_id": topic_id,
-                "topic_name": test["topics"]["name_tr"] if test.get("topics") else "Unknown",
-                "subject_name": test["topics"]["subjects"]["name_tr"] if test.get("topics") and test["topics"].get("subjects") else "Unknown",
-                "tests": []
-            }
-        
-        topic_performance[topic_id]["tests"].append(test)
-    
+    # Topic listesi oluştur
     topics_list = []
-    now = datetime.now(timezone.utc)
     
     for topic_id, data in topic_performance.items():
         tests = data["tests"]
-        latest_test = tests[0]
         
-        remembering_rate = calculate_remembering_rate(tests)
-        
-        test_date = datetime.fromisoformat(latest_test["test_date"].replace('Z', '+00:00'))
-        days_since_last_test = (now - test_date).days
-        
-        next_review = calculate_next_review_date(remembering_rate, test_date)
-        
-        status, status_text, emoji = calculate_status(remembering_rate, days_since_last_test)
-        
+        # Achievement badge
         achievement_badge = None
         if len(tests) >= 2:
-            improvement = tests[0]["success_rate"] - tests[-1]["success_rate"]
+            improvement = tests[0].get("success_rate", 0) - tests[-1].get("success_rate", 0)
             if improvement > 20:
                 achievement_badge = {
-                    "text": f"+%{int(improvement)} ({len(tests)} test)",
+                    "text": f"+%{{int(improvement)}} ({{len(tests)}} test)",
                     "icon": "⭐"
                 }
         
+        # Topic objesi (performance modülünden hazır data)
         topic_obj = {
             "id": topic_id,
             "name": data["topic_name"],
             "subject": data["subject_name"],
-            "rememberingRate": remembering_rate,
-            "status": status,
-            "statusText": status_text,
-            "emoji": emoji,
-            "days_since_last_test": days_since_last_test,
-            "total_tests": len(tests),
-            "latest_net": float(latest_test["net_score"]),
-            "latest_success_rate": float(latest_test["success_rate"]),
-            "next_review": {
-                "days_remaining": next_review["days_remaining"],
-                "urgency": next_review["urgency"]
-            }
+            "rememberingRate": data["remembering_rate"],
+            "status": data["status"],
+            "statusText": data["status_text"],
+            "emoji": data["emoji"],
+            "days_since_last_test": data["days_since_last_test"],
+            "total_tests": data["total_tests"],
+            "latest_net": data["latest_net"],
+            "latest_success_rate": data["latest_success_rate"],
+            "next_review": data["next_review"]
         }
         
         if achievement_badge:
@@ -102,56 +77,52 @@ async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
     
     topics_list.sort(key=lambda x: x["rememberingRate"])
     
- 
-    top_topics = topics_list[:5]
+    # Analytics
+    if topics_list:
+        worst = topics_list[0]
+    else:
+        worst = {"rememberingRate": 0}
     
-    projection = calculate_realistic_projection(all_tests.data, topic_performance)
-    
-    critical_alert = None
-    if top_topics and top_topics[0]["rememberingRate"] < 50:
-        worst = top_topics[0]
-        critical_alert = {
-            "show": True,
-            "topicName": worst["name"],
-            "daysAgo": worst["days_since_last_test"],
-            "forgetRisk": 100 - worst["rememberingRate"]
-        }
-    
+    now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
+    
     weekly_tests = [
-        t for t in all_tests.data 
+        t for t in all_tests 
         if datetime.fromisoformat(t["test_date"].replace('Z', '+00:00')) >= week_ago
     ]
     
-    weekly_success = int((sum([t["success_rate"] for t in weekly_tests]) / len(weekly_tests)) if weekly_tests else 0)
+    weekly_success = int((sum([t.get("success_rate", 0) for t in weekly_tests]) / len(weekly_tests)) if weekly_tests else 0)
     
-    today = now.date()
-    today_tests = [
-        t for t in all_tests.data 
-        if datetime.fromisoformat(t["test_date"].replace('Z', '+00:00')).date() == today
+    month_ago = now - timedelta(days=30)
+    monthly_tests = [
+        t for t in all_tests 
+        if datetime.fromisoformat(t["test_date"].replace('Z', '+00:00')) >= month_ago
     ]
     
+    projection = calculate_realistic_projection(all_tests, topic_performance)
+    
     return {
-        "student_name": "Demo Öğrenci",
-        "streak": 7,
-        "daily_goal": {
-            "current": len(today_tests),
-            "target": 5
+        "topic_counts": topic_counts,
+        "success": True,
+        "topics": topics_list,
+        "analytics": {
+            "weakestTopic": worst["rememberingRate"],
+            "forgetRisk": 100 - worst["rememberingRate"]
         },
-        "weekly_success": weekly_success,
-        "weekly_target": 85,
-        "study_time_today": len(today_tests) * 15,
-        "weekly_questions": len(weekly_tests) * 12,
-        "weekly_increase": 25 if len(weekly_tests) > 0 else 0,
-        "topics": top_topics,
-        "critical_alert": critical_alert,
-        "projection": projection
+        "weekly": {
+            "tests": len(weekly_tests),
+            "average_success": weekly_success
+        },
+        "monthly": {
+            "tests": len(monthly_tests)
+        },
+        "projection": projection,
+        "cache_info": perf_data.get("metadata", {})
     }
-
-
 def get_mock_dashboard():
     """Mock dashboard - Test yoksa boş döner"""
     return {
+        "topic_counts": topic_counts,
         "student_name": "Demo Öğrenci",
         "streak": 0,
         "daily_goal": {"current": 0, "target": 5},
@@ -168,7 +139,8 @@ def get_mock_dashboard():
 
 @router.get("/profile")
 async def get_student_profile(current_user: dict = Depends(get_current_user)):
-    return {"id": student_id, "name": "Demo Öğrenci", "email": "demo@endstp.com", "class": "11. Sınıf"}
+    return {
+        "topic_counts": topic_counts,"id": student_id, "name": "Demo Öğrenci", "email": "demo@endstp.com", "class": "11. Sınıf"}
 
 
 @router.get("/tests")
@@ -185,7 +157,8 @@ async def get_student_tests(current_user: dict = Depends(get_current_user)):
     ).eq("student_id", student_id).order("test_date", desc=True).execute()
     
     if not tests_response.data:
-        return {"tests": []}
+        return {
+        "topic_counts": topic_counts,"tests": []}
     
     # Formatla
     formatted_tests = []
@@ -206,7 +179,8 @@ async def get_student_tests(current_user: dict = Depends(get_current_user)):
             }
         })
     
-    return {"tests": formatted_tests}
+    return {
+        "topic_counts": topic_counts,"tests": formatted_tests}
 @router.get("/weekly-subjects")
 async def get_weekly_subjects(current_user: dict = Depends(get_current_user)):
     student_id = current_user["id"]
@@ -225,6 +199,7 @@ async def get_weekly_subjects(current_user: dict = Depends(get_current_user)):
         
         if not tests.data:
             return {
+        "topic_counts": topic_counts,
                 "success": True,
                 "subjects": [],
                 "message": "Son 7 günde test yok"
@@ -269,6 +244,7 @@ async def get_weekly_subjects(current_user: dict = Depends(get_current_user)):
         best.reverse()
         
         return {
+        "topic_counts": topic_counts,
             "success": True,
             "worst_subjects": worst,
             "best_subjects": best,
@@ -277,7 +253,8 @@ async def get_weekly_subjects(current_user: dict = Depends(get_current_user)):
         
     except Exception as e:
         print(f"Weekly subjects error: {str(e)}")
-        return {"success": False, "error": str(e)}
+        return {
+        "topic_counts": topic_counts,"success": False, "error": str(e)}
 # student.py'nin en sonuna ekle
 
 # ============================================

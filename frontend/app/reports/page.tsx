@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api/client';
+import { supabase } from '@/lib/supabase/client';
+
+/* =======================
+   TYPES
+======================= */
 
 interface OverallStats {
   total_tests: number;
@@ -52,36 +58,38 @@ interface ReportsData {
   recent_tests: RecentTest[];
 }
 
+/* =======================
+   PAGE
+======================= */
+
 export default function ReportsPage() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ReportsData | null>(null);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'subjects' | 'topics' | 'recent'>('subjects');
+  const [activeTab, setActiveTab] =
+    useState<'subjects' | 'topics' | 'recent'>('subjects');
 
   useEffect(() => {
     fetchReports();
   }, []);
 
+  /* =======================
+     DATA FETCH
+  ======================= */
+
   const fetchReports = async () => {
     try {
-      const userStr = localStorage.getItem('user');
-      if (!userStr) {
+      const res = await api.get<ReportsData>('/reports');
+      setData(res);
+    } catch (err: any) {
+      if (err?.status === 401) {
         router.push('/login');
         return;
       }
 
-      const user = JSON.parse(userStr);
-      const accessToken = localStorage.getItem('access_token');
-
-      // Reports API'den veri çek
-      const response = await fetch(`http://localhost:8000/api/v1/students/${user.id}/reports`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-
-      if (response.status === 404) {
-        // Veri yok
-        setError('');
+      if (err?.status === 404) {
         setData({
           overall_stats: {
             total_tests: 0,
@@ -89,38 +97,45 @@ export default function ReportsPage() {
             total_correct: 0,
             total_wrong: 0,
             total_empty: 0,
-            success_rate: 0
+            success_rate: 0,
           },
           subject_performance: [],
           topic_performance: [],
           strong_topics: [],
           weak_topics: [],
-          recent_tests: []
+          recent_tests: [],
         });
         return;
       }
 
-      if (!response.ok) throw new Error('Raporlar yüklenemedi');
-
-      const reportsData = await response.json();
-      setData(reportsData);
-
-    } catch (err: any) {
       console.error('Reports hatası:', err);
-      setError(err.message);
+      setError('Raporlar yüklenemedi');
     } finally {
       setLoading(false);
     }
   };
 
+  /* =======================
+     LOGOUT (ALTIN MİMARİ)
+  ======================= */
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  /* =======================
+     HELPERS
+  ======================= */
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('tr-TR', { 
-      day: '2-digit', 
-      month: '2-digit', 
+    return date.toLocaleDateString('tr-TR', {
+      day: '2-digit',
+      month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
@@ -136,20 +151,14 @@ export default function ReportsPage() {
     return 'bg-red-50 border-red-300';
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    document.cookie = 'access_token=; path=/; max-age=0';
-    router.push('/login');
-  };
+  /* =======================
+     STATES
+  ======================= */
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Raporlar yükleniyor...</p>
-        </div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
   }
@@ -157,42 +166,33 @@ export default function ReportsPage() {
   if (error || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
-        <div className="text-center bg-white p-8 rounded-2xl shadow-lg">
-          <div className="text-6xl mb-4">❌</div>
-          <p className="text-red-600 mb-4 font-semibold">{error || 'Veri yüklenemedi'}</p>
+        <div className="bg-white p-8 rounded-xl shadow-lg text-center">
+          <p className="text-red-600 font-semibold mb-4">{error}</p>
           <button
             onClick={() => router.push('/student/dashboard')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg"
           >
-            Dashboard'a Dön
+            Dashboard’a Dön
           </button>
         </div>
       </div>
     );
   }
 
+  /* =======================
+     UI
+  ======================= */
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push('/student/dashboard')}>
-            <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              End.STP
-            </span>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => router.push('/student/dashboard')}
-              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition"
-            >
+      <header className="bg-white border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between">
+          <h1 className="text-2xl font-bold">📊 Detaylı Performans Raporları</h1>
+          <div className="flex gap-3">
+            <button onClick={() => router.push('/student/dashboard')}>
               ← Dashboard
             </button>
-            <button 
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
-            >
+            <button onClick={handleLogout} className="text-red-600">
               Çıkış
             </button>
           </div>

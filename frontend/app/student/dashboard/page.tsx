@@ -1,7 +1,6 @@
 'use client';
 import FeedbackWidget from '@/app/components/FeedbackWidget';
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useStudentDashboard } from '@/lib/store/studentDashboardStore';
 import { api } from '@/lib/api/client';
 import DashboardHeader from './components/DashboardHeader';
@@ -12,6 +11,7 @@ import TopicHealthBar from './components/TopicHealthBar';
 import HealthStatusBar from './components/HealthStatusBar';
 import MotorAnalysisPanel from './components/MotorAnalysisPanel';
 import TodayStatusCards from './components/TodayStatusCards';
+import { usePolling } from '@/lib/hooks/usePolling'
 
 /**
  * Student Dashboard - v5.0
@@ -26,10 +26,12 @@ import TodayStatusCards from './components/TodayStatusCards';
  */
 
 export default function StudentDashboard() {
-  const router = useRouter();
   const { dashboardData, isLoading, error, fetchDashboardData } = useStudentDashboard();
+  const stableFetchDashboardData = useCallback(() => {
+  fetchDashboardData();
+}, [fetchDashboardData]);
+
   const [activeView, setActiveView] = useState<'overview' | 'motors' | 'tasks'>('overview');
-  const [studentId, setStudentId] = useState<string>('');
   const [tasksSummary, setTasksSummary] = useState({
     total_tasks: 0,
     completed_tasks: 0,
@@ -44,19 +46,17 @@ export default function StudentDashboard() {
     all_subjects: []
   });
 
-  useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    const accessToken = localStorage.getItem('access_token');
-    
-    if (!userStr || !accessToken) {
-      router.push('/login');
-      return;
-    }
+  //useEffect(() => {
+  //  fetchDashboardData();
+  //}, [router]);
+  usePolling({
+    callback: stableFetchDashboardData,
+    interval: 60_000,      // 60 saniye
+    immediate: true,       // sayfa açılır açılmaz
+    enabled: true,
+    pauseOnHidden: true,   // tab arka planda durur
+  });
 
-    const user = JSON.parse(userStr);
-    setStudentId(user.id);
-    fetchDashboardData(user.id);
-  }, [router]);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -133,11 +133,11 @@ export default function StudentDashboard() {
   return (
     <div className="min-h-screen p-6">
       <div className="max-w-[1280px] mx-auto">
-        <DashboardHeader
-          studentName={dashboardData.studentName}
-          streak={dashboardData.streak}
-          studentId={studentId}
-        />
+      <DashboardHeader
+        studentName={dashboardData.studentName}
+        streak={dashboardData.streak}
+      />
+
 
         {/* ⭐ SEGMENT CONTROL - iOS Tarzı Dashboard Filtresi */}
         <div className="bg-white rounded-2xl shadow-lg p-1.5 mb-6 flex gap-1 w-full">
@@ -233,10 +233,10 @@ export default function StudentDashboard() {
             {dashboardData.topics.length > 0 ? (
               <HealthStatusBar
                 totalTopics={dashboardData.topics.length}
-                healthyTopics={dashboardData.topics.filter(t => t.status === 'excellent' || t.status === 'good').length}
-                warningTopics={dashboardData.topics.filter(t => t.status === 'warning').length}
-                frozenTopics={dashboardData.topics.filter(t => t.status === 'frozen').length}
-                criticalTopics={dashboardData.topics.filter(t => t.status === 'critical').length}
+                healthyTopics={dashboardData.topic_counts.healthy}
+                warningTopics={dashboardData.topic_counts.warning}
+                frozenTopics={dashboardData.topic_counts.frozen}
+                criticalTopics={dashboardData.topic_counts.critical}
                 currentlyShown={dashboardData.topics.length}
               />
             ) : (

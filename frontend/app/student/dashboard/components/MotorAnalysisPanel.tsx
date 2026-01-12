@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api/client';
 import FeedbackButtons from './FeedbackButtons';
@@ -48,7 +49,8 @@ export default function MotorAnalysisPanel() {
   const [analysisData, setAnalysisData] = useState<MotorAnalysisData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMotor, setSelectedMotor] = useState<'all' | 'bs' | 'difficulty' | 'time' | 'priority'>('all');
+  const [selectedMotor, setSelectedMotor] =
+    useState<'all' | 'bs' | 'difficulty' | 'time' | 'priority'>('all');
 
   useEffect(() => {
     runAnalysis();
@@ -59,19 +61,19 @@ export default function MotorAnalysisPanel() {
     setError(null);
 
     try {
-      const userStr = localStorage.getItem('user');
-      const accessToken = localStorage.getItem('access_token');
-
-      if (!userStr || !accessToken) {
-        throw new Error('Lütfen giriş yapın');
-      }
-
-      const user = JSON.parse(userStr);
-
-      const response = await api.post('/student/analyze') as any;
-      setAnalysisData(response);
+      /**
+       * Auth kontrolü burada yapılmaz.
+       * api client cookie/session ile çalışır.
+       * Yetkisizse backend 401 döner.
+       */
+      const res = await api.post<MotorAnalysisData>('/student/analyze');
+      setAnalysisData(res);
     } catch (err: any) {
-      setError(err.message || 'Analiz sırasında hata oluştu');
+      if (err?.status === 401) {
+        setError('Lütfen giriş yapın');
+        return;
+      }
+      setError(err?.message || 'Analiz sırasında hata oluştu');
     } finally {
       setIsLoading(false);
     }
@@ -80,31 +82,44 @@ export default function MotorAnalysisPanel() {
   const getUrgencyColor = (urgency?: string) => {
     if (!urgency) return 'bg-gray-100 text-gray-700';
     switch (urgency) {
-      case 'HEMEN': return 'bg-red-500 text-white';
-      case 'ACİL': return 'bg-orange-500 text-white';
-      case 'YAKIN': return 'bg-yellow-500 text-white';
-      default: return 'bg-blue-500 text-white';
+      case 'HEMEN':
+        return 'bg-red-500 text-white';
+      case 'ACİL':
+        return 'bg-orange-500 text-white';
+      case 'YAKIN':
+        return 'bg-yellow-500 text-white';
+      default:
+        return 'bg-blue-500 text-white';
     }
   };
 
   const getPriorityColor = (level?: string) => {
     if (!level) return 'bg-gray-100 text-gray-700';
     switch (level) {
-      case 'CRITICAL': return 'bg-red-500 text-white';
-      case 'HIGH': return 'bg-orange-500 text-white';
-      case 'MEDIUM': return 'bg-yellow-500 text-white';
-      default: return 'bg-blue-500 text-white';
+      case 'CRITICAL':
+        return 'bg-red-500 text-white';
+      case 'HIGH':
+        return 'bg-orange-500 text-white';
+      case 'MEDIUM':
+        return 'bg-yellow-500 text-white';
+      default:
+        return 'bg-blue-500 text-white';
     }
   };
 
   const getPriorityText = (level?: string) => {
     if (!level) return 'BELİRSİZ';
     switch (level) {
-      case 'CRITICAL': return 'KRİTİK';
-      case 'HIGH': return 'YÜKSEK';
-      case 'MEDIUM': return 'ORTA';
-      case 'LOW': return 'DÜŞÜK';
-      default: return level;
+      case 'CRITICAL':
+        return 'KRİTİK';
+      case 'HIGH':
+        return 'YÜKSEK';
+      case 'MEDIUM':
+        return 'ORTA';
+      case 'LOW':
+        return 'DÜŞÜK';
+      default:
+        return level;
     }
   };
 
@@ -112,7 +127,7 @@ export default function MotorAnalysisPanel() {
     return (
       <div className="bg-white rounded-2xl p-8 shadow-lg">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4" />
           <p className="text-gray-600">4 Motor analizi yapılıyor...</p>
         </div>
       </div>
@@ -141,13 +156,13 @@ export default function MotorAnalysisPanel() {
     return (
       <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
-        <h3 className="text-xl font-bold text-gray-800 mb-2">Henüz Analiz Verisi Yok</h3>
+        <h3 className="text-xl font-bold mb-2">Henüz Analiz Verisi Yok</h3>
         <p className="text-gray-600 mb-4">
-          4 motor analizini yapabilmek için önce test sonuçları girmelisiniz.
+          Analiz için önce test sonuçları girmelisiniz.
         </p>
         <a
           href="/test-entry"
-          className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700"
+          className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg"
         >
           Test Ekle
         </a>
@@ -155,7 +170,8 @@ export default function MotorAnalysisPanel() {
     );
   }
 
-  const { bs_model, difficulty_engine, time_analyzer, priority_engine } = analysisData;
+  const { bs_model, difficulty_engine, time_analyzer, priority_engine } =
+    analysisData;
 
   return (
     <div className="space-y-6">

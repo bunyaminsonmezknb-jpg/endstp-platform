@@ -30,10 +30,19 @@ export function useFeatureFlag(flagKey: string): boolean {
   });
 
   useEffect(() => {
+    let active = true;
+
     fetchFlags().then((flags) => {
-      setIsEnabled(flags[flagKey] ?? false);
+      if (active) {
+        setIsEnabled(flags[flagKey] ?? false);
+      }
     });
+
+    return () => {
+      active = false;
+    };
   }, [flagKey]);
+
 
   return isEnabled;
 }

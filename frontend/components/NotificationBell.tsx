@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Bell } from 'lucide-react'
-import { useReflexNotifications } from '@/hooks/useReflexNotifications'
+import { useReflexNotifications } from '@/lib/hooks/useReflexNotifications'
 import { ReflexNotificationCard } from './ReflexNotificationCard'
 import toast from 'react-hot-toast'
 

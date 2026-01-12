@@ -1,7 +1,26 @@
 'use client';
-
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api/client';
+import { supabase } from '@/lib/supabase/client';
+
+/**
+ * ⚠️ NOTE (Modülerleştirme Planı)
+ * ------------------------------------------------------------
+ * Bu dosya geliştirme aşamasında tek parça tutuluyor (debug + hız).
+ * Ancak binlerce satıra çıkmaması için güvenli modülerleştirme şudur:
+ *
+ * ✅ SADECE "PURE UI" parçaları ayır:
+ * - components/AdminOverview.tsx
+ * - components/AdminStudentsTable.tsx
+ * - components/AdminTopicsTable.tsx
+ * - components/AdminSubjectsGrid.tsx
+ * - components/AddTopicModal.tsx
+ *
+ * ❌ Fetch/state/useEffect child componentlere DAĞITMA!
+ * Data owner bu sayfa kalmalı (tek kaynak).
+ * ------------------------------------------------------------
+ */
 
 interface AdminStats {
   total_students: number;
@@ -42,74 +61,58 @@ interface Subject {
   total_questions: number;
 }
 
+type ActiveTab = 'overview' | 'students' | 'topics' | 'subjects';
+
 export default function AdminPage() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  
-  const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'topics' | 'subjects'>('overview');
-  
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+
   // Add Topic Modal
   const [showAddTopic, setShowAddTopic] = useState(false);
   const [newTopic, setNewTopic] = useState({
     subject_id: '',
     name_tr: '',
     difficulty_level: 3,
-    exam_weight: 0
+    exam_weight: 0,
   });
 
   useEffect(() => {
     fetchAdminData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchAdminData = async () => {
+    setLoading(true);
+    setError('');
+
     try {
-      const accessToken = localStorage.getItem('access_token');
+      // 1) Stats
+      const statsData = await api.get<any>('/admin/stats');
+      setStats(statsData);
 
-      // Stats
-      const statsRes = await fetch('http://localhost:8000/api/v1/admin/stats', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setStats(statsData);
-      }
+      // 2) Students
+      const studentsData = await api.get<any>('/admin/students');
+      setStudents(studentsData?.students || []);
 
-      // Students
-      const studentsRes = await fetch('http://localhost:8000/api/v1/admin/students', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (studentsRes.ok) {
-        const studentsData = await studentsRes.json();
-        setStudents(studentsData.students || []);
-      }
+      // 3) Topics
+      const topicsData = await api.get<any>('/admin/topics');
+      setTopics(topicsData?.topics || []);
 
-      // Topics
-      const topicsRes = await fetch('http://localhost:8000/api/v1/admin/topics', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (topicsRes.ok) {
-        const topicsData = await topicsRes.json();
-        setTopics(topicsData.topics || []);
-      }
-
-      // Subjects
-      const subjectsRes = await fetch('http://localhost:8000/api/v1/subjects', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (subjectsRes.ok) {
-        const subjectsData = await subjectsRes.json();
-        setSubjects(subjectsData || []);
-      }
-
+      // 4) Subjects (public endpoint olabilir ama admin ekranında yine api-client kullanıyoruz)
+      const subjectsData = await api.get<any>('/subjects');
+      setSubjects(subjectsData || []);
     } catch (err: any) {
       console.error('Admin data hatası:', err);
-      setError(err.message);
+      setError(err?.message || 'Admin verileri alınamadı');
     } finally {
       setLoading(false);
     }
@@ -117,24 +120,33 @@ export default function AdminPage() {
 
   const handleAddTopic = async () => {
     try {
-      const accessToken = localStorage.getItem('access_token');
-      
-      const response = await fetch('http://localhost:8000/api/v1/admin/topics', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify(newTopic)
-      });
+      const payload = {
+        subject_id: newTopic.subject_id,
+        name_tr: newTopic.name_tr,
+        difficulty_level: newTopic.difficulty_level,
+        exam_weight: newTopic.exam_weight,
+      };
 
-      if (response.ok) {
-        alert('✅ Konu eklendi!');
-        setShowAddTopic(false);
-        fetchAdminData();
-      } else {
+      const response = await api.post<any>('/admin/topics', payload);
+
+      // api-client response şekli farklı olabilir; yine de güvenli kontrol:
+      if (response?.success === false) {
         alert('❌ Konu eklenemedi!');
+        return;
       }
+
+      alert('✅ Konu eklendi!');
+      setShowAddTopic(false);
+
+      // Formu kısmi sıfırla (mevcut davranışı bozmadan)
+      setNewTopic((prev) => ({
+        ...prev,
+        name_tr: '',
+        difficulty_level: 3,
+        exam_weight: 0,
+      }));
+
+      await fetchAdminData();
     } catch (err) {
       console.error('Add topic hatası:', err);
       alert('Bir hata oluştu!');
@@ -145,40 +157,73 @@ export default function AdminPage() {
     if (!confirm('Bu konuyu deaktif etmek istediğinizden emin misiniz?')) return;
 
     try {
-      const accessToken = localStorage.getItem('access_token');
-      
-      const response = await fetch(`http://localhost:8000/api/v1/admin/topics/${topicId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-
-      if (response.ok) {
-        alert('✅ Konu silindi!');
-        fetchAdminData();
-      } else {
+      const res = await api.delete<any>(`/admin/topics/${topicId}`);
+      if (res?.success === false) {
         alert('❌ Konu silinemedi!');
+        return;
       }
+
+      alert('✅ Konu silindi!');
+      await fetchAdminData();
     } catch (err) {
       console.error('Delete topic hatası:', err);
+      alert('❌ Konu silinemedi!');
     }
   };
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
-    return date.toLocaleDateString('tr-TR', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric'
+    return date.toLocaleDateString('tr-TR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
     });
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    document.cookie = 'access_token=; path=/; max-age=0';
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout'); // opsiyonel, backend varsa
+    } catch {
+      // sessiz geç — logout UX bozulmasın
+    }
+
+    await supabase.auth.signOut();
     router.push('/login');
   };
+
+  const overviewCards = useMemo(() => {
+    if (!stats) return null;
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+        <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-500 hover:shadow-lg transition">
+          <p className="text-gray-600 text-sm mb-1">Toplam Öğrenci</p>
+          <p className="text-4xl font-bold text-blue-600">{stats.total_students}</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-green-500 hover:shadow-lg transition">
+          <p className="text-gray-600 text-sm mb-1">Toplam Test</p>
+          <p className="text-4xl font-bold text-green-600">{stats.total_tests}</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-purple-500 hover:shadow-lg transition">
+          <p className="text-gray-600 text-sm mb-1">Aktif Konu</p>
+          <p className="text-4xl font-bold text-purple-600">{stats.total_topics}</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-orange-500 hover:shadow-lg transition">
+          <p className="text-gray-600 text-sm mb-1">Aktif Ders</p>
+          <p className="text-4xl font-bold text-orange-600">{stats.total_subjects}</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-red-500 hover:shadow-lg transition">
+          <p className="text-gray-600 text-sm mb-1">Son 7 Gün Test</p>
+          <p className="text-4xl font-bold text-red-600">{stats.recent_tests}</p>
+        </div>
+      </div>
+    );
+  }, [stats]);
 
   if (loading) {
     return (
@@ -197,12 +242,20 @@ export default function AdminPage() {
         <div className="text-center bg-white p-8 rounded-2xl shadow-lg">
           <div className="text-6xl mb-4">❌</div>
           <p className="text-red-600 mb-4 font-semibold">{error}</p>
-          <button
-            onClick={() => router.push('/student/dashboard')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            Dashboard'a Dön
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => fetchAdminData()}
+              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+            >
+              Tekrar Dene
+            </button>
+            <button
+              onClick={() => router.push('/student/dashboard')}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              Dashboard&apos;a Dön
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -219,15 +272,15 @@ export default function AdminPage() {
             </h1>
             <p className="text-sm text-gray-500">Yönetim Paneli</p>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => router.push('/student/dashboard')}
               className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition"
             >
               ← Kullanıcı Paneli
             </button>
-            <button 
+            <button
               onClick={handleLogout}
               className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
             >
@@ -241,7 +294,7 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="bg-white rounded-xl shadow-md mb-6">
           <div className="border-b border-gray-200">
-            <div className="flex gap-2 p-2">
+            <div className="flex gap-2 p-2 flex-wrap">
               <button
                 onClick={() => setActiveTab('overview')}
                 className={`px-6 py-3 rounded-lg font-semibold transition ${
@@ -252,6 +305,7 @@ export default function AdminPage() {
               >
                 📊 Genel Bakış
               </button>
+
               <button
                 onClick={() => setActiveTab('students')}
                 className={`px-6 py-3 rounded-lg font-semibold transition ${
@@ -262,6 +316,7 @@ export default function AdminPage() {
               >
                 👥 Öğrenciler ({students.length})
               </button>
+
               <button
                 onClick={() => setActiveTab('topics')}
                 className={`px-6 py-3 rounded-lg font-semibold transition ${
@@ -272,6 +327,7 @@ export default function AdminPage() {
               >
                 📖 Konular ({topics.length})
               </button>
+
               <button
                 onClick={() => setActiveTab('subjects')}
                 className={`px-6 py-3 rounded-lg font-semibold transition ${
@@ -290,33 +346,8 @@ export default function AdminPage() {
         {activeTab === 'overview' && stats && (
           <div>
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Genel İstatistikler</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-              <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-500 hover:shadow-lg transition">
-                <p className="text-gray-600 text-sm mb-1">Toplam Öğrenci</p>
-                <p className="text-4xl font-bold text-blue-600">{stats.total_students}</p>
-              </div>
 
-              <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-green-500 hover:shadow-lg transition">
-                <p className="text-gray-600 text-sm mb-1">Toplam Test</p>
-                <p className="text-4xl font-bold text-green-600">{stats.total_tests}</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-purple-500 hover:shadow-lg transition">
-                <p className="text-gray-600 text-sm mb-1">Aktif Konu</p>
-                <p className="text-4xl font-bold text-purple-600">{stats.total_topics}</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-orange-500 hover:shadow-lg transition">
-                <p className="text-gray-600 text-sm mb-1">Aktif Ders</p>
-                <p className="text-4xl font-bold text-orange-600">{stats.total_subjects}</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-red-500 hover:shadow-lg transition">
-                <p className="text-gray-600 text-sm mb-1">Son 7 Gün Test</p>
-                <p className="text-4xl font-bold text-red-600">{stats.recent_tests}</p>
-              </div>
-            </div>
+            {overviewCards}
 
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h3 className="text-xl font-bold text-gray-800 mb-4">⚡ Hızlı İşlemler</h3>
@@ -372,7 +403,12 @@ export default function AdminPage() {
                 <tbody>
                   {students.length > 0 ? (
                     students.map((student, index) => (
-                      <tr key={student.id} className={`border-b ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} hover:bg-blue-50 transition`}>
+                      <tr
+                        key={student.id}
+                        className={`border-b ${
+                          index % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                        } hover:bg-blue-50 transition`}
+                      >
                         <td className="px-6 py-4 font-semibold text-gray-800">{student.name}</td>
                         <td className="px-6 py-4 text-gray-600">{student.email}</td>
                         <td className="px-6 py-4 text-gray-600">{student.class}</td>
@@ -427,25 +463,28 @@ export default function AdminPage() {
                 <tbody>
                   {topics.length > 0 ? (
                     topics.map((topic, index) => (
-                      <tr key={topic.id} className={`border-b ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} hover:bg-blue-50 transition`}>
+                      <tr
+                        key={topic.id}
+                        className={`border-b ${
+                          index % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                        } hover:bg-blue-50 transition`}
+                      >
                         <td className="px-6 py-4 font-semibold text-gray-800">{topic.name_tr}</td>
                         <td className="px-6 py-4 text-gray-600">
                           {topic.subject_icon} {topic.subject_name}
                         </td>
-                        <td className="px-6 py-4 text-center text-xl">
-                          {'⭐'.repeat(topic.difficulty_level)}
-                        </td>
+                        <td className="px-6 py-4 text-center text-xl">{'⭐'.repeat(topic.difficulty_level)}</td>
                         <td className="px-6 py-4 text-center">
                           <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full font-semibold">
                             {topic.test_count}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span className={`px-3 py-1 rounded-full font-semibold ${
-                            topic.is_active 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
+                          <span
+                            className={`px-3 py-1 rounded-full font-semibold ${
+                              topic.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}
+                          >
                             {topic.is_active ? 'Aktif' : 'Pasif'}
                           </span>
                         </td>
@@ -480,7 +519,11 @@ export default function AdminPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {subjects.map((subject) => (
-                <div key={subject.id} className="bg-white rounded-xl shadow-lg p-6 border-l-4 hover:shadow-xl transition" style={{borderColor: subject.color}}>
+                <div
+                  key={subject.id}
+                  className="bg-white rounded-xl shadow-lg p-6 border-l-4 hover:shadow-xl transition"
+                  style={{ borderColor: subject.color }}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <span className="text-5xl">{subject.icon}</span>
@@ -489,9 +532,11 @@ export default function AdminPage() {
                         <p className="text-sm text-gray-500">{subject.code}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                      subject.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                        subject.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}
+                    >
                       {subject.is_active ? 'Aktif' : 'Pasif'}
                     </span>
                   </div>
@@ -518,18 +563,18 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
             <h3 className="text-2xl font-bold text-gray-800 mb-6">➕ Yeni Konu Ekle</h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Ders</label>
                 <select
                   value={newTopic.subject_id}
-                  onChange={(e) => setNewTopic({...newTopic, subject_id: e.target.value})}
+                  onChange={(e) => setNewTopic({ ...newTopic, subject_id: e.target.value })}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   required
                 >
                   <option value="">Ders Seçin</option>
-                  {subjects.map(subject => (
+                  {subjects.map((subject) => (
                     <option key={subject.id} value={subject.id}>
                       {subject.icon} {subject.name_tr}
                     </option>
@@ -542,7 +587,7 @@ export default function AdminPage() {
                 <input
                   type="text"
                   value={newTopic.name_tr}
-                  onChange={(e) => setNewTopic({...newTopic, name_tr: e.target.value})}
+                  onChange={(e) => setNewTopic({ ...newTopic, name_tr: e.target.value })}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   placeholder="Örn: Limit"
                   required
@@ -558,7 +603,7 @@ export default function AdminPage() {
                   min="1"
                   max="5"
                   value={newTopic.difficulty_level}
-                  onChange={(e) => setNewTopic({...newTopic, difficulty_level: parseInt(e.target.value)})}
+                  onChange={(e) => setNewTopic({ ...newTopic, difficulty_level: parseInt(e.target.value) })}
                   className="w-full"
                 />
               </div>
@@ -569,7 +614,9 @@ export default function AdminPage() {
                   type="number"
                   step="0.1"
                   value={newTopic.exam_weight}
-                  onChange={(e) => setNewTopic({...newTopic, exam_weight: parseFloat(e.target.value)})}
+                  onChange={(e) =>
+                    setNewTopic({ ...newTopic, exam_weight: parseFloat(e.target.value || '0') })
+                  }
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   placeholder="8.5"
                 />

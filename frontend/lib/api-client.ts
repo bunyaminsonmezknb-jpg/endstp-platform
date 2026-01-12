@@ -1,207 +1,94 @@
-/**
- * API Client for End.STP Backend
- * Handles all HTTP requests to FastAPI backend
- * 
- * UPDATED: 4 Motor Analysis endpoint eklendi
- */
+import { createClient } from '@supabase/supabase-js'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// =========================
+// SUPABASE CLIENT (FRONTEND)
+// =========================
 
-export interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
-  status: number;
-}
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-/**
- * Generic fetch wrapper with error handling
- */
-async function fetchApi<T>(
-  endpoint: string,
-  options?: RequestInit
-): Promise<ApiResponse<T>> {
-  try {
-    // Get token from localStorage (only in browser)
-    const token = typeof window !== 'undefined'
-      ? localStorage.getItem('access_token')
-      : null;
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options?.headers,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return {
-        data: null,
-        error: errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
-        status: response.status,
-      };
-    }
-
-    const data = await response.json();
-    return {
-      data,
-      error: null,
-      status: response.status,
-    };
-  } catch (error) {
-    console.error('API Error:', error);
-    return {
-      data: null,
-      error: error instanceof Error ? error.message : 'Network error',
-      status: 0,
-    };
+export const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
   }
+)
+
+// =========================
+// BACKEND API BASE
+// =========================
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+
+// =========================
+// AUTH – TEK KAYNAK
+// =========================
+
+async function getAccessToken(): Promise<string | null> {
+  const { data, error } = await supabase.auth.getSession()
+
+  if (error) {
+    console.error('Supabase session error:', error.message)
+    return null
+  }
+
+  return data.session?.access_token ?? null
 }
 
-// ============================================
-// ESKİ ENDPOINT'LER (DEĞİŞMEDİ - DOKUNMAYIN)
-// ============================================
+// =========================
+// GENERIC API REQUEST
+// =========================
 
-/**
- * Get student dashboard data (ESKİ SİSTEM)
- */
-export async function getStudentDashboard(studentId: number) {
-  return fetchApi(`/api/v1/student/${studentId}/dashboard`);
+export async function apiRequest<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = await getAccessToken()
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers,
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`API ${response.status}: ${text}`)
+  }
+
+  return response.json() as Promise<T>
 }
 
-/**
- * Get recovery plan (partner links) for a topic
- */
-export async function getRecoveryPlan(studentId: number, topicId: number) {
-  return fetchApi(`/api/v1/student/${studentId}/topic/${topicId}/recovery-plan`);
-}
+// =========================
+// DOMAIN-SPECIFIC HELPERS
+// =========================
 
-/**
- * Update topic status after study completion
- */
-export async function updateTopicStatus(
-  studentId: number,
-  topicId: number,
-  newRememberingRate: number,
-  studyCompleted: boolean
-) {
-  return fetchApi(`/api/v1/student/${studentId}/topic/update`, {
-    method: 'POST',
-    body: JSON.stringify({
-      topic_id: topicId,
-      new_remembering_rate: newRememberingRate,
-      study_completed: studyCompleted,
-    }),
-  });
-}
+export const api = {
+  // Subjects
+  getSubjects: () =>
+    apiRequest<any[]>('/api/v1/subjects'),
 
-/**
- * Health check
- */
-export async function healthCheck() {
-  return fetchApi('/health');
-}
+  // Topics
+  getTopics: (subjectId: string) =>
+    apiRequest<any[]>(`/api/v1/topics/${subjectId}`),
 
-// ============================================
-// YENİ: 4 MOTOR ANALİZ ENDPOINT'İ
-// ============================================
+  // Student Dashboard
+  getStudentDashboard: () =>
+    apiRequest<any>('/api/v1/student/dashboard'),
 
-/**
- * Topic Test Input for 4 Motor Analysis
- */
-export interface TopicTestInput {
-  topic_id: number;
-  topic_name: string;
-  correct: number;
-  incorrect: number;
-  blank: number;
-  total_questions: number;
-  
-  // BS-Model için (opsiyonel)
-  current_ease_factor?: number;
-  current_interval?: number;
-  actual_gap_days?: number;
-  repetitions?: number;
-  
-  // Time Analyzer için (opsiyonel)
-  duration_minutes?: number;
-  
-  // Priority için (opsiyonel)
-  topic_weight?: number;
-  course_importance?: number;
-  difficulty_baseline?: number;
-}
-
-/**
- * 4 Motor Analysis Response - Tek Konu
- */
-export interface TopicAnalysisOutput {
-  topic_id: number;
-  topic_name: string;
-  next_review_date: string;
-  next_ease_factor: number;
-  next_interval: number;
-  status: string;
-  difficulty_level: number;
-  difficulty_percentage: number;
-  pace_ratio: number;
-  time_modifier: number;
-  speed_note: string;
-  priority_score: number;
-  priority_level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  suggestion: string;
-}
-
-/**
- * 4 Motor Analysis Response - Tam
- */
-export interface MotorAnalysisResponse {
-  student_id: string;
-  analyzed_at: string;
-  topics: TopicAnalysisOutput[];
-  summary: {
-    total_topics: number;
-    critical_topics: number;
-    high_priority_topics: number;
-    next_review_today: number;
-  };
-}
-
-/**
- * YENİ: 4 Motor ile Öğrenci Analizi
- * 
- * @example
- * const result = await getMotorAnalysis([
- *   {
- *     topic_id: 1,
- *     topic_name: "Türev",
- *     correct: 5,
- *     incorrect: 3,
- *     blank: 2,
- *     total_questions: 10,
- *     duration_minutes: 15
- *   }
- * ]);
- */
-export async function getMotorAnalysis(topics: TopicTestInput[]): Promise<ApiResponse<MotorAnalysisResponse>> {
-  // Get student ID from localStorage
-  const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-  const studentId = userStr ? JSON.parse(userStr).id : 'unknown';
-  
-  return fetchApi('/api/v1/student/analyze', {
-    method: 'POST',
-    body: JSON.stringify({
-      student_id: studentId,
-      topics: topics
-    })
-  });
-}
-
-/**
- * YENİ: Motor Health Check
- */
-export async function getMotorHealth() {
-  return fetchApi('/api/v1/student/health');
+  // Feature flags / health
+  getHealthFlags: () =>
+    apiRequest<any>('/api/v1/flags/health-status'),
 }

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api/client';
+import { supabase } from '@/lib/api-client';
 
 interface ExamSystem {
   id: string;
@@ -31,22 +33,26 @@ interface YearlyStats {
   notes: string;
 }
 
+type TopicsResponse = { topics: Topic[] };
+type YearlyStatsResponse = { stats: YearlyStats[] };
+
 export default function AdminExamsPage() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [examSystems, setExamSystems] = useState<ExamSystem[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
-  
+
   // Seçimler
   const [selectedExamSystem, setSelectedExamSystem] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('');
-  
+
   // Yıllık istatistikler
   const [yearlyStats, setYearlyStats] = useState<YearlyStats[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
-  
+
   // Yeni sınav verisi ekleme
   const [showAddData, setShowAddData] = useState(false);
   const [topicData, setTopicData] = useState({
@@ -56,133 +62,133 @@ export default function AdminExamsPage() {
     primary_questions: 0,
     secondary_questions: 0,
     question_numbers: '',
-    is_primary: true
+    is_primary: true,
   });
 
+  // -------------------------------------------------
+  // INITIAL LOAD
+  // -------------------------------------------------
   useEffect(() => {
-    fetchData();
+    void fetchInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchData = async () => {
+  const fetchInitialData = async () => {
     try {
-      const accessToken = localStorage.getItem('access_token');
+      // ✅ Subjects
+      const subjectsData = await api.get<Subject[]>('/api/v1/subjects');
+      setSubjects(subjectsData);
 
-      // Subjects
-      const subjectsRes = await fetch('http://localhost:8000/api/v1/subjects', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (subjectsRes.ok) {
-        const data = await subjectsRes.json();
-        setSubjects(data);
-      }
+      // ✅ Topics (beklenen format: { topics: [...] })
+      const topicsData = await api.get<TopicsResponse>('/api/v1/topics');
+      setTopics(topicsData.topics || []);
 
-      // Topics
-      const topicsRes = await fetch('http://localhost:8000/api/v1/admin/topics', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (topicsRes.ok) {
-        const data = await topicsRes.json();
-        setTopics(data.topics || []);
-      }
-
-      // Mock exam systems (gerçekte API'den gelecek)
-      setExamSystems([
-        { id: '1', code: 'YKS', name_tr: 'YKS (TYT/AYT)' }
-      ]);
-
+      // ✅ Exam Systems (şimdilik mock)
+      setExamSystems([{ id: '1', code: 'YKS', name_tr: 'YKS (TYT/AYT)' }]);
     } catch (err) {
-      console.error('Data fetch hatası:', err);
+      console.error('Initial data fetch hatası:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Konu seçildiğinde yıllık istatistikleri getir
+  // -------------------------------------------------
+  // YEARLY STATS
+  // -------------------------------------------------
   useEffect(() => {
     if (selectedTopic && selectedExamSystem) {
-      fetchYearlyStats();
+      void fetchYearlyStats();
+    } else {
+      setYearlyStats([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTopic, selectedExamSystem]);
 
   const fetchYearlyStats = async () => {
+    if (!selectedTopic || !selectedExamSystem) return;
+
     setLoadingStats(true);
     try {
-      const accessToken = localStorage.getItem('access_token');
-      const res = await fetch(
-        `http://localhost:8000/api/v1/admin/topics/${selectedTopic}/yearly-stats?exam_system_id=${selectedExamSystem}`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      const qs = new URLSearchParams({
+        topic_id: selectedTopic,
+        exam_system_id: selectedExamSystem,
+      });
+
+      const data = await api.get<YearlyStatsResponse>(
+        `/api/v1/admin/topic-yearly-data?${qs.toString()}`
       );
 
-      if (res.ok) {
-        const data = await res.json();
-        setYearlyStats(data.stats || []);
-      }
+      setYearlyStats(data.stats || []);
     } catch (err) {
       console.error('Yearly stats hatası:', err);
+      setYearlyStats([]);
     } finally {
       setLoadingStats(false);
     }
   };
 
+  // -------------------------------------------------
+  // ADD NEW YEAR DATA
+  // -------------------------------------------------
   const handleAddTopicData = async () => {
     try {
-      const accessToken = localStorage.getItem('access_token');
-      
-      const response = await fetch('http://localhost:8000/api/v1/admin/topic-yearly-data', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          topic_id: topicData.topic_id,
-          exam_system_id: topicData.exam_system_id,
-          year: topicData.year,
-          primary_questions: topicData.primary_questions,
-          secondary_questions: topicData.secondary_questions,
-          question_numbers: topicData.question_numbers.split(',').map(n => n.trim()).filter(n => n)
-        })
+      await api.post('/api/v1/admin/topic-yearly-data', {
+        topic_id: topicData.topic_id,
+        exam_system_id: topicData.exam_system_id,
+        year: topicData.year,
+        primary_questions: topicData.primary_questions,
+        secondary_questions: topicData.secondary_questions,
+        question_numbers: topicData.question_numbers
+          .split(',')
+          .map((n) => n.trim())
+          .filter(Boolean),
       });
 
-      if (response.ok) {
-        alert('✅ Sınav verisi eklendi!');
-        setShowAddData(false);
-        fetchYearlyStats();
-        
-        // Formu sıfırla
-        setTopicData({
-          topic_id: '',
-          year: new Date().getFullYear(),
-          exam_system_id: '',
-          primary_questions: 0,
-          secondary_questions: 0,
-          question_numbers: '',
-          is_primary: true
-        });
-      } else {
-        alert('❌ Hata oluştu!');
-      }
+      alert('✅ Sınav verisi eklendi!');
+      setShowAddData(false);
+      await fetchYearlyStats();
+
+      // Formu sıfırla
+      setTopicData({
+        topic_id: '',
+        year: new Date().getFullYear(),
+        exam_system_id: '',
+        primary_questions: 0,
+        secondary_questions: 0,
+        question_numbers: '',
+        is_primary: true,
+      });
     } catch (err) {
       console.error('Add topic data hatası:', err);
-      alert('Bir hata oluştu!');
+      alert('❌ Bir hata oluştu!');
     }
   };
 
-  const filteredTopics = selectedSubject 
-    ? topics.filter(t => t.subject_name === subjects.find(s => s.id === selectedSubject)?.name_tr)
-    : topics;
+  // -------------------------------------------------
+  // DERIVED
+  // -------------------------------------------------
+  const filteredTopics = useMemo(() => {
+    if (!selectedSubject) return topics;
+    const subjectName = subjects.find((s) => s.id === selectedSubject)?.name_tr;
+    if (!subjectName) return [];
+    return topics.filter((t) => t.subject_name === subjectName);
+  }, [selectedSubject, subjects, topics]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    document.cookie = 'access_token=; path=/; max-age=0';
+  // -------------------------------------------------
+  // AUTH
+  // -------------------------------------------------
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     router.push('/login');
   };
 
+  // -------------------------------------------------
+  // RENDER
+  // -------------------------------------------------
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
   }
@@ -196,15 +202,15 @@ export default function AdminExamsPage() {
             <h1 className="text-2xl font-bold text-gray-800">📊 Sınav Yönetimi</h1>
             <p className="text-sm text-gray-500">Yıllık sınav verilerini güncelleyin</p>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => router.push('/admin')}
               className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition"
             >
               ← Admin Panel
             </button>
-            <button 
+            <button
               onClick={handleLogout}
               className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
             >
@@ -218,7 +224,7 @@ export default function AdminExamsPage() {
         {/* Filtreler */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">🎯 Konu Seçimi</h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Sınav Sistemi</label>
@@ -228,8 +234,10 @@ export default function AdminExamsPage() {
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sınav Seçin</option>
-                {examSystems.map(exam => (
-                  <option key={exam.id} value={exam.id}>{exam.name_tr}</option>
+                {examSystems.map((exam) => (
+                  <option key={exam.id} value={exam.id}>
+                    {exam.name_tr}
+                  </option>
                 ))}
               </select>
             </div>
@@ -245,7 +253,7 @@ export default function AdminExamsPage() {
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Ders Seçin</option>
-                {subjects.map(subject => (
+                {subjects.map((subject) => (
                   <option key={subject.id} value={subject.id}>
                     {subject.icon} {subject.name_tr}
                   </option>
@@ -262,7 +270,7 @@ export default function AdminExamsPage() {
                 disabled={!selectedSubject}
               >
                 <option value="">Konu Seçin</option>
-                {filteredTopics.map(topic => (
+                {filteredTopics.map((topic) => (
                   <option key={topic.id} value={topic.id}>
                     {topic.name_tr}
                   </option>
@@ -276,15 +284,13 @@ export default function AdminExamsPage() {
         {selectedTopic && selectedExamSystem && (
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800">
-                📅 Yıllık Soru Dağılımı
-              </h2>
+              <h2 className="text-xl font-bold text-gray-800">📅 Yıllık Soru Dağılımı</h2>
               <button
                 onClick={() => {
                   setTopicData({
                     ...topicData,
                     topic_id: selectedTopic,
-                    exam_system_id: selectedExamSystem
+                    exam_system_id: selectedExamSystem,
                   });
                   setShowAddData(true);
                 }}
@@ -296,7 +302,7 @@ export default function AdminExamsPage() {
 
             {loadingStats ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
               </div>
             ) : yearlyStats.length > 0 ? (
               <>
@@ -314,7 +320,12 @@ export default function AdminExamsPage() {
                     </thead>
                     <tbody>
                       {yearlyStats.map((stat, index) => (
-                        <tr key={stat.year} className={`border-b ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} hover:bg-blue-50 transition`}>
+                        <tr
+                          key={stat.year}
+                          className={`border-b ${
+                            index % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                          } hover:bg-blue-50 transition`}
+                        >
                           <td className="px-6 py-4 font-bold text-gray-900">{stat.year}</td>
                           <td className="px-6 py-4 text-center">
                             <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-semibold">
@@ -334,9 +345,7 @@ export default function AdminExamsPage() {
                           <td className="px-6 py-4 text-gray-600">
                             {stat.question_numbers?.join(', ') || '-'}
                           </td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">
-                            {stat.notes || '-'}
-                          </td>
+                          <td className="px-6 py-4 text-gray-600 text-sm">{stat.notes || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -346,7 +355,7 @@ export default function AdminExamsPage() {
                 {/* Özet */}
                 <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl">
                   <h3 className="font-semibold text-gray-800 mb-3">📈 Özet İstatistikler</h3>
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="bg-white rounded-lg p-4">
                       <p className="text-gray-600 text-sm mb-1">Toplam Yıl</p>
                       <p className="font-bold text-gray-900 text-2xl">{yearlyStats.length}</p>
@@ -366,7 +375,10 @@ export default function AdminExamsPage() {
                     <div className="bg-white rounded-lg p-4">
                       <p className="text-gray-600 text-sm mb-1">Ortalama (Yıllık)</p>
                       <p className="font-bold text-green-600 text-2xl">
-                        {(yearlyStats.reduce((sum, s) => sum + s.total_questions, 0) / yearlyStats.length).toFixed(1)}
+                        {(
+                          yearlyStats.reduce((sum, s) => sum + s.total_questions, 0) /
+                          yearlyStats.length
+                        ).toFixed(1)}
                       </p>
                     </div>
                   </div>
@@ -387,18 +399,18 @@ export default function AdminExamsPage() {
       {showAddData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">
-              📝 Yeni Sınav Verisi Ekle
-            </h3>
-            
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">📝 Yeni Sınav Verisi Ekle</h3>
+
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Yıl</label>
                   <input
                     type="number"
                     value={topicData.year}
-                    onChange={(e) => setTopicData({...topicData, year: parseInt(e.target.value)})}
+                    onChange={(e) =>
+                      setTopicData({ ...topicData, year: parseInt(e.target.value) })
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     min="2000"
                     max={new Date().getFullYear()}
@@ -409,7 +421,9 @@ export default function AdminExamsPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Ana/Tali Konu</label>
                   <select
                     value={topicData.is_primary ? 'primary' : 'secondary'}
-                    onChange={(e) => setTopicData({...topicData, is_primary: e.target.value === 'primary'})}
+                    onChange={(e) =>
+                      setTopicData({ ...topicData, is_primary: e.target.value === 'primary' })
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="primary">Ana Konu</option>
@@ -418,7 +432,7 @@ export default function AdminExamsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Ana Konu Soru Sayısı
@@ -426,7 +440,12 @@ export default function AdminExamsPage() {
                   <input
                     type="number"
                     value={topicData.primary_questions}
-                    onChange={(e) => setTopicData({...topicData, primary_questions: parseInt(e.target.value) || 0})}
+                    onChange={(e) =>
+                      setTopicData({
+                        ...topicData,
+                        primary_questions: parseInt(e.target.value) || 0,
+                      })
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     min="0"
                   />
@@ -439,7 +458,12 @@ export default function AdminExamsPage() {
                   <input
                     type="number"
                     value={topicData.secondary_questions}
-                    onChange={(e) => setTopicData({...topicData, secondary_questions: parseInt(e.target.value) || 0})}
+                    onChange={(e) =>
+                      setTopicData({
+                        ...topicData,
+                        secondary_questions: parseInt(e.target.value) || 0,
+                      })
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     min="0"
                   />
@@ -453,20 +477,21 @@ export default function AdminExamsPage() {
                 <input
                   type="text"
                   value={topicData.question_numbers}
-                  onChange={(e) => setTopicData({...topicData, question_numbers: e.target.value})}
+                  onChange={(e) => setTopicData({ ...topicData, question_numbers: e.target.value })}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Örn: 23, 35, 47, 51"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Opsiyonel: Hangi sorularda çıktı?
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Opsiyonel: Hangi sorularda çıktı?</p>
               </div>
 
               <div className="bg-blue-50 p-4 rounded-xl">
                 <p className="text-sm font-semibold text-gray-800 mb-1">📊 Özet:</p>
                 <p className="text-sm text-gray-700">
-                  {topicData.year} yılında <span className="font-bold">{topicData.primary_questions + topicData.secondary_questions}</span> soru 
-                  ({topicData.primary_questions} ana + {topicData.secondary_questions} tali)
+                  {topicData.year} yılında{' '}
+                  <span className="font-bold">
+                    {topicData.primary_questions + topicData.secondary_questions}
+                  </span>{' '}
+                  soru ({topicData.primary_questions} ana + {topicData.secondary_questions} tali)
                 </p>
               </div>
             </div>

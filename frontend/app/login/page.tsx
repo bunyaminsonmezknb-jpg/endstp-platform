@@ -15,26 +15,20 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Supabase ile giriş yap
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // ✅ DOĞRU: Sadece Supabase login
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
 
-      // Token'ları kaydet
-      const token = data.session?.access_token;
-      localStorage.setItem('access_token', token!);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      document.cookie = `access_token=${token}; path=/; max-age=3600`;
-
+      // ✅ Supabase session cookie'yi otomatik set eder
+      // ❌ localStorage.setItem KALDIRILDI
+      // ❌ document.cookie KALDIRILDI
+      
       console.log('✅ Login başarılı, redirect ediliyor...');
-
-      // 250ms stabilization delay + window.location
-      setTimeout(() => {
-        window.location.href = '/student/dashboard';
-      }, 250);
+      window.location.href = '/student/dashboard';
 
     } catch (err: any) {
       setError(err.message || 'Giriş başarısız');

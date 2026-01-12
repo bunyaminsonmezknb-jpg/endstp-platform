@@ -1,76 +1,85 @@
 'use client';
 
+import React, { useMemo } from 'react';
+
 interface HealthStatusBarProps {
   totalTopics: number;
   healthyTopics: number;
   warningTopics: number;
-  frozenTopics: number;      // ❄️ YENİ!
+  frozenTopics: number;   // ✅ EKLE
   criticalTopics: number;
   currentlyShown: number;
 }
 
-export default function HealthStatusBar({
+function HealthStatusBar({
   totalTopics,
   healthyTopics,
   warningTopics,
-  frozenTopics,              // ❄️ YENİ!
+  frozenTopics,
   criticalTopics,
   currentlyShown
 }: HealthStatusBarProps) {
-  
-  // Yüzdeleri hesapla
-  const healthyPercent = (healthyTopics / totalTopics) * 100;
-  const warningPercent = (warningTopics / totalTopics) * 100;
-  const frozenPercent = (frozenTopics / totalTopics) * 100;   // ❄️ YENİ!
-  const criticalPercent = (criticalTopics / totalTopics) * 100;
+
+  // ✅ SADECE HESAPLAR useMemo
+  const healthyPercent = useMemo(
+    () => (healthyTopics / totalTopics) * 100,
+    [healthyTopics, totalTopics]
+  );
+
+  const warningPercent = useMemo(
+    () => (warningTopics / totalTopics) * 100,
+    [warningTopics, totalTopics]
+  );
+
+  const frozenPercent = useMemo(
+    () => (frozenTopics / totalTopics) * 100,
+    [frozenTopics, totalTopics]
+  );
+
+  const criticalPercent = useMemo(
+    () => (criticalTopics / totalTopics) * 100,
+    [criticalTopics, totalTopics]
+  );
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-lg mb-6">
-      {/* 🧠 YENİ BAŞLIK */}
       <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         🧠 Genel Bilgi Sağlığı
       </h3>
 
-      {/* Gradient Bar */}
       <div className="relative w-full h-2.5 bg-gray-200 rounded-full overflow-hidden mb-4">
-        {/* Yeşil (Sağlıklı) */}
         <div
           className="absolute left-0 h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-500"
           style={{ width: `${healthyPercent}%` }}
         />
-        
-        {/* Sarı (Uyarı) */}
+
         <div
           className="absolute h-full bg-gradient-to-r from-yellow-400 to-yellow-500 transition-all duration-500"
-          style={{ 
+          style={{
             left: `${healthyPercent}%`,
-            width: `${warningPercent}%` 
+            width: `${warningPercent}%`
           }}
         />
-        
-        {/* ❄️ MAVİ (DONMUŞ) - YENİ! */}
+
         <div
           className="absolute h-full bg-gradient-to-r from-blue-300 to-blue-400 transition-all duration-500"
-          style={{ 
+          style={{
             left: `${healthyPercent + warningPercent}%`,
-            width: `${frozenPercent}%` 
+            width: `${frozenPercent}%`
           }}
         />
-        
-        {/* Kırmızı (Kritik) */}
+
         <div
           className="absolute h-full bg-gradient-to-r from-red-400 to-red-500 transition-all duration-500"
-          style={{ 
+          style={{
             left: `${healthyPercent + warningPercent + frozenPercent}%`,
-            width: `${criticalPercent}%` 
+            width: `${criticalPercent}%`
           }}
         />
       </div>
 
-      {/* İstatistikler */}
       <div className="flex items-center justify-between text-sm flex-wrap gap-2">
         <div className="flex items-center gap-4 flex-wrap">
-          {/* Sağlıklı */}
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-500"></div>
             <span className="text-gray-600">
@@ -78,7 +87,6 @@ export default function HealthStatusBar({
             </span>
           </div>
 
-          {/* Risk */}
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
             <span className="text-gray-600">
@@ -86,7 +94,6 @@ export default function HealthStatusBar({
             </span>
           </div>
 
-          {/* ❄️ DONMUŞ - YENİ! */}
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-400"></div>
             <span className="text-gray-600">
@@ -94,7 +101,6 @@ export default function HealthStatusBar({
             </span>
           </div>
 
-          {/* Kritik */}
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500"></div>
             <span className="text-gray-600">
@@ -103,16 +109,20 @@ export default function HealthStatusBar({
           </div>
         </div>
 
-        {/* Toplam */}
         <div className="text-gray-500">
           <span className="font-bold text-purple-600">{totalTopics}</span> konu izleniyor
         </div>
       </div>
 
-      {/* Güncel Durum */}
       <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
-        💡 Güncel Durum: <span className="font-semibold text-gray-700">{currentlyShown}/{totalTopics}</span> konu gösteriliyor
+        💡 Güncel Durum:{' '}
+        <span className="font-semibold text-gray-700">
+          {currentlyShown}/{totalTopics}
+        </span>{' '}
+        konu gösteriliyor
       </div>
     </div>
   );
 }
+
+export default React.memo(HealthStatusBar);

@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useRef, useEffect } from 'react';
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -10,63 +11,35 @@ interface DashboardHeaderProps {
   studentId?: string;
 }
 
-export default function DashboardHeader({ studentName, streak, studentId }: DashboardHeaderProps) {
+function DashboardHeader({ studentName, streak, studentId }: DashboardHeaderProps) {
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Click outside to close
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsMenuOpen(false);
       }
     };
-
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    if (isMenuOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
+  const handleLogout = useCallback(() => {
     document.cookie = 'access_token=; path=/; max-age=0';
     router.push('/login');
-  };
+  }, [router]);
 
-  const handleNewTest = () => {
-    router.push('/test-entry');
-  };
+  const handleNewTest = useCallback(() => router.push('/test-entry'), [router]);
+  const handlePastTests = useCallback(() => router.push('/past-tests'), [router]);
+  const handleProfile = useCallback(() => router.push('/student/profile'), [router]);
+  const handleSettings = useCallback(() => router.push('/student/settings'), [router]);
+  const handleSubscription = useCallback(() => router.push('/student/subscription'), [router]);
+  const handleHelp = useCallback(() => router.push('/student/help'), [router]);
 
-  const handlePastTests = () => {
-    router.push('/past-tests');
-  };
-
-  const handleProfile = () => {
-    setIsMenuOpen(false);
-    router.push('/student/profile');
-  };
-
-  const handleSettings = () => {
-    setIsMenuOpen(false);
-    router.push('/student/settings');
-  };
-
-  const handleSubscription = () => {
-    setIsMenuOpen(false);
-    router.push('/student/subscription');
-  };
-
-  const handleHelp = () => {
-    setIsMenuOpen(false);
-    router.push('/student/help');
-  };
-
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-  };
+  const getInitials = (name: string) =>
+    name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="bg-white rounded-3xl shadow-lg p-6 mb-6">
@@ -180,3 +153,4 @@ export default function DashboardHeader({ studentName, streak, studentId }: Dash
     </div>
   );
 }
+export default React.memo(DashboardHeader);

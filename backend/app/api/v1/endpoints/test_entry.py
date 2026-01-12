@@ -5,125 +5,125 @@ Test Entry Endpoints
 
 import uuid
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.db.session import get_supabase_admin
+from app.core.auth import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 # ============================================
-# REQUEST/RESPONSE MODELS
+# REQUEST MODEL
 # ============================================
 
 class TestResultSubmit(BaseModel):
-    student_id: str
+    # ⚠️ frontend gönderse bile backend override eder
+    student_id: Optional[str] = None
+
     subject_id: str
     topic_id: str
+
+    # frontend: "YYYY-MM-DDTHH:MM"
     test_date: str
+
     correct_count: int
     wrong_count: int
     empty_count: int
-    net_score: float
-    success_rate: float
+
+    # ⚠️ backend hesaplar
+    net_score: Optional[float] = None
+    success_rate: Optional[float] = None
+
     test_duration_minutes: Optional[int] = None
 
 
 # ============================================
-# GET /api/v1/subjects
+# PUBLIC ENDPOINTS
 # ============================================
 
 @router.get("/subjects")
 async def get_subjects():
-    """Tüm dersleri listele (PUBLIC - AUTH GEREKMİYOR)"""
     supabase = get_supabase_admin()
-    
     try:
-        result = supabase.table("subjects").select(
-            "id, code, name_tr, icon, color"
-        ).eq("is_active", True).order("name_tr").execute()
-        
+        result = (
+            supabase.table("subjects")
+            .select("id, code, name_tr, icon, color")
+            .eq("is_active", True)
+            .order("name_tr")
+            .execute()
+        )
         return result.data
     except Exception as e:
         logger.error(f"Subjects Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(500, "Subjects load failed")
 
-
-# ============================================
-# GET /api/v1/subjects/{subject_id}/topics
-# ============================================
 
 @router.get("/subjects/{subject_id}/topics")
 async def get_topics_by_subject(subject_id: str):
-    """Bir derse ait konuları listele (PUBLIC - AUTH GEREKMİYOR)"""
     supabase = get_supabase_admin()
-    
     try:
-        result = supabase.table("topics").select(
-            "id, code, name_tr, difficulty_level, exam_weight"
-        ).eq("subject_id", subject_id).eq("is_active", True).order("name_tr").execute()
-        
+        result = (
+            supabase.table("topics")
+            .select("id, code, name_tr, difficulty_level, exam_weight")
+            .eq("subject_id", subject_id)
+            .eq("is_active", True)
+            .order("name_tr")
+            .execute()
+        )
         return result.data
     except Exception as e:
         logger.error(f"Topics Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(500, "Topics load failed")
 
 
 # ============================================
-# AUTO-COMPLETE TASK HELPER
+# AUTO COMPLETE TASK
 # ============================================
 
-def auto_complete_task_if_exists(student_id: str, topic_id: str, test_result_id: str):
-    """
-    Bugünkü görevlerde bu konu varsa otomatik tamamla
-    """
+def auto_complete_task_if_exists(
+    student_id: str,
+    topic_id: str,
+    test_result_id: str
+):
     supabase = get_supabase_admin()
-    
     try:
         today = datetime.now(timezone.utc).date().isoformat()
-        
-        # Bugünkü görevlerde bu topic var mı kontrol et (pending durumda)
-        tasks = supabase.table("student_tasks").select("*").eq(
-            "student_id", student_id
-        ).eq(
-            "task_date", today
-        ).eq(
-            "topic_id", topic_id
-        ).eq(
-            "status", "pending"
-        ).execute()
-        
-        if tasks.data and len(tasks.data) > 0:
-            # İlk eşleşen görevi otomatik tamamla
+
+        tasks = (
+            supabase.table("student_tasks")
+            .select("*")
+            .eq("student_id", student_id)
+            .eq("task_date", today)
+            .eq("topic_id", topic_id)
+            .eq("status", "pending")
+            .execute()
+        )
+
+        if tasks.data:
             task = tasks.data[0]
-            
-            update_data = {
+            supabase.table("student_tasks").update({
                 "status": "completed",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
                 "manual_completion": False,
                 "test_result_id": test_result_id
-            }
-            
-            supabase.table("student_tasks").update(update_data).eq("id", task["id"]).execute()
-            
-            logger.info(f"✅ Auto-completed task {task['id']} for topic {topic_id}")
-            
+            }).eq("id", task["id"]).execute()
+
             return {
                 "auto_completed": True,
                 "task_id": task["id"],
-                "task_name": task["topic_name"]
+                "task_name": task.get("topic_name")
             }
-        else:
-            logger.info(f"ℹ️ No pending task found for topic {topic_id} today")
-            return {"auto_completed": False}
-            
+
+        return {"auto_completed": False}
+
     except Exception as e:
-        logger.error(f"Auto-complete task error: {str(e)}")
-        return {"auto_completed": False, "error": str(e)}
+        logger.error(f"Auto-complete task error: {e}")
+        return {"auto_completed": False}
 
 
 # ============================================
@@ -131,81 +131,176 @@ def auto_complete_task_if_exists(student_id: str, topic_id: str, test_result_id:
 # ============================================
 
 @router.post("/test-results")
-async def submit_test_result(test_data: TestResultSubmit):
+async def submit_test_result(
+    test_data: TestResultSubmit,
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Test sonucu kaydet + Otomatik görev tamamlama
+    MÜHÜRLÜ TEST ENTRY
+    - Auth zorunlu
+    - student_id backend override
+    - 12 soru kuralı backend
+    - success_rate & net_score backend hesap
+    - LOCAL → UTC normalize
+    - Gelecek tarih engeli (UTC)
     """
+
     supabase = get_supabase_admin()
-    
+
     try:
-        logger.info(f"�� Test girişi başlıyor: student={test_data.student_id}, topic={test_data.topic_id}")
-        
-        # Test record hazırla
+        # 🔒 AUTH OVERRIDE
+        student_id = current_user["id"]
+        # 🚦 RATE LIMIT (SPAM GUARD)
+        recent = (
+            supabase.table("student_topic_tests")
+            .select("id")
+            .eq("student_id", student_id)
+            .gte(
+                "created_at",
+                (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+            )
+            .execute()
+        )
+
+        if recent.data and len(recent.data) >= 3:
+            raise HTTPException(
+                status_code=429,
+                detail="Çok hızlı test girişi. Lütfen birkaç saniye bekleyin."
+            )
+
+        # 📏 12 SORU KURALI
+        total = (
+            test_data.correct_count
+            + test_data.wrong_count
+            + test_data.empty_count
+        )
+
+        if total != 12:
+            raise HTTPException(422, "Toplam soru sayısı 12 olmalıdır")
+
+        # 🕒 TEST DATE NORMALIZE (LOCAL → UTC)
+        try:
+            local_dt = datetime.fromisoformat(test_data.test_date)
+        except ValueError:
+            raise HTTPException(422, "Geçersiz test tarihi formatı")
+
+        # timezone yoksa → local kabul et
+        if local_dt.tzinfo is None:
+            local_dt = local_dt.astimezone()
+
+        test_date_utc = local_dt.astimezone(timezone.utc)
+        # 🛑 Aynı testin tekrar gönderilmesini engelle
+        existing = (
+            supabase.table("student_topic_tests")
+            .select("id")
+            .eq("student_id", student_id)
+            .eq("topic_id", test_data.topic_id)
+            .eq("test_date", test_date_utc.isoformat())
+            .execute()
+        )
+
+        if existing.data:
+            raise HTTPException(
+                status_code=409,
+                detail="Bu test zaten girilmiş"
+            )
+
+        # ⛔ GELECEK TARİH ENGELİ
+        now_utc = datetime.now(timezone.utc)
+
+        # 🟢 1 dakikalık tolerance
+        if test_date_utc > now_utc + timedelta(minutes=1):
+            raise HTTPException(
+                status_code=422,
+                detail="Gelecek tarihli test girilemez"
+            )
+
+
+        # 📊 BACKEND HESAPLAMALARI
+        success_rate = round(
+            (test_data.correct_count / total) * 100, 2
+        )
+        net_score = round(
+            test_data.correct_count - (test_data.wrong_count / 4), 2
+        )
+        # 🛡️ test_duration_minutes guard
+        duration = test_data.test_duration_minutes
+        if duration is not None and duration <= 0:
+            duration = None
+
+        # 🧾 DB KAYDI
         test_record = {
-            "student_id": test_data.student_id,
+            "student_id": student_id,
             "subject_id": test_data.subject_id,
             "topic_id": test_data.topic_id,
-            "test_date": test_data.test_date,
+
+            # 🔑 UTC KAYIT
+            "test_date": test_date_utc.isoformat(),
+
             "correct_count": test_data.correct_count,
             "wrong_count": test_data.wrong_count,
             "empty_count": test_data.empty_count,
-            "net_score": test_data.net_score,
-            "success_rate": test_data.success_rate,
+
+            "net_score": net_score,
+            "success_rate": success_rate,
+            "test_duration_minutes": duration,
+ 
             "is_processed": False,
             "processing_status": "pending",
             "test_source": "web_form",
-            "test_duration_minutes": test_data.test_duration_minutes,
             "question_type": "multiple_choice",
             "created_via": "web_form",
             "api_version": "v1",
             "request_id": str(uuid.uuid4()),
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
-        
-        # Test'i kaydet
-        result = supabase.table("student_topic_tests").insert(test_record).execute()
-        
+
+        result = (
+            supabase.table("student_topic_tests")
+            .insert(test_record)
+            .execute()
+        )
+
         if not result.data:
-            logger.warning("⚠️ Insert yapıldı ama data boş döndü.")
             return {
                 "success": True,
-                "message": "Test kaydedildi (Data dönüşü yok)",
-                "net_score": test_data.net_score,
+                "message": "Test kaydedildi",
+                "net_score": net_score,
                 "task_auto_completed": False
             }
-        
-        # Test başarıyla kaydedildi
-        test_id = result.data[0].get("id")
-        logger.info(f"✅ Test kaydedildi: test_id={test_id}")
-        
-        # Otomatik görev tamamlama
+
+        test_id = result.data[0]["id"]
+
         task_result = auto_complete_task_if_exists(
-            student_id=test_data.student_id,
+            student_id=student_id,
             topic_id=test_data.topic_id,
             test_result_id=test_id
         )
-        
-        # Response
+
         response = {
             "success": True,
             "message": "Test başarıyla kaydedildi",
             "test_id": test_id,
-            "net_score": test_data.net_score,
+            "net_score": net_score,
+            "success_rate": success_rate,
             "task_auto_completed": task_result.get("auto_completed", False)
         }
-        
+
         if task_result.get("auto_completed"):
             response["completed_task"] = {
                 "task_id": task_result.get("task_id"),
                 "task_name": task_result.get("task_name")
             }
-            response["message"] += " ve görev otomatik tamamlandı! 🎉"
-        
+            response["message"] += " ve görev otomatik tamamlandı 🎉"
+
         return response
-        
+
+    except HTTPException:
+        raise
+
     except Exception as e:
-        logger.error(f"❌ Test submit error: {str(e)}")
+        logger.exception("❌ Test submit error")
         raise HTTPException(
-            status_code=500, 
-            detail=f"Veritabanı hatası: {str(e)}"
+            status_code=500,
+            detail="Test kaydı sırasında sunucu hatası"
         )

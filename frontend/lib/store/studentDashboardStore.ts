@@ -58,6 +58,15 @@ export interface DashboardData {
   weeklyQuestions: number;
   weeklyIncrease: number;
   topics: Topic[];
+
+   // ✅ EKLENECEK ALAN
+  topic_counts: {
+    healthy: number;
+    warning: number;
+    frozen: number;
+    critical: number;
+  };
+
   criticalAlert?: {
     show: boolean;
     topicName: string;
@@ -128,6 +137,15 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
   : undefined,
           achievementBadge: topic.achievementBadge,
         })),
+
+          // ✅ KRİTİK
+      topic_counts: response.topic_counts || {
+        healthy: 0,
+        warning: 0,
+        frozen: 0,
+        critical: 0,
+      },
+
         criticalAlert: response.critical_alert,
         projection: response.projection,
       };

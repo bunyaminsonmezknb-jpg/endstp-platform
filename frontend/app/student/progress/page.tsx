@@ -1,6 +1,9 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api/client';
+
 import ProjectionCard from '../dashboard/components/ProjectionCard';
 import UniversityGoalCard from '../dashboard/components/UniversityGoalCard';
 import ProgressTrendChart from './components/ProgressTrendChart';
@@ -9,16 +12,15 @@ import ProgressSkeleton from './components/ProgressSkeleton';
 
 /**
  * İlerleme & Hedefler Sayfası
- * 
+ *
  * SORUMLULUKLAR:
- * - Layout ve auth kontrolü
- * - Component orchestration
- * - Data fetching koordinasyonu
- * 
- * DELEGASYON:
- * - SubjectProgressList: Ders bazlı UI + loading
- * - ProgressTrendChart: Grafik UI + period toggle
- * - Hooks: Data fetching logic
+ * - Layout
+ * - Data orchestration
+ * - Error & loading state
+ *
+ * AUTH:
+ * - Supabase session → api-client içinde
+ * - 401 → login redirect
  */
 
 // ==================== TYPES ====================
@@ -35,77 +37,49 @@ interface ProgressData {
 
 export default function ProgressPage() {
   const router = useRouter();
+
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<ProgressData>({
     subjects: null,
-    trends: { weekly: null, monthly: null }
+    trends: { weekly: null, monthly: null },
   });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Auth check
-    const userStr = localStorage.getItem('user');
-    const accessToken = localStorage.getItem('access_token');
-    
-    if (!userStr || !accessToken) {
-      router.push('/login');
-      return;
-    }
-    
     loadData();
-  }, []); // ✅ Boş dependency array - sadece ilk mount'ta çalışır
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ==================== DATA LOAD ====================
 
   async function loadData() {
     try {
       setIsLoading(true);
       setError(null);
-      
-      const token = localStorage.getItem('access_token');
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-      // ✅ Paralel fetch - 3 endpoint birden (subjects, weekly, monthly)
-      const [subjectsRes, weeklyRes, monthlyRes] = await Promise.allSettled([
-        fetch(`${API_BASE}/student/progress/subjects`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/student/progress/trends?period=weekly`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/student/progress/trends?period=monthly`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+      /**
+       * ✅ Paralel fetch
+       * Auth + token otomatik → api-client
+       */
+      const [subjects, weekly, monthly] = await Promise.all([
+        api.get<any>('/student/progress/subjects'),
+        api.get<any>('/student/progress/trends?period=weekly'),
+        api.get<any>('/student/progress/trends?period=monthly'),
       ]);
 
-      // Subjects data
-      let subjects = null;
-      if (subjectsRes.status === 'fulfilled' && subjectsRes.value.ok) {
-        const result = await subjectsRes.value.json();
-        subjects = result.data;
-      }
-
-      // Weekly trends
-      let weeklyData = null;
-      if (weeklyRes.status === 'fulfilled' && weeklyRes.value.ok) {
-        const result = await weeklyRes.value.json();
-        weeklyData = result.data;
-      }
-
-      // Monthly trends
-      let monthlyData = null;
-      if (monthlyRes.status === 'fulfilled' && monthlyRes.value.ok) {
-        const result = await monthlyRes.value.json();
-        monthlyData = result.data;
-      }
-
-      setData({ 
-        subjects, 
-        trends: { 
-          weekly: weeklyData, 
-          monthly: monthlyData 
-        } 
+      setData({
+        subjects: subjects?.data ?? null,
+        trends: {
+          weekly: weekly?.data ?? null,
+          monthly: monthly?.data ?? null,
+        },
       });
+    } catch (err: any) {
+      if (err?.status === 401) {
+        router.push('/login');
+        return;
+      }
 
-    } catch (err) {
       console.error('Progress data load error:', err);
       setError('Veriler yüklenirken hata oluştu');
     } finally {
@@ -113,7 +87,8 @@ export default function ProgressPage() {
     }
   }
 
-  // Auth loading
+  // ==================== STATES ====================
+
   if (isLoading && !data.subjects) {
     return <ProgressSkeleton />;
   }
@@ -130,7 +105,7 @@ export default function ProgressPage() {
             <span>←</span>
             <span className="font-medium">Dashboard'a Dön</span>
           </button>
-          
+
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             📈 İlerleme & Hedefler
           </h1>
@@ -139,7 +114,7 @@ export default function ProgressPage() {
           </p>
         </div>
 
-        {/* ERROR STATE */}
+        {/* ERROR */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
             <p className="text-red-600 font-semibold mb-2">❌ {error}</p>
@@ -152,7 +127,7 @@ export default function ProgressPage() {
           </div>
         )}
 
-        {/* PROJECTION & GOAL CARDS */}
+        {/* PROJECTION & GOAL */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <ProjectionCard />
           <UniversityGoalCard />
@@ -163,7 +138,7 @@ export default function ProgressPage() {
           <h2 className="text-2xl font-bold text-gray-800 mb-6">
             📊 İlerleme Trendi
           </h2>
-          <ProgressTrendChart 
+          <ProgressTrendChart
             weeklyData={data.trends.weekly}
             monthlyData={data.trends.monthly}
             isLoading={isLoading}
@@ -172,7 +147,7 @@ export default function ProgressPage() {
 
         {/* SUBJECT BREAKDOWN */}
         <div className="bg-white rounded-3xl p-8 shadow-lg">
-          <SubjectProgressList 
+          <SubjectProgressList
             subjects={data.subjects}
             isLoading={isLoading}
           />

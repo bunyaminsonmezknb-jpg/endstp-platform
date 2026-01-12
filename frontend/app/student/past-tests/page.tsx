@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api/client';
 import EditTestModal from './EditTestModal';
 
+interface StudentTestsResponse {
+  tests: TestRecord[];
+}
 interface TestRecord {
   id: string;
   test_date: string;
@@ -33,61 +36,73 @@ export default function PastTestsPage() {
     loadTests();
   }, []);
 
+  /* =======================
+     DATA FETCH
+  ======================= */
+
   const loadTests = async () => {
     try {
       setIsLoading(true);
-      
-      const userStr = localStorage.getItem('user');
-      const accessToken = localStorage.getItem('access_token');
-      
-      if (!userStr || !accessToken) {
+
+      const res = await api.get<StudentTestsResponse>('/student/tests');
+      setTests(res.tests);
+
+      setError(null);
+
+    } catch (err: any) {
+      console.error('Test yükleme hatası:', err);
+
+      if (err?.status === 401) {
         router.push('/login');
         return;
       }
 
-      const user = JSON.parse(userStr);
-
-const data = await api.get('/student/tests') as any;
-setTests(data.tests || []);
-      setError(null);
-    } catch (err: any) {
-      console.error('Test yükleme hatası:', err);
       setError(err.message || 'Bir hata oluştu');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ✅ BACKEND'E UPDATE İSTEĞİ YAPAN FONKSİYON
-const updateTestInBackend = async (updatedTestData: any) => {
-  await api.put(`/student/tests/${updatedTestData.id}`, {
-    test_date: updatedTestData.test_date,
-    correct_count: updatedTestData.correct_count,
-    wrong_count: updatedTestData.wrong_count,
-    empty_count: updatedTestData.empty_count,
-  });
+  /* =======================
+     UPDATE
+  ======================= */
 
-  // Başarılı olduysa listeyi yenile
-  await loadTests();
-};
+  const updateTestInBackend = async (updatedTestData: any) => {
+    await api.put(`/student/tests/${updatedTestData.id}`, {
+      test_date: updatedTestData.test_date,
+      correct_count: updatedTestData.correct_count,
+      wrong_count: updatedTestData.wrong_count,
+      empty_count: updatedTestData.empty_count,
+    });
 
-const handleDelete = async (testId: string) => {
-  try {
-    await api.delete(`/student/tests/${testId}`);
-    setTests(tests.filter(t => t.id !== testId));
-    setDeleteConfirm(null);
-  } catch (err: any) {
-    alert('Silme hatası: ' + err.message);
-  }
-};
+    await loadTests();
+  };
+
+  /* =======================
+     DELETE
+  ======================= */
+
+  const handleDelete = async (testId: string) => {
+    try {
+      await api.delete(`/student/tests/${testId}`);
+      setTests(tests.filter(t => t.id !== testId));
+      setDeleteConfirm(null);
+    } catch (err: any) {
+      alert('Silme hatası: ' + err.message);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('tr-TR', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
     });
   };
+
+  /* =======================
+     UI STATES
+  ======================= */
 
   if (isLoading) {
     return (
@@ -121,6 +136,7 @@ const handleDelete = async (testId: string) => {
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 p-6">

@@ -1,0 +1,486 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { api } from '@/lib/api/client';
+import { calculateAllMotors } from '@/lib/api/endpoints/motors';
+
+/* =======================
+   TYPES
+======================= */
+interface Subject {
+  id: string;
+  code: string;
+  name_tr: string;
+  icon: string;
+  color: string;
+}
+
+interface Topic {
+  id: string;
+  code: string;
+  name_tr: string;
+  difficulty_level?: number;
+  exam_weight?: number;
+}
+
+/* =======================
+   HELPERS
+======================= */
+
+// Yerel saatle max datetime (UTC bug FIX)
+const getLocalDateTime = () => {
+  const now = new Date();
+  const offset = now.getTimezoneOffset(); // dakika
+  const local = new Date(now.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
+export default function TestEntryPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  /* =======================
+     STATE
+  ======================= */
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [motorResults, setMotorResults] = useState<any>(null);
+  const [lastTest, setLastTest] = useState<any>(null);
+
+  // Form
+  const [testDateTime, setTestDateTime] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [correctCount, setCorrectCount] = useState('');
+  const [wrongCount, setWrongCount] = useState('');
+  const [emptyCount, setEmptyCount] = useState('');
+  const [testDuration, setTestDuration] = useState('');
+
+  /* =======================
+     CALCULATIONS
+  ======================= */
+  const correct = parseInt(correctCount) || 0;
+  const wrong = parseInt(wrongCount) || 0;
+  const empty = parseInt(emptyCount) || 0;
+
+  const totalQuestions = correct + wrong + empty;
+  const net = Math.max(0, correct - wrong / 4);
+  const successRate =
+    totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0;
+
+  const isValidTotal = () => totalQuestions === 12;
+
+  // Süreyi güvenli parse et (null / NaN FIX)
+  const durationMinutes =
+    testDuration && !isNaN(parseInt(testDuration))
+      ? parseInt(testDuration)
+      : null;
+
+  /* =======================
+     EFFECTS
+  ======================= */
+
+  // Son seçimleri hatırla
+  useEffect(() => {
+    const lastSubject = localStorage.getItem('last_subject_id');
+    const lastTopic = localStorage.getItem('last_topic_id');
+
+    if (lastSubject) setSelectedSubject(lastSubject);
+    if (lastTopic) setSelectedTopic(lastTopic);
+  }, []);
+
+  // Dersleri yükle
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      try {
+        const res: any = await api.get('/subjects');
+        setSubjects(res.data || res);
+      } catch {
+        setError('Dersler yüklenemedi');
+      } finally {
+        setLoadingSubjects(false);
+      }
+    };
+    fetchSubjects();
+  }, []);
+
+  // Query param prefill
+  useEffect(() => {
+    const subjectId = searchParams.get('subject_id');
+    const topicId = searchParams.get('topic_id');
+
+    if (!subjectId || !topicId || subjects.length === 0) return;
+
+    setSelectedSubject(subjectId);
+
+    const loadTopics = async () => {
+      try {
+        setLoadingTopics(true);
+        const res: any = await api.get(`/subjects/${subjectId}/topics`);
+        setTopics(res.data || res);
+
+        setTimeout(() => {
+          setSelectedTopic(topicId);
+          document
+            .getElementById('test-form')
+            ?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      } catch {
+        setError('Konular yüklenemedi');
+      } finally {
+        setLoadingTopics(false);
+      }
+    };
+
+    loadTopics();
+  }, [searchParams, subjects]);
+
+  // Ders değişince konular
+  useEffect(() => {
+    if (!selectedSubject) {
+      setTopics([]);
+      return;
+    }
+
+    localStorage.setItem('last_subject_id', selectedSubject);
+
+    const fetchTopics = async () => {
+      try {
+        setLoadingTopics(true);
+        const res: any = await api.get(`/subjects/${selectedSubject}/topics`);
+        setTopics(res.data || res);
+      } catch {
+        setError('Konular yüklenemedi');
+      } finally {
+        setLoadingTopics(false);
+      }
+    };
+
+    fetchTopics();
+  }, [selectedSubject]);
+
+  // Konu seçimini hatırla
+  useEffect(() => {
+    if (selectedTopic) {
+      localStorage.setItem('last_topic_id', selectedTopic);
+    }
+  }, [selectedTopic]);
+
+  /* =======================
+     AUTH HELPER
+  ======================= */
+  const getSupabaseUserAndToken = async () => {
+    const { createBrowserClient } = await import('@supabase/ssr');
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Oturum bulunamadı');
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Token alınamadı');
+
+    return { user, accessToken: session.access_token };
+  };
+
+  /* =======================
+     SUBMIT
+  ======================= */
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!isValidTotal()) {
+      setError('Toplam soru sayısı tam olarak 12 olmalıdır!');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+    setMotorResults(null);
+    setLastTest(null);
+
+    try {
+      const selectedDate = new Date(testDateTime);
+      if (selectedDate > new Date()) {
+        throw new Error('⚠️ Gelecek tarih seçilemez!');
+      }
+
+      const { user, accessToken } = await getSupabaseUserAndToken();
+
+      const payload = {
+        student_id: user.id,
+        subject_id: selectedSubject,
+        topic_id: selectedTopic,
+
+        // timezone-safe
+        test_date: new Date(testDateTime).toISOString(),
+
+        correct_count: correct,
+        wrong_count: wrong,
+        empty_count: empty,
+
+        net_score: parseFloat(net.toFixed(2)),
+        success_rate: parseFloat(successRate.toFixed(2)),
+
+        // undefined değil null
+        test_duration_minutes: durationMinutes,
+      };
+
+      const res = await fetch('http://localhost:8000/api/v1/test-results', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const saved = await res.json();
+      if (!res.ok) throw new Error(saved?.detail || 'Test kaydedilemedi');
+
+      setLastTest(saved);
+
+      // Motorlar (fail-safe)
+      try {
+        const motors = await calculateAllMotors({
+          student_id: user.id,
+          topic_id: selectedTopic,
+          correct,
+          incorrect: wrong,
+          blank: empty,
+          total: 12,
+          time_spent: durationMinutes ? durationMinutes * 60 : 900,
+          test_date: new Date(testDateTime).toISOString(),
+          user_tier: 'premium',
+        });
+        setMotorResults(motors);
+      } catch {
+        /* motor fail etse bile submit başarılı */
+      }
+
+      setSuccess(true);
+      setTimeout(() => router.push('/past-tests'), 2000);
+    } catch (err: any) {
+      setError(err.message || 'Bir hata oluştu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = () => {
+    setCorrectCount('');
+    setWrongCount('');
+    setEmptyCount('');
+    setTestDuration('');
+  };
+
+  /* =======================
+     UI
+  ======================= */
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-purple-50">
+      <main className="max-w-2xl mx-auto px-4 py-8" id="test-form">
+        {/* SUCCESS */}
+        {success && (
+          <div className="bg-green-100 border-2 border-green-500 text-green-800 px-6 py-4 rounded-2xl mb-6 animate-pulse">
+            <div className="font-bold">Test başarıyla kaydedildi!</div>
+            <div className="text-sm">Net: {net.toFixed(2)}</div>
+          </div>
+        )}
+
+        {/* ERROR */}
+        {error && (
+          <div className="bg-red-100 border-2 border-red-500 text-red-800 px-6 py-4 rounded-2xl mb-6">
+            <strong>Hata:</strong> {error}
+          </div>
+        )}
+
+        {/* FORM */}
+        <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-2xl p-8">
+          <h1 className="text-3xl font-bold mb-2">📝 Konu Öğrenme Testi</h1>
+          <p className="text-gray-600 mb-6">
+            Çözdüğünüz 12 soruluk test sonucunu girin
+          </p>
+
+          {/* DATE */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold mb-2">
+              📅 Test Tarihi ve Saati
+            </label>
+            <input
+              type="datetime-local"
+              value={testDateTime}
+              onChange={(e) => setTestDateTime(e.target.value)}
+              max={getLocalDateTime()}
+              required
+              disabled={loading}
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              ⏰ Unutma eğrisi analizi için test zamanı önemlidir
+            </p>
+          </div>
+
+          {/* SUBJECT */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold mb-2">📚 Ders</label>
+            {loadingSubjects ? (
+              <div className="px-4 py-3 border-2 rounded-xl bg-gray-50">
+                Dersler yükleniyor...
+              </div>
+            ) : (
+              <select
+                value={selectedSubject}
+                onChange={(e) => {
+                  setSelectedSubject(e.target.value);
+                  setSelectedTopic('');
+                }}
+                required
+                disabled={loading}
+                className="w-full px-4 py-3 border-2 rounded-xl"
+              >
+                <option value="">Ders seçin...</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.icon} {s.name_tr}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* TOPIC */}
+          {selectedSubject && (
+            <div className="mb-6">
+              <label className="block text-sm font-semibold mb-2">📖 Konu</label>
+              {loadingTopics ? (
+                <div className="px-4 py-3 border-2 rounded-xl bg-gray-50">
+                  Konular yükleniyor...
+                </div>
+              ) : (
+                <select
+                  value={selectedTopic}
+                  onChange={(e) => setSelectedTopic(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="w-full px-4 py-3 border-2 rounded-xl"
+                >
+                  <option value="">Konu seçin...</option>
+                  {topics.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name_tr}
+                      {t.difficulty_level && ` (⭐${t.difficulty_level})`}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* COUNTS */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <input className="border-2 border-green-300 rounded-xl text-center text-xl font-bold" type="number" min="0" max="12" value={correctCount} onChange={(e) => setCorrectCount(e.target.value)} />
+            <input className="border-2 border-red-300 rounded-xl text-center text-xl font-bold" type="number" min="0" max="12" value={wrongCount} onChange={(e) => setWrongCount(e.target.value)} />
+            <input className="border-2 border-gray-300 rounded-xl text-center text-xl font-bold" type="number" min="0" max="12" value={emptyCount} onChange={(e) => setEmptyCount(e.target.value)} />
+          </div>
+
+          {/* DURATION */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold mb-2">
+              ⏱️ Test Süresi (Opsiyonel)
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="120"
+              value={testDuration}
+              onChange={(e) => setTestDuration(e.target.value)}
+              className="w-32 px-4 py-3 border-2 border-blue-300 rounded-xl text-center text-xl font-bold"
+            />
+          </div>
+
+          {/* SUMMARY */}
+          <div
+            className={`rounded-2xl p-6 mb-6 border-2 ${
+              isValidTotal()
+                ? 'bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200'
+                : 'bg-gradient-to-br from-red-50 to-orange-50 border-red-300'
+            }`}
+          >
+            <h3 className="text-lg font-bold mb-4 text-center">
+              📊 Hesaplanan Değerler
+            </h3>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-sm">Toplam</div>
+                <div className="text-3xl font-bold">{totalQuestions}/12</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm">Net</div>
+                <div className="text-3xl font-bold text-purple-600">
+                  {net.toFixed(2)}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm">Başarı</div>
+                <div className="text-3xl font-bold text-blue-600">
+                  %{successRate.toFixed(0)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* BUTTONS */}
+          <div className="flex gap-4 mb-4">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={loading}
+              className="flex-1 bg-gray-200 py-3 rounded-xl"
+            >
+              🔄 Temizle
+            </button>
+
+            <button
+              type="submit"
+              disabled={
+                loading ||
+                !selectedSubject ||
+                !selectedTopic ||
+                !testDateTime ||
+                !isValidTotal()
+              }
+              className={`flex-1 py-3 rounded-xl text-white font-semibold ${
+                loading ||
+                !selectedSubject ||
+                !selectedTopic ||
+                !testDateTime ||
+                !isValidTotal()
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-purple-600 to-blue-600'
+              }`}
+            >
+              {loading
+                ? '⏳ Kaydediliyor...'
+                : !isValidTotal()
+                ? '❌ Toplam 12 soru olmalı'
+                : '💾 Test Sonucunu Kaydet'}
+            </button>
+          </div>
+        </form>
+      </main>
+    </div>
+  );
+}

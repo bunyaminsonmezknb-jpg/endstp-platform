@@ -1,0 +1,40 @@
+from fastapi import APIRouter, Depends
+from app.core.auth import get_current_user
+
+router = APIRouter()
+
+@router.get("/dashboard")
+async def get_student_dashboard(current_user=Depends(get_current_user)):
+    """
+    Student Dashboard - Requires Supabase JWT
+    """
+    return {
+        "student_name": current_user.get("email", "Demo Student"),
+        "user_id": current_user["sub"],
+        "topics": [],
+        "critical_alert": {"show": False},
+        "today_tasks": [],
+        "weekly_subjects": []
+    }
+
+
+@router.get("/profile")
+async def get_student_profile(current_user=Depends(get_current_user)):
+    """Student Profile"""
+    return {
+        "id": current_user["sub"],
+        "email": current_user["email"],
+        "role": current_user["role"]
+    }
+
+
+@router.get("/tests")
+async def get_student_tests(current_user=Depends(get_current_user)):
+    """Student Tests"""
+    return {"tests": []}
+
+
+@router.get("/weekly-subjects")
+async def get_weekly_subjects(current_user=Depends(get_current_user)):
+    """Weekly Subjects"""
+    return {"subjects": []}

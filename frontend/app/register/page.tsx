@@ -4,51 +4,46 @@ import { useState, FormEvent } from 'react';
 import { supabase } from '@/lib/supabase/client';
 
 export default function RegisterPage() {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMsg('');
 
     try {
-      // Supabase ile kayıt ol
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: {
-            full_name: fullName,
-          }
-        }
+          data: { full_name: fullName },
+          // Eğer email confirm ON ise, buraya redirect URL eklemek isteyebilirsin:
+          // emailRedirectTo: `${window.location.origin}/login`
+        },
       });
 
       if (error) throw error;
 
-      // Token'ları kaydet
-      const token = data.session?.access_token;
-      if (token) {
-        localStorage.setItem('access_token', token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        document.cookie = `access_token=${token}; path=/; max-age=3600`;
-
-        console.log('✅ Kayıt başarılı, redirect ediliyor...');
-
-        // 250ms stabilization delay + window.location
-        setTimeout(() => {
-          window.location.href = '/student/dashboard';
-        }, 250);
-      } else {
-        setError('Email doğrulama gerekli. Lütfen emailinizi kontrol edin.');
-        setLoading(false);
+      // ✅ Email confirm OFF ise session gelebilir → direkt dashboard
+      if (data.session?.access_token) {
+        window.location.href = '/student/dashboard';
+        return;
       }
 
+      // ✅ Email confirm ON ise session null gelir → kullanıcıya bilgi ver
+      setSuccessMsg(
+        '✅ Kayıt alındı. Email doğrulama gerekiyorsa lütfen gelen kutunu kontrol et. Doğrulama sonrası giriş yapabilirsin.'
+      );
     } catch (err: any) {
-      setError(err.message || 'Kayıt başarısız');
+      setError(err?.message || 'Kayıt başarısız');
+    } finally {
       setLoading(false);
     }
   };
@@ -62,6 +57,12 @@ export default function RegisterPage() {
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
               {error}
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4">
+              {successMsg}
             </div>
           )}
 

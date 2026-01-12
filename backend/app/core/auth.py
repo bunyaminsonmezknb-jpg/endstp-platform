@@ -1,60 +1,60 @@
 """
-Authentication utilities
-JWT token verification
+Supabase JWT Authentication (HS256 - JWT_SECRET)
+JWKS boş olduğunda kullan!
 """
-
+from fastapi import Header, HTTPException
+from jose import jwt, JWTError
 import os
-from fastapi import HTTPException, Header
 from typing import Optional
-import jwt
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+
+if not SUPABASE_URL:
+    raise RuntimeError("SUPABASE_URL not set")
+
+if not SUPABASE_JWT_SECRET:
+    raise RuntimeError("SUPABASE_JWT_SECRET not set")
+
+EXPECTED_ISSUER = f"{SUPABASE_URL}/auth/v1"
+EXPECTED_AUDIENCE = "authenticated"
 
 
 def get_current_user(authorization: Optional[str] = Header(None)):
-    """
-    Get current user from JWT token
-    Validates token and returns user data
-    """
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header gerekli")
-    
+    """HS256 + JWT_SECRET ile doğrulama"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401, 
+            detail="Authorization header gerekli"
+        )
+
+    token = authorization.split(" ", 1)[1].strip()
+
     try:
-        # Extract token from "Bearer <token>"
-        token = authorization.replace("Bearer ", "")
-        
-        # Get JWT secret from env
-        jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
-        
-        if not jwt_secret:
-            raise HTTPException(
-                status_code=500, 
-                detail="JWT secret yapılandırılmamış"
-            )
-        
-        # Decode and verify token
         payload = jwt.decode(
             token,
-            jwt_secret,
+            SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
-            audience="authenticated"
+            audience=EXPECTED_AUDIENCE,
+            issuer=EXPECTED_ISSUER,
         )
-        
+
+        print(f"✅ Token validated (HS256) for {payload.get('email')}")
+
         return {
-            "id": payload.get("sub"),
+            "id": payload["sub"],
+            "sub": payload["sub"],
             "email": payload.get("email"),
-            "role": payload.get("role", "authenticated")
+            "role": payload.get("role", "authenticated"),
         }
-        
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token süresi dolmuş")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Geçersiz token")
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Auth error: {str(e)}")
+
+    except JWTError as e:
+        print(f"❌ JWT validation failed: {e}")
+        raise HTTPException(
+            status_code=401, 
+            detail="Geçersiz token"
+        )
 
 
 def get_current_active_user(authorization: Optional[str] = Header(None)):
-    """
-    Get current active user (same as get_current_user for now)
-    Can add additional checks like user.is_active in future
-    """
     return get_current_user(authorization)

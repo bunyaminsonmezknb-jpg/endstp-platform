@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { ReflexNotification } from '@/hooks/useReflexNotifications'
+import { ReflexNotification } from '@/lib/hooks/useReflexNotifications'
 
 interface ReflexNotificationCardProps {
   notification: ReflexNotification

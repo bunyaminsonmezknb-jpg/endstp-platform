@@ -19,19 +19,3 @@ export const getUserTimezone = (): string => {
     return 'UTC'; // Fallback
   }
 };
-
-export const getStoredTimezone = (): string => {
-  if (typeof window === 'undefined') return 'UTC';
-  
-  const stored = localStorage.getItem('user_timezone');
-  if (stored) return stored;
-  
-  // İlk kez ise tespit et ve kaydet
-  return getUserTimezone();
-};
-
-export const getTimezoneHeaders = () => {
-  return {
-    'X-User-Timezone': getStoredTimezone()
-  };
-};

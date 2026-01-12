@@ -595,5 +595,3 @@ class TodaysTasksResponseOld(BaseModel):
     success: bool
     data: TodaysTasksDataOld
     message: Optional[str] = None
-
-

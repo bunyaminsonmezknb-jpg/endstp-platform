@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api/client';
+
+/* ======================================================
+   TYPES
+====================================================== */
 
 interface ExamType {
   id: string;
@@ -29,20 +34,44 @@ interface UnmappedTopic {
   grade: number;
 }
 
+/* ======================================================
+   API RESPONSE TYPES (⚠️ SADECE TYPE EKLENDİ)
+====================================================== */
+
+interface OsymTopicsResponse {
+  osym_topics: OsymTopic[];
+}
+
+interface UnmappedTopicsResponse {
+  unmapped_topics: UnmappedTopic[];
+}
+
+interface BulkUploadResponse {
+  success: boolean;
+  success_count: number;
+  error_count: number;
+}
+
+/* ======================================================
+   COMPONENT
+====================================================== */
+
 export default function AdminOsymPage() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
+
   const [examTypes, setExamTypes] = useState<ExamType[]>([]);
   const [osymTopics, setOsymTopics] = useState<OsymTopic[]>([]);
   const [unmappedTopics, setUnmappedTopics] = useState<UnmappedTopic[]>([]);
+
   const [selectedExamType, setSelectedExamType] = useState('');
-  
   const [activeTab, setActiveTab] = useState<'osym' | 'mapping'>('osym');
-  
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [showAddMapping, setShowAddMapping] = useState(false);
-  
+
   const [newOsym, setNewOsym] = useState({
     exam_type_id: '',
     official_name: '',
@@ -50,75 +79,59 @@ export default function AdminOsymPage() {
     related_grade_levels: [] as number[],
     published_year: 2024
   });
-  
+
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [uploadResult, setUploadResult] = useState<BulkUploadResponse | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const [selectedMebTopic, setSelectedMebTopic] = useState('');
   const [selectedOsymTopic, setSelectedOsymTopic] = useState('');
-  const [matchType, setMatchType] = useState('exact');
+  const [matchType, setMatchType] = useState<'exact' | 'partial'>('exact');
+
+  /* ======================================================
+     DATA FETCH
+  ====================================================== */
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const accessToken = localStorage.getItem('access_token');
+    const fetchData = async () => {
+      try {
+        setExamTypes([
+          { id: '1', code: 'TYT', name_tr: 'TYT', short_name: 'TYT' },
+          { id: '2', code: 'AYT', name_tr: 'AYT', short_name: 'AYT' },
+        ]);
 
-      setExamTypes([
-        { id: '1', code: 'TYT', name_tr: 'TYT', short_name: 'TYT' },
-        { id: '2', code: 'AYT', name_tr: 'AYT', short_name: 'AYT' },
-      ]);
+        const osymRes = await api.get<OsymTopicsResponse>('/api/v1/osym/topics');
+        setOsymTopics(osymRes.osym_topics || []);
 
-      const response = await fetch('http://localhost:8000/api/v1/osym/topics', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setOsymTopics(data.osym_topics || []);
+        const unmappedRes = await api.get<UnmappedTopicsResponse>(
+          '/api/v1/admin/unmapped-topics'
+        );
+        setUnmappedTopics(unmappedRes.unmapped_topics || []);
+
+      } catch (err) {
+        console.error('Data fetch hatası:', err);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      const unmappedRes = await fetch('http://localhost:8000/api/v1/admin/unmapped-topics', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      
-      if (unmappedRes.ok) {
-        const data = await unmappedRes.json();
-        setUnmappedTopics(data.unmapped_topics || []);
-      }
 
-    } catch (err) {
-      console.error('Data fetch hatası:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  /* ======================================================
+     ACTIONS
+  ====================================================== */
 
   const handleAddOsym = async () => {
     try {
-      const accessToken = localStorage.getItem('access_token');
-      
-      const response = await fetch('http://localhost:8000/api/v1/admin/osym-topics', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify(newOsym)
-      });
-
-      if (response.ok) {
-        alert('✅ ÖSYM konusu eklendi!');
-        setShowAddModal(false);
-        fetchData();
-      } else {
-        alert('❌ Hata oluştu!');
-      }
+      await api.post('/api/v1/admin/osym-topics', newOsym);
+      alert('✅ ÖSYM konusu eklendi!');
+      setShowAddModal(false);
+      fetchData();
     } catch (err) {
       console.error('Add ÖSYM topic hatası:', err);
+      alert('❌ Hata oluştu!');
     }
   };
 
@@ -132,29 +145,21 @@ export default function AdminOsymPage() {
     setUploadResult(null);
 
     try {
-      const accessToken = localStorage.getItem('access_token');
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch('http://localhost:8000/api/v1/admin/osym-topics/bulk-upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-        body: formData
-      });
+      const res = await api.post<BulkUploadResponse>(
+        '/api/v1/admin/osym-topics/bulk-upload',
+        formData
+      );
 
-      if (response.ok) {
-        const result = await response.json();
-        setUploadResult(result);
-        
-        if (result.success) {
-          setTimeout(() => {
-            setShowBulkUpload(false);
-            fetchData();
-          }, 2000);
-        }
-      } else {
-        const error = await response.json();
-        alert(`Hata: ${error.detail}`);
+      setUploadResult(res);
+
+      if (res.success) {
+        setTimeout(() => {
+          setShowBulkUpload(false);
+          fetchData();
+        }, 2000);
       }
     } catch (err) {
       console.error('Upload hatası:', err);
@@ -166,46 +171,40 @@ export default function AdminOsymPage() {
 
   const handleAddMapping = async () => {
     try {
-      const accessToken = localStorage.getItem('access_token');
-      
-      const response = await fetch('http://localhost:8000/api/v1/admin/topic-osym-mapping', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          meb_topic_id: selectedMebTopic,
-          osym_topic_id: selectedOsymTopic,
-          match_type: matchType,
-          match_percentage: matchType === 'exact' ? 100 : 70,
-          verified: true,
-          created_by: 'admin'
-        })
+      await api.post('/api/v1/admin/topic-osym-mapping', {
+        meb_topic_id: selectedMebTopic,
+        osym_topic_id: selectedOsymTopic,
+        match_type: matchType,
+        match_percentage: matchType === 'exact' ? 100 : 70,
+        verified: true,
+        created_by: 'admin'
       });
 
-      if (response.ok) {
-        alert('✅ Eşleştirme oluşturuldu!');
-        setShowAddMapping(false);
-        fetchData();
-      } else {
-        alert('❌ Hata oluştu!');
-      }
+      alert('✅ Eşleştirme oluşturuldu!');
+      setShowAddMapping(false);
+      fetchData();
     } catch (err) {
       console.error('Add mapping hatası:', err);
+      alert('❌ Hata oluştu!');
     }
   };
+
+  /* ======================================================
+     HELPERS
+  ====================================================== */
 
   const filteredTopics = selectedExamType
     ? osymTopics.filter(t => t.exam_type_id === selectedExamType)
     : osymTopics;
 
   const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
     document.cookie = 'access_token=; path=/; max-age=0';
     router.push('/login');
   };
+
+  /* ======================================================
+     UI (⚠️ AYNEN KORUNDU)
+  ====================================================== */
 
   if (loading) {
     return (
@@ -217,18 +216,26 @@ export default function AdminOsymPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+
+      {/* HEADER */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">🎯 ÖSYM Konu Yönetimi</h1>
             <p className="text-sm text-gray-500">MEB-ÖSYM Eşleştirme</p>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <button onClick={() => router.push('/admin')} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg">
+            <button
+              onClick={() => router.push('/admin')}
+              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+            >
               ← Admin Panel
             </button>
-            <button onClick={handleLogout} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+            >
               Çıkış
             </button>
           </div>
@@ -353,7 +360,7 @@ export default function AdminOsymPage() {
                 <option value="">ÖSYM Konusu</option>
                 {osymTopics.map(t => <option key={t.id} value={t.id}>{t.official_name} ({t.exam_types.short_name})</option>)}
               </select>
-              <select value={matchType} onChange={(e) => setMatchType(e.target.value)} className="w-full px-4 py-3 border-2 rounded-lg">
+              <select value={matchType} onChange={(e) => setMatchType(e.target.value as 'exact' | 'partial')} className="w-full px-4 py-3 border-2 rounded-lg">
                 <option value="exact">Tam Eşleşme (100%)</option>
                 <option value="partial">Kısmi (70%)</option>
               </select>

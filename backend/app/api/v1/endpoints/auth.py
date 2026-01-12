@@ -1,7 +1,7 @@
 """
 Authentication Endpoints (Supabase v2)
 """
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Header, Depends, Request
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from app.db.session import get_supabase
@@ -132,3 +132,30 @@ async def signout(authorization: Optional[str] = Header(None)):
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Mevcut kullanıcı"""
     return current_user
+
+
+@router.get("/me")
+async def get_current_user_info(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get current user information
+    Returns user data + access token for API calls
+    """
+    # Extract access token from cookies
+    auth_cookie = request.cookies.get('sb-runbsfxytxmtzweuaufr-auth-token')
+    access_token = None
+    
+    if auth_cookie:
+        try:
+            import json
+            auth_data = json.loads(auth_cookie)
+            access_token = auth_data[0]  # [0] is access_token, [1] is refresh_token
+        except:
+            pass
+    
+    return {
+        "user": current_user,
+        "access_token": access_token
+    }

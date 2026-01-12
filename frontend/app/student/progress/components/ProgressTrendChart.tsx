@@ -45,7 +45,6 @@ export default function ProgressTrendChart({
   useEffect(() => {
     const fetchPrediction = async () => {
       try {
-        const token = localStorage.getItem('access_token');
         const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
         
         const res = await fetch(`${API_BASE}/student/progress/prediction?period=${period}`, {

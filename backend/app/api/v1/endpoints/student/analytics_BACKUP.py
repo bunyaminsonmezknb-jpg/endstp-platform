@@ -1,1 +1,0 @@
-# YEDEK ALINDI
