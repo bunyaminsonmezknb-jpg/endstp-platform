@@ -1,113 +1,138 @@
 """
 Student Dashboard & Profile Endpoints
-- Dashboard stats
-- Profile
-- Tests list
-- Weekly subjects
+FAZ-3 COMPLIANT
+- Dashboard reads only from performance module
+- No local calculations
 """
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional, List
+
+from fastapi import APIRouter, Depends
+from typing import Dict, Any
 from datetime import datetime, timezone, timedelta
+
 from app.db.session import get_supabase_admin
 from app.core.auth import get_current_user
-from .utils import calculate_remembering_rate, format_turkish_date, calculate_next_review_date, calculate_status, get_mock_topics, calculate_realistic_projection, EXAM_DATE
 from .performance import get_student_performance
 
 router = APIRouter()
 
-# Mock data fonksiyonu (geçici)
-def get_mock_dashboard():
-    """Mock dashboard data"""
+
+# ============================================================
+# MOCK / EMPTY DASHBOARD (NO TEST DATA)
+# ============================================================
+
+def get_empty_dashboard() -> Dict[str, Any]:
     return {
-        "topic_counts": topic_counts,
         "success": True,
-        "message": "Mock data - henüz test girişi yok",
-        "topics": []
+        "topics": [],
+        "analytics": {
+            "weakestTopic": 0,
+            "forgetRisk": 0
+        },
+        "weekly": {
+            "tests": 0,
+            "average_success": 0
+        },
+        "monthly": {
+            "tests": 0
+        },
+        "projection": None,
+        "cache_info": {
+            "source": "empty"
+        }
     }
 
+
+# ============================================================
+# DASHBOARD
+# ============================================================
+
 @router.get("/dashboard")
-async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
-    """Öğrenci dashboard verisi (Cache'li performans modülü ile)"""
+async def get_student_dashboard(
+    current_user: dict = Depends(get_current_user)
+):
     student_id = current_user["id"]
-    
-    # Cache'li performans modülü
-    perf_data = get_student_performance(student_id, use_cache=True)
-    topic_performance = perf_data["topic_performance"]
+
+    perf_data = get_student_performance(
+        student_id=student_id,
+        use_cache=True
+    )
+
+    topic_performance = perf_data.get("topic_performance", {})
     all_tests = perf_data.get("all_tests", [])
-    
+
     if not all_tests:
-        return get_mock_dashboard()
-    
-    # Topic listesi oluştur
+        return get_empty_dashboard()
+
     topics_list = []
-    
+
     for topic_id, data in topic_performance.items():
-        tests = data["tests"]
-        
-        # Achievement badge
+        tests = data.get("tests", [])
+
         achievement_badge = None
         if len(tests) >= 2:
-            improvement = tests[0].get("success_rate", 0) - tests[-1].get("success_rate", 0)
+            improvement = (
+                tests[0].get("success_rate", 0)
+                - tests[-1].get("success_rate", 0)
+            )
             if improvement > 20:
                 achievement_badge = {
-                    "text": f"+%{{int(improvement)}} ({{len(tests)}} test)",
+                    "text": f"+%{int(improvement)} ({len(tests)} test)",
                     "icon": "⭐"
                 }
-        
-        # Topic objesi (performance modülünden hazır data)
+
         topic_obj = {
             "id": topic_id,
-            "name": data["topic_name"],
-            "subject": data["subject_name"],
-            "rememberingRate": data["remembering_rate"],
-            "status": data["status"],
-            "statusText": data["status_text"],
-            "emoji": data["emoji"],
-            "days_since_last_test": data["days_since_last_test"],
-            "total_tests": data["total_tests"],
-            "latest_net": data["latest_net"],
-            "latest_success_rate": data["latest_success_rate"],
-            "next_review": data["next_review"]
+            "name": data.get("topic_name"),
+            "subject": data.get("subject_name"),
+            "rememberingRate": data.get("remembering_rate", 0),
+            "status": data.get("status"),
+            "statusText": data.get("status_text"),
+            "emoji": data.get("emoji"),
+            "days_since_last_test": data.get("days_since_last_test"),
+            "total_tests": data.get("total_tests", 0),
+            "latest_net": data.get("latest_net"),
+            "latest_success_rate": data.get("latest_success_rate"),
+            "next_review": data.get("next_review")
         }
-        
+
         if achievement_badge:
             topic_obj["achievementBadge"] = achievement_badge
-        
+
         topics_list.append(topic_obj)
-    
+
     topics_list.sort(key=lambda x: x["rememberingRate"])
-    
-    # Analytics
-    if topics_list:
-        worst = topics_list[0]
-    else:
-        worst = {"rememberingRate": 0}
-    
+
+    worst_topic = topics_list[0]["rememberingRate"] if topics_list else 0
+
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
-    
-    weekly_tests = [
-        t for t in all_tests 
-        if datetime.fromisoformat(t["test_date"].replace('Z', '+00:00')) >= week_ago
-    ]
-    
-    weekly_success = int((sum([t.get("success_rate", 0) for t in weekly_tests]) / len(weekly_tests)) if weekly_tests else 0)
-    
     month_ago = now - timedelta(days=30)
-    monthly_tests = [
-        t for t in all_tests 
-        if datetime.fromisoformat(t["test_date"].replace('Z', '+00:00')) >= month_ago
+
+    weekly_tests = [
+        t for t in all_tests
+        if datetime.fromisoformat(
+            t["test_date"].replace("Z", "+00:00")
+        ) >= week_ago
     ]
-    
-    projection = calculate_realistic_projection(all_tests, topic_performance)
-    
+
+    monthly_tests = [
+        t for t in all_tests
+        if datetime.fromisoformat(
+            t["test_date"].replace("Z", "+00:00")
+        ) >= month_ago
+    ]
+
+    weekly_success = (
+        int(sum(t.get("success_rate", 0) for t in weekly_tests) / len(weekly_tests))
+        if weekly_tests else 0
+    )
+
     return {
-        "topic_counts": topic_counts,
         "success": True,
         "topics": topics_list,
         "analytics": {
-            "weakestTopic": worst["rememberingRate"],
-            "forgetRisk": 100 - worst["rememberingRate"]
+            "weakestTopic": worst_topic,
+            "forgetRisk": 100 - worst_topic
         },
         "weekly": {
             "tests": len(weekly_tests),
@@ -116,54 +141,53 @@ async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
         "monthly": {
             "tests": len(monthly_tests)
         },
-        "projection": projection,
+        "projection": perf_data.get("projection"),
         "cache_info": perf_data.get("metadata", {})
     }
-def get_mock_dashboard():
-    """Mock dashboard - Test yoksa boş döner"""
+
+
+# ============================================================
+# PROFILE
+# ============================================================
+
+@router.get("/profile")
+async def get_student_profile(
+    current_user: dict = Depends(get_current_user)
+):
     return {
-        "topic_counts": topic_counts,
-        "student_name": "Demo Öğrenci",
-        "streak": 0,
-        "daily_goal": {"current": 0, "target": 5},
-        "weekly_success": 0,
-        "weekly_target": 85,
-        "study_time_today": 0,
-        "weekly_questions": 0,
-        "weekly_increase": 0,
-        "topics": [],  # ← BOŞ ARRAY
-        "critical_alert": None,  # ← NULL
-        "projection": None  # ← NULL
+        "id": current_user["id"],
+        "name": current_user.get("name"),
+        "email": current_user.get("email"),
+        "class": current_user.get("class")
     }
 
 
-@router.get("/profile")
-async def get_student_profile(current_user: dict = Depends(get_current_user)):
-    return {
-        "topic_counts": topic_counts,"id": student_id, "name": "Demo Öğrenci", "email": "demo@endstp.com", "class": "11. Sınıf"}
-
+# ============================================================
+# TEST LIST
+# ============================================================
 
 @router.get("/tests")
-async def get_student_tests(current_user: dict = Depends(get_current_user)):
+async def get_student_tests(
+    current_user: dict = Depends(get_current_user)
+):
     student_id = current_user["id"]
-    """
-    Öğrencinin tüm test geçmişini getir
-    """
     supabase = get_supabase_admin()
-    
-    # Testleri çek (topic ve subject bilgileriyle)
-    tests_response = supabase.table("student_topic_tests").select(
-        "*, topics(name_tr, subject_id, subjects(name_tr))"
-    ).eq("student_id", student_id).order("test_date", desc=True).execute()
-    
+
+    tests_response = (
+        supabase
+        .table("student_topic_tests")
+        .select("*, topics(name_tr, subjects(name_tr))")
+        .eq("student_id", student_id)
+        .order("test_date", desc=True)
+        .execute()
+    )
+
     if not tests_response.data:
-        return {
-        "topic_counts": topic_counts,"tests": []}
-    
-    # Formatla
-    formatted_tests = []
+        return {"tests": []}
+
+    formatted = []
     for test in tests_response.data:
-        formatted_tests.append({
+        formatted.append({
             "id": test["id"],
             "test_date": test["test_date"],
             "correct_count": test["correct_count"],
@@ -172,91 +196,80 @@ async def get_student_tests(current_user: dict = Depends(get_current_user)):
             "net_score": float(test["net_score"]),
             "success_rate": float(test["success_rate"]),
             "topic": {
-                "name_tr": test["topics"]["name_tr"] if test.get("topics") else "Bilinmeyen"
+                "name_tr": test["topics"]["name_tr"]
+                if test.get("topics") else None
             },
             "subject": {
-                "name_tr": test["topics"]["subjects"]["name_tr"] if test.get("topics") and test["topics"].get("subjects") else "Bilinmeyen"
+                "name_tr": (
+                    test["topics"]["subjects"]["name_tr"]
+                    if test.get("topics") and test["topics"].get("subjects")
+                    else None
+                )
             }
         })
-    
-    return {
-        "topic_counts": topic_counts,"tests": formatted_tests}
-@router.get("/weekly-subjects")
-async def get_weekly_subjects(current_user: dict = Depends(get_current_user)):
-    student_id = current_user["id"]
-    """
-    Son 7 günün ders bazlı performansı
-    """
-    try:
-        supabase = get_supabase_admin()
-        
-        # Son 7 günün testlerini çek
-        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-        
-        tests = supabase.table("student_topic_tests").select(
-            "*, topics(name_tr, subjects(id, name_tr))"
-        ).eq("student_id", student_id).gte("test_date", week_ago.isoformat()).execute()
-        
-        if not tests.data:
-            return {
-        "topic_counts": topic_counts,
-                "success": True,
-                "subjects": [],
-                "message": "Son 7 günde test yok"
-            }
-        
-        # Ders bazında grupla
-        subject_stats = {}
-        
-        for test in tests.data:
-            if not test.get("topics") or not test["topics"].get("subjects"):
-                continue
-                
-            subject_id = test["topics"]["subjects"]["id"]
-            subject_name = test["topics"]["subjects"]["name_tr"]
-            
-            if subject_id not in subject_stats:
-                subject_stats[subject_id] = {
-                    "name": subject_name,
-                    "total_tests": 0,
-                    "total_success": 0
-                }
-            
-            subject_stats[subject_id]["total_tests"] += 1
-            subject_stats[subject_id]["total_success"] += test["success_rate"]
-        
-        # Ortalama hesapla
-        subjects = []
-        for subject_id, stats in subject_stats.items():
-            avg_success = int(stats["total_success"] / stats["total_tests"])
-            subjects.append({
-                "name": stats["name"],
-                "avg_success": avg_success,
-                "total_tests": stats["total_tests"]
-            })
-        
-        # Başarıya göre sırala
-        subjects.sort(key=lambda x: x["avg_success"])
-        
-        # En kötü 2, en iyi 2
-        worst = subjects[:2] if len(subjects) >= 2 else subjects
-        best = subjects[-2:] if len(subjects) >= 2 else []
-        best.reverse()
-        
-        return {
-        "topic_counts": topic_counts,
-            "success": True,
-            "worst_subjects": worst,
-            "best_subjects": best,
-            "all_subjects": subjects
-        }
-        
-    except Exception as e:
-        print(f"Weekly subjects error: {str(e)}")
-        return {
-        "topic_counts": topic_counts,"success": False, "error": str(e)}
-# student.py'nin en sonuna ekle
 
-# ============================================
-# 📋 SUPPORT FEEDBACK ENDPOINTS
-# ============================================
+    return {"tests": formatted}
+
+
+# ============================================================
+# WEEKLY SUBJECTS
+# ============================================================
+
+@router.get("/weekly-subjects")
+async def get_weekly_subjects(
+    current_user: dict = Depends(get_current_user)
+):
+    student_id = current_user["id"]
+    supabase = get_supabase_admin()
+
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+    tests = (
+        supabase
+        .table("student_topic_tests")
+        .select("*, topics(subjects(id, name_tr))")
+        .eq("student_id", student_id)
+        .gte("test_date", week_ago.isoformat())
+        .execute()
+    )
+
+    if not tests.data:
+        return {
+            "success": True,
+            "subjects": []
+        }
+
+    subject_stats = {}
+
+    for test in tests.data:
+        subj = test.get("topics", {}).get("subjects")
+        if not subj:
+            continue
+
+        sid = subj["id"]
+        subject_stats.setdefault(sid, {
+            "name": subj["name_tr"],
+            "total_tests": 0,
+            "total_success": 0
+        })
+
+        subject_stats[sid]["total_tests"] += 1
+        subject_stats[sid]["total_success"] += test["success_rate"]
+
+    subjects = [
+        {
+            "name": s["name"],
+            "avg_success": int(s["total_success"] / s["total_tests"]),
+            "total_tests": s["total_tests"]
+        }
+        for s in subject_stats.values()
+    ]
+
+    subjects.sort(key=lambda x: x["avg_success"])
+
+    return {
+        "success": True,
+        "worst_subjects": subjects[:2],
+        "best_subjects": list(reversed(subjects[-2:])),
+        "all_subjects": subjects
+    }

@@ -5,7 +5,7 @@
 # Created: {DATE}
 # Phase: MVP (Phase 1)
 # Author: End.STP Team
-# 
+# # Phase: FAZ 3 – Stub Performance Layer
 # 🌍 LOCALIZATION STATUS:
 #   [ ] UTC datetime handling
 #   [ ] Multi-language support (Phase 2)
@@ -35,11 +35,37 @@ Usage:
     {USAGE_EXAMPLE}
 """
 
-from datetime import datetime, timezone  # ⚠️ ALWAYS use timezone.utc!
-from typing import List, Dict, Any, Optional
-
 # =============================================================================
 # YOUR CODE STARTS HERE
 # =============================================================================
 
 # TODO: Implement your functions
+
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
+
+# ❗ FAZ-3 STUB
+# Gerçek hesaplar FAZ-4'te gelecek
+
+
+def get_student_performance(
+    student_id: str,
+    use_cache: bool = True
+) -> Dict[str, Any]:
+    """
+    FAZ-3 PERFORMANCE CONTRACT (STUB)
+
+    Returns structure only.
+    No real calculation yet.
+    """
+
+    return {
+        "topic_performance": {},
+        "all_tests": [],
+        "projection": None,
+        "metadata": {
+            "source": "stub",
+            "cached": False,
+            "generated_at": datetime.now(timezone.utc).isoformat()
+        }
+    }
