@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
+import { api } from '@/lib/api/client';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -38,23 +39,18 @@ export default function ProgressTrendChart({
 }: TrendChartProps) {
   const [period, setPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [prediction, setPrediction] = useState<any>(null);
-  const [showPrediction, setShowPrediction] = useState(false); // ✅ YENİ: Tahmin toggle
-  const [showSubjects, setShowSubjects] = useState(false); // ✅ YENİ: Ders toggle
+  const [showPrediction, setShowPrediction] = useState(false);
+  const [showSubjects, setShowSubjects] = useState(false);
 
-  // Prediction data fetch
+  // ✅ ALTIN STANDART: api-client kullan
   useEffect(() => {
     const fetchPrediction = async () => {
       try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-        
-        const res = await fetch(`${API_BASE}/student/progress/prediction?period=${period}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (res.ok) {
-          const result = await res.json();
-          setPrediction(result.data);
-        }
+        const result = await api.get(
+          `/student/progress/prediction?period=${period}`
+        ) as any;
+
+        setPrediction(result?.data ?? null);
       } catch (error) {
         console.error('Prediction fetch error:', error);
       }

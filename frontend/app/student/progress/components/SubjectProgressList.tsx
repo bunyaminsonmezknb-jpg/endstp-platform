@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 
 interface Subject {
   subject_id: string;
-  subject_name: string;
+  subject_name: string | null; // 🔴 BURASI
   progress_percentage: number;
   test_count: number;
   topics_total: number;
@@ -25,8 +25,10 @@ interface SubjectProgressListProps {
 }
 
 // ===== DERS İKONLARI =====
-function getSubjectIcon(subjectName: string): string {
+function getSubjectIcon(subjectName?: string | null): string {
+  if (!subjectName || typeof subjectName !== 'string') return '📚';
   const name = subjectName.toLowerCase();
+
   
   if (name.includes('matematik')) return '📐';
   if (name.includes('fizik')) return '⚡';
@@ -320,8 +322,9 @@ export default function SubjectProgressList({ subjects, isLoading }: SubjectProg
                   
                   <div className="text-left">
                     <h3 className="font-bold text-gray-900 text-lg">
-                      {subject.subject_name}
+                      {subject.subject_name ?? 'Ders Adı Yok'}
                     </h3>
+
                     <p className="text-sm text-gray-500">
                       {isNoData 
                         ? `Henüz test çözülmedi (${subject.topics_total} konu var)`

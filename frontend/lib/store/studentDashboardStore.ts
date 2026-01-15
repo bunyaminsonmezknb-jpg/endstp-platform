@@ -122,7 +122,7 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
           name: topic.name,
           subject: topic.subject,
           rememberingRate: topic.rememberingRate,
-          status: topic.status.toLowerCase() as any,
+          status: (topic.status || "unknown").toLowerCase() as any,
           statusText: topic.statusText,
           emoji: topic.emoji,
           daysSinceLastTest: topic.days_since_last_test,

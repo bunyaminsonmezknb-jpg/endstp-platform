@@ -25,31 +25,26 @@ export default function ProjectionCard() {
     setError(null);
 
     try {
-      if (!userStr || !accessToken) {
-        throw new Error('Lütfen giriş yapın');
+      const response = await api.post('/student/projection') as any;
+
+      if (response.status === 'no_data') {
+        setProjection(null);
+      } else if (response.projection) {
+        const totalTopics =
+          Number(response.projection.total_topics ?? response.projection.totalTopics ?? 0);
+        const completedTopics =
+          Number(response.projection.completed_topics ?? response.projection.completedTopics ?? 0);
+        const estimatedDays =
+          Number(response.projection.estimated_days ?? response.projection.estimatedDays ?? 0);
+
+        setProjection({
+          totalTopics,
+          completedTopics,
+          estimatedDays,
+          estimatedDate:
+            response.projection.estimated_date ?? response.projection.estimatedDate ?? '',
+        });
       }
-
-      const user = JSON.parse(userStr);
-
-const response = await api.post('/student/projection') as any;
-if (response.status === 'no_data') {
-  setProjection(null);
-} else if (response.projection) {
-  const totalTopics =
-    Number(response.projection.total_topics ?? response.projection.totalTopics ?? 0);
-  const completedTopics =
-    Number(response.projection.completed_topics ?? response.projection.completedTopics ?? 0);
-  const estimatedDays =
-    Number(response.projection.estimated_days ?? response.projection.estimatedDays ?? 0);
-
-      setProjection({
-        totalTopics,
-        completedTopics,
-        estimatedDays,
-        estimatedDate:
-          response.projection.estimated_date ?? response.projection.estimatedDate ?? '',
-      });
-    }
     } catch (err: any) {
       setError(err.message || 'Projeksiyon yüklenemedi');
     } finally {
@@ -104,48 +99,39 @@ if (response.status === 'no_data') {
     );
   }
 
-  // Kalan konuları hesapla
   const remainingTopics = projection.totalTopics - projection.completedTopics;
-  
-  // İlerleme yüzdesi
-const totalTopics = Number(projection.totalTopics ?? 0);
-const completedTopics = Number(projection.completedTopics ?? 0);
 
-let progressPercent = 0;
+  const totalTopics = Number(projection.totalTopics ?? 0);
+  const completedTopics = Number(projection.completedTopics ?? 0);
 
-if (Number.isFinite(totalTopics) && totalTopics > 0 && Number.isFinite(completedTopics)) {
-  progressPercent = (completedTopics / totalTopics) * 100;
-}
+  let progressPercent = 0;
+  if (Number.isFinite(totalTopics) && totalTopics > 0 && Number.isFinite(completedTopics)) {
+    progressPercent = (completedTopics / totalTopics) * 100;
+  }
+  if (!Number.isFinite(progressPercent)) {
+    progressPercent = 0;
+  }
 
-// Eğer yine de bir sebeple NaN olursa 0'a düş
-if (!Number.isFinite(progressPercent)) {
-  progressPercent = 0;
-}
-  
-  // VELOCITY DÜZELTMESİ - Daha anlamlı format
   const formatVelocity = () => {
     if (remainingTopics === 0) return 'Tamamlandı! 🎉';
     if (projection.estimatedDays === 0) return 'Veri yetersiz';
-    
+
     const dailyRate = remainingTopics / projection.estimatedDays;
-    
-    // Günlük 1'den az ise haftalık göster
+
     if (dailyRate < 1) {
       const weeklyRate = dailyRate * 7;
       if (weeklyRate < 1) {
-        // Kaç günde 1 konu
         const daysPerTopic = Math.ceil(1 / dailyRate);
         return `1 konu/${daysPerTopic} günde`;
       }
       return `${weeklyRate.toFixed(1)} konu/hafta`;
     }
-    
+
     return `${dailyRate.toFixed(1)} konu/gün`;
   };
 
   const velocityText = formatVelocity();
 
-  // Uyarı seviyesi belirle
   const getWarningLevel = () => {
     if (projection.estimatedDays <= 30) return 'success';
     if (projection.estimatedDays <= 60) return 'warning';
@@ -160,7 +146,6 @@ if (!Number.isFinite(progressPercent)) {
     return 'from-purple-500 to-indigo-600';
   };
 
-  // Halka grafiği parametreleri
   const circularProgressParams = {
     size: 140,
     strokeWidth: 12,

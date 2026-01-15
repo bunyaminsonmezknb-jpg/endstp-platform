@@ -23,5 +23,4 @@ router.include_router(tasks_router, tags=["student-tasks"])
 router.include_router(support_feedback_router, tags=["student-support-feedback"])
 router.include_router(reflex_notifications_router, tags=["student-reflex-notifications"])
 
-# Performance test router
-from .performance import router as performance_router
+

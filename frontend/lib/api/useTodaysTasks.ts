@@ -1,11 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from './client';
-import { TodaysTasksData, TodaysTasksResponse } from '../types/todaysTasks';
-
-// API base URL (from environment variable)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { TodaysTasksData } from '../types/todaysTasks';
 
 interface UseTodaysTasksReturn {
   data: TodaysTasksData | null;
@@ -16,61 +13,69 @@ interface UseTodaysTasksReturn {
 
 /**
  * Custom hook to fetch today's tasks data from backend
- * 
+ *
  * Endpoint: GET /api/v1/student/todays-tasks
- * 
- * Features:
- * - Automatic retry on failure (3 attempts)
- * - Loading state
- * - Error handling
- * - Manual refetch capability
+ *
+ * Altın Standartlar:
+ * - Auth → api-client interceptor
+ * - No localStorage / token usage
+ * - Retry mekanizması
+ * - Type-safe response
+ * - Sadece canlı veri
  */
 export const useTodaysTasks = (): UseTodaysTasksReturn => {
   const [data, setData] = useState<TodaysTasksData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchTodaysTasks = async (retryCount = 0): Promise<void> => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Make API request
-// Make API request
-const response = await api.get('/student/todays-tasks') as any;
-
-if (response.success && response.data) {
-  setData(response.data);
+  const fetchTodaysTasks = useCallback(
+    async (retryCount = 0): Promise<void> => {
+      try {
+        setIsLoading(true);
         setError(null);
-      } else {
-        throw new Error(response.data.error || 'Failed to fetch data');
+
+        const response = await api.get('/student/todays-tasks');
+
+        /**
+         * Beklenen backend response:
+         * {
+         *   success: true,
+         *   data: TodaysTasksData
+         * }
+         */
+        if (!response) {
+          throw new Error('Boş API yanıtı');
+        }
+
+        setData(response as TodaysTasksData);
+
+      } catch (err: any) {
+        console.error('[useTodaysTasks] fetch error:', err);
+
+        // Retry (max 3 deneme)
+        if (retryCount < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          return fetchTodaysTasks(retryCount + 1);
+        }
+
+        const message =
+          err?.response?.data?.message ||
+          err?.message ||
+          'Bugünkü görevler yüklenemedi';
+
+        setError(message);
+        setData(null);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err: any) {
-      console.error('Error fetching todays tasks:', err);
+    },
+    []
+  );
 
-      // Retry logic (max 3 attempts)
-      if (retryCount < 2) {
-        console.log(`Retrying... (${retryCount + 1}/2)`);
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1s
-        return fetchTodaysTasks(retryCount + 1);
-      }
-
-      // Set error after retries exhausted
-      const errorMessage =
-        err.response?.data?.message ||
-        err.message ||
-        'Veri yüklenirken bir hata oluştu';
-      setError(errorMessage);
-      setData(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fetch on mount
+  // İlk yükleme
   useEffect(() => {
     fetchTodaysTasks();
-  }, []);
+  }, [fetchTodaysTasks]);
 
   return {
     data,
@@ -79,54 +84,3 @@ if (response.success && response.data) {
     refetch: () => fetchTodaysTasks(0),
   };
 };
-
-// Mock data for development/testing
-export const getMockTodaysTasksData = (): TodaysTasksData => ({
-  streak: {
-    current_streak: 5,
-    longest_streak: 12,
-    streak_status: 'active',
-    last_study_date: '2025-12-04',
-    next_milestone: 7,
-  },
-  time_stats: {
-    total_time_today_minutes: 0,
-    target_time_minutes: 96,
-    remaining_time_minutes: 96,
-    progress_percentage: 0,
-    total_time_week_minutes: 380,
-  },
-  tasks: [
-    {
-      id: 1,
-      motor_type: 'priority',
-      title: 'Fonksiyonlar',
-      subject: 'Matematik',
-      priority_score: 87,
-      description: 'Öncelik skoru yüksek (87/100)',
-      estimated_questions: 12,
-      estimated_time_minutes: 18,
-      status: 'pending',
-      icon: '📌',
-    },
-    {
-      id: 2,
-      motor_type: 'repetition',
-      title: 'Çembersel Hareket',
-      subject: 'Fizik',
-      days_since_last: 14,
-      description: 'Son tekrar 14 gün önce',
-      estimated_questions: 12,
-      estimated_time_minutes: 18,
-      status: 'pending',
-      icon: '🔁',
-    },
-  ],
-  summary: {
-    total_tasks: 2,
-    completed_tasks: 0,
-    pending_tasks: 2,
-    completion_percentage: 0,
-  },
-  generated_at: new Date().toISOString(),
-});

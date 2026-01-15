@@ -64,11 +64,7 @@ export default function UniversityGoalCard() {
     setError(null);
 
     try {
-      if (!userStr || !accessToken) {
-        throw new Error('Lütfen giriş yapın');
-      }
-
-      const user = JSON.parse(userStr);
+      
 
       const response = await api.post('/student/goal') as any;
       if (response.status === 'no_data') {
