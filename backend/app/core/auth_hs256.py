@@ -1,45 +1,121 @@
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
-# File: {FILENAME}
-# Created: {DATE}
+# File: auth_hs256.py
+# Created: 2025-01-02
 # Phase: MVP (Phase 1)
 # Author: End.STP Team
-# 
+#
 # 🌍 LOCALIZATION STATUS:
-#   [ ] UTC datetime handling
+#   [x] UTC datetime handling
 #   [ ] Multi-language support (Phase 2)
 #   [ ] Database uses _tr/_en columns
 #   [ ] API accepts Accept-Language header (Phase 2)
-#   [ ] No hardcoded text
+#   [x] No hardcoded text
 #
 # 📋 HARDCODED ITEMS (Temporary - Mark with line numbers):
-#   - (None yet - Add items as you code)
-#   - Example: "TURKISH_MONTHS dict (Line 45) → Phase 2: Database lookup"
+#   - EXPECTED_AUDIENCE = "authenticated"
 #
 # 🚀 MIGRATION NOTES (Phase 2 Actions):
-#   - (Actions will be listed here)
-#   - Example: "Replace format_date_turkish() with format_date_localized()"
+#   - JWKS-based validation (RS256) when enabled
 #
 # 📚 RELATED DOCS:
-#   - Guidelines: docs/GLOBAL_FIRST_GUIDE.md
-#   - Migration: docs/PHASE2_MIGRATION_PLAN.md
+#   - docs/AUTH_SECURITY.md
 # =============================================================================
 
 """
-{FILENAME} - {SHORT_DESCRIPTION}
+Supabase JWT Authentication (HS256)
+----------------------------------
+Fallback authentication when JWKS is unavailable.
 
-{DETAILED_DESCRIPTION}
+Responsibilities:
+- Validate JWT via HS256 + SUPABASE_JWT_SECRET
+- Enforce issuer & audience
+- Return normalized user payload
 
-Usage:
-    {USAGE_EXAMPLE}
+IMPORTANT:
+- This file is SECURITY-CRITICAL
+- Do NOT modify logic without explicit review
 """
 
-from datetime import datetime, timezone  # ⚠️ ALWAYS use timezone.utc!
-from typing import List, Dict, Any, Optional
+from typing import Optional
+import os
+
+from fastapi import Header, HTTPException
+from jose import jwt, JWTError
+
 
 # =============================================================================
-# YOUR CODE STARTS HERE
+# CONFIG
 # =============================================================================
 
-# TODO: Implement your functions
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+
+if not SUPABASE_URL:
+    raise RuntimeError("SUPABASE_URL not set")
+
+if not SUPABASE_JWT_SECRET:
+    raise RuntimeError("SUPABASE_JWT_SECRET not set")
+
+EXPECTED_ISSUER = f"{SUPABASE_URL}/auth/v1"
+EXPECTED_AUDIENCE = "authenticated"
+
+
+# =============================================================================
+# AUTH CORE
+# =============================================================================
+
+def get_current_user(
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Validate Supabase JWT (HS256)
+
+    Returns:
+        {
+            id: str,
+            sub: str,
+            email: Optional[str],
+            role: str
+        }
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header required",
+        )
+
+    token = authorization.split(" ", 1)[1].strip()
+
+    try:
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience=EXPECTED_AUDIENCE,
+            issuer=EXPECTED_ISSUER,
+        )
+
+        return {
+            "id": payload["sub"],
+            "sub": payload["sub"],
+            "email": payload.get("email"),
+            "role": payload.get("role", "authenticated"),
+        }
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+        )
+
+
+def get_current_active_user(
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Alias for get_current_user
+    (reserved for future active/disabled checks)
+    """
+    return get_current_user(authorization)

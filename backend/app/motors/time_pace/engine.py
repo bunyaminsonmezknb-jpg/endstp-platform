@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
@@ -44,7 +46,6 @@ from typing import List, Dict, Any, Optional
 
 # TODO: Implement your functions
 # app/motors/time/engine.py
-from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, List, Optional

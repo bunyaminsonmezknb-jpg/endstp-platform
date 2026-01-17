@@ -1,3 +1,9 @@
+from __future__ import annotations
+"""
+Priority Engine v4B
+Deterministic, explainable priority scoring
+"""
+
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
@@ -43,7 +49,7 @@ from typing import List, Dict, Any, Optional
 # =============================================================================
 
 # TODO: Implement your functions
-from __future__ import annotations
+
 
 from datetime import datetime, timezone
 from typing import Any, List, Optional

@@ -1,3 +1,4 @@
+from __future__ import annotations
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
@@ -43,7 +44,7 @@ from typing import List, Dict, Any, Optional
 # =============================================================================
 
 # TODO: Implement your functions
-from __future__ import annotations
+
 
 from dataclasses import dataclass, field
 from datetime import datetime

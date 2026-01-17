@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
@@ -21,7 +23,6 @@
 Difficulty motor typed contracts (FAZ 4B)
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime

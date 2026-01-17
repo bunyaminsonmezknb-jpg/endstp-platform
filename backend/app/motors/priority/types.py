@@ -1,3 +1,9 @@
+from __future__ import annotations
+"""
+Priority Engine v4B
+Deterministic, explainable priority scoring
+"""
+
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
@@ -30,7 +36,6 @@ Priority motor typed contracts (FAZ 4B)
 - Pure / DB-free engines consume these
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
