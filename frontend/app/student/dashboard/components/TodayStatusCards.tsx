@@ -164,7 +164,7 @@ export default function TodayStatusCards({
       {/* 3 Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <AtRiskCard topics={data?.at_risk_topics || []} total={data?.total_at_risk || 0} />
-        <PriorityCard topics={data.priority_topics} total={data.total_priority} />
+        <PriorityCard topics={data.priority_topics ?? []} total={data.total_priority ?? 0} />
         <StreakCard streak={data.streak} timeStats={data.time_stats} />
       </div>
 
@@ -336,7 +336,7 @@ interface AtRiskCardProps {
   total: number;
 }
 
-function AtRiskCard({ topics, total }: AtRiskCardProps) {
+function AtRiskCard({ topics = [], total }: AtRiskCardProps) {
   const urgencyLevel = total >= 5 ? 'high' : total >= 3 ? 'medium' : total > 0 ? 'low' : 'none';
 
   const urgencyColors: Record<string, string> = {
@@ -505,7 +505,7 @@ interface StreakCardProps {
     current_streak: number;
     longest_streak: number;
     streak_status: 'active' | 'at_risk' | 'broken';
-    last_study_date: string;
+    last_study_date: string | null;
     next_milestone: number;
   };
   timeStats: {
@@ -517,7 +517,22 @@ interface StreakCardProps {
   };
 }
 
-function StreakCard({ streak, timeStats }: StreakCardProps) {
+function StreakCard({
+  streak = {
+    current_streak: 0,
+    longest_streak: 0,
+    streak_status: 'broken',
+    last_study_date: null,
+    next_milestone: 1, // division by zero guard
+  },
+  timeStats = {
+    total_study_time_today: 0,
+    total_study_time_week: 0,
+    avg_daily_time: 0,
+    target_daily_time: 1, // division by zero guard
+    time_efficiency: 0,
+  },
+}: StreakCardProps) {
   const streakStatusColors: Record<string, string> = {
     active: 'bg-green-50 border-green-300',
     at_risk: 'bg-yellow-50 border-yellow-300',
@@ -536,30 +551,43 @@ function StreakCard({ streak, timeStats }: StreakCardProps) {
     broken: 'text-gray-700',
   };
 
-  const milestoneProgress = (streak.current_streak / streak.next_milestone) * 100;
-  const todayProgress = (timeStats.total_study_time_today / timeStats.target_daily_time) * 100;
+  const milestoneProgress =
+    (streak.current_streak / streak.next_milestone) * 100;
+
+  const todayProgress =
+    (timeStats.total_study_time_today / timeStats.target_daily_time) * 100;
 
   return (
-    <div className={`rounded-xl border-2 p-6 transition-all hover:shadow-lg ${streakStatusColors[streak.streak_status]}`}>
+    <div
+      className={`rounded-xl border-2 p-6 transition-all hover:shadow-lg ${streakStatusColors[streak.streak_status]}`}
+    >
       <div className="flex items-center gap-3 mb-4">
         <FireIcon />
         <div className="flex-1">
-          <h3 className={`text-lg font-bold ${streakStatusTextColor[streak.streak_status]}`}>
+          <h3
+            className={`text-lg font-bold ${streakStatusTextColor[streak.streak_status]}`}
+          >
             {streakStatusText[streak.streak_status]}
           </h3>
-          <p className="text-sm text-gray-600">{streak.current_streak} gün üst üste</p>
+          <p className="text-sm text-gray-600">
+            {streak.current_streak} gün üst üste
+          </p>
         </div>
       </div>
 
       <div className="bg-white rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-gray-600">Mevcut Devamlılık</span>
-          <span className="text-2xl font-bold text-orange-600">{streak.current_streak} 🔥</span>
+          <span className="text-2xl font-bold text-orange-600">
+            {streak.current_streak} 🔥
+          </span>
         </div>
 
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-gray-600">En Uzun Devamlılık</span>
-          <span className="text-lg font-semibold text-gray-700">{streak.longest_streak} gün</span>
+          <span className="text-lg font-semibold text-gray-700">
+            {streak.longest_streak} gün
+          </span>
         </div>
 
         <div className="mb-2">
@@ -579,12 +607,16 @@ function StreakCard({ streak, timeStats }: StreakCardProps) {
       <div className="bg-white rounded-lg p-4">
         <div className="flex items-center gap-2 mb-3">
           <ChartIcon />
-          <span className="text-sm font-semibold text-gray-700">Bugünkü Çalışma</span>
+          <span className="text-sm font-semibold text-gray-700">
+            Bugünkü Çalışma
+          </span>
         </div>
 
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-gray-600">Süre</span>
-          <span className="text-lg font-bold text-indigo-600">{timeStats.total_study_time_today} dk</span>
+          <span className="text-lg font-bold text-indigo-600">
+            {timeStats.total_study_time_today} dk
+          </span>
         </div>
 
         <div className="mb-3">
@@ -610,7 +642,9 @@ function StreakCard({ streak, timeStats }: StreakCardProps) {
 
         <div className="flex items-center justify-between text-xs text-gray-600">
           <span>Bu Hafta Toplam</span>
-          <span className="font-semibold">{timeStats.total_study_time_week} dk</span>
+          <span className="font-semibold">
+            {timeStats.total_study_time_week} dk
+          </span>
         </div>
       </div>
 

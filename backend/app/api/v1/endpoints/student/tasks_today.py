@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Header
-from datetime import datetime, timezone
+from datetime import datetime
 from app.db.session import get_supabase_admin
 from app.core.auth import get_current_user
 from .utils import (
@@ -55,7 +55,7 @@ async def get_tasks_today(
         ).data or []
 
     # ----------------------------------
-    # 3️⃣ MOTOR VERİLERİ (TEK HESAPLAMA)
+    # 3️⃣ MOTOR VERİLERİ (AT-RISK HESABI)
     # ----------------------------------
     topic_tests = (
         supabase.table("student_topic_tests")
@@ -66,70 +66,131 @@ async def get_tasks_today(
     ).data or []
 
     topic_performance = {}
+
     for t in topic_tests:
         topic_id = t.get("topic_id") or t.get("topics", {}).get("id")
         if not topic_id:
             continue
 
-        topic_performance.setdefault(topic_id, {
-            "topic_name": t["topics"]["name_tr"],
-            "subject": t["topics"]["subjects"]["name_tr"],
-            "tests": []
-        })["tests"].append(t)
+        topic_performance.setdefault(
+            topic_id,
+            {
+                "topic_name": t["topics"]["name_tr"],
+                "subject": t["topics"]["subjects"]["name_tr"],
+                "tests": [],
+            },
+        )["tests"].append(t)
 
     # ----------------------------------
     # 4️⃣ AT RISK TOPICS
     # ----------------------------------
     at_risk = []
+
     for topic_id, data in topic_performance.items():
         tests = data["tests"]
         latest = tests[0]
-        test_date = datetime.fromisoformat(latest["test_date"].replace("Z", "+00:00"))
+
+        test_date = datetime.fromisoformat(
+            latest["test_date"].replace("Z", "+00:00")
+        )
 
         rate = calculate_remembering_rate(tests)
         next_review = calculate_next_review_date(rate, test_date)
 
-        if next_review["urgency"] in ["HEMEN", "ACİL", "YAKIN", "critical", "high"]:
-            at_risk.append({
-                "topic_id": topic_id,
-                "topic_name": data["topic_name"],
-                "subject": data["subject"],
-                "retention_rate": rate,
-                "days_until_forgotten": next_review["days_remaining"],
-            })
+        if next_review["urgency"] in [
+            "HEMEN",
+            "ACİL",
+            "YAKIN",
+            "critical",
+            "high",
+        ]:
+            at_risk.append(
+                {
+                    "topic_id": topic_id,
+                    "topic_name": data["topic_name"],
+                    "subject": data["subject"],
+                    "retention_rate": rate,
+                    "days_until_forgotten": next_review["days_remaining"],
+                }
+            )
 
     # ----------------------------------
     # 5️⃣ SUMMARY
     # ----------------------------------
-    total_time = sum(t["estimated_time_minutes"] for t in tasks)
+    total_time = sum(t.get("estimated_time_minutes", 0) for t in tasks)
     completed_time = sum(
-        t["estimated_time_minutes"] for t in tasks if t["status"] == "completed"
+        t.get("estimated_time_minutes", 0)
+        for t in tasks
+        if t.get("status") == "completed"
     )
 
+    # ----------------------------------
+    # 6️⃣ RESPONSE — FRONTEND CONTRACT SAFE
+    # ----------------------------------
     return {
         "success": True,
         "date": today_str,
+
+        # --------------------
+        # TASKS
+        # --------------------
         "tasks": tasks,
+
         "summary": {
             "total_tasks": len(tasks),
-            "completed_tasks": len([t for t in tasks if t["status"] == "completed"]),
+            "completed_tasks": len(
+                [t for t in tasks if t.get("status") == "completed"]
+            ),
             "total_time_minutes": total_time,
             "completed_time_minutes": completed_time,
             "remaining_time_minutes": total_time - completed_time,
         },
+
+        # --------------------
+        # AT RISK
+        # --------------------
         "at_risk_topics": at_risk[:3],
         "total_at_risk": len(at_risk),
+
+        # --------------------
+        # PLACEHOLDER — FRONTEND CONTRACT
+        # (Motorlar sonra bağlanacak)
+        # --------------------
+        "priority_topics": [],
+        "total_priority": 0,
+
+        "streak": {
+            "current_streak": 0,
+            "longest_streak": 0,
+            "streak_status": "broken",
+            "last_study_date": None,
+            "next_milestone": 7,
+        },
+
+        "time_stats": {
+            "total_study_time_today": completed_time,
+            "total_study_time_week": completed_time,
+            "avg_daily_time": completed_time,
+            "target_daily_time": 60,
+            "time_efficiency": 0,
+        },
     }
+
+
+# ==================================================
+# DAILY TASK CREATOR (SAFE FALLBACK)
+# ==================================================
+
 def create_daily_tasks(student_id: str, date: str):
     """
-    Bugün için görev yoksa otomatik oluştur
-    Gerçek motorlar bağlanana kadar demo veriler
+    Bugün için görev yoksa otomatik oluşturur.
+    Motorlar bağlanana kadar güvenli fallback.
     """
     supabase = get_supabase_admin()
-    
-    # Matematik subject ID
+
+    # Matematik subject ID (geçici)
     MATH_SUBJECT = "e576c099-c3ae-4022-be5c-919929437966"
-    
+
     tasks = [
         {
             "student_id": student_id,
@@ -142,7 +203,7 @@ def create_daily_tasks(student_id: str, date: str):
             "priority_level": 1,
             "estimated_time_minutes": 20,
             "question_count": 12,
-            "status": "pending"
+            "status": "pending",
         },
         {
             "student_id": student_id,
@@ -155,7 +216,7 @@ def create_daily_tasks(student_id: str, date: str):
             "priority_level": 2,
             "estimated_time_minutes": 20,
             "question_count": 12,
-            "status": "pending"
+            "status": "pending",
         },
         {
             "student_id": student_id,
@@ -167,7 +228,7 @@ def create_daily_tasks(student_id: str, date: str):
             "source_motor": "weakness",
             "priority_level": 3,
             "estimated_time_minutes": 30,
-            "status": "pending"
+            "status": "pending",
         },
         {
             "student_id": student_id,
@@ -179,7 +240,7 @@ def create_daily_tasks(student_id: str, date: str):
             "source_motor": "speed",
             "priority_level": 4,
             "estimated_time_minutes": 25,
-            "status": "pending"
+            "status": "pending",
         },
         {
             "student_id": student_id,
@@ -192,11 +253,11 @@ def create_daily_tasks(student_id: str, date: str):
             "priority_level": 5,
             "estimated_time_minutes": 15,
             "question_count": 12,
-            "status": "pending"
-        }
+            "status": "pending",
+        },
     ]
-    
+
     for task in tasks:
         supabase.table("student_tasks").insert(task).execute()
-    
+
     print(f"✅ Created {len(tasks)} tasks for {date}")

@@ -11,18 +11,6 @@ interface UseTodaysTasksReturn {
   refetch: () => Promise<void>;
 }
 
-/**
- * Custom hook to fetch today's tasks data from backend
- *
- * Endpoint: GET /api/v1/student/todays-tasks
- *
- * Altın Standartlar:
- * - Auth → api-client interceptor
- * - No localStorage / token usage
- * - Retry mekanizması
- * - Type-safe response
- * - Sadece canlı veri
- */
 export const useTodaysTasks = (): UseTodaysTasksReturn => {
   const [data, setData] = useState<TodaysTasksData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -30,30 +18,45 @@ export const useTodaysTasks = (): UseTodaysTasksReturn => {
 
   const fetchTodaysTasks = useCallback(
     async (retryCount = 0): Promise<void> => {
+      let willRetry = false;
+
       try {
         setIsLoading(true);
         setError(null);
 
-        const response = await api.get('/student/todays-tasks');
+        // ✅ DOĞRU ENDPOINT
+        const raw = await api.get('/student/tasks/today');
 
-        /**
-         * Beklenen backend response:
-         * {
-         *   success: true,
-         *   data: TodaysTasksData
-         * }
-         */
-        if (!response) {
+        // api client AxiosResponse döndürüyor olabilir → raw.data
+        const payload: any = (raw as any)?.data ?? raw;
+
+        if (!payload) {
           throw new Error('Boş API yanıtı');
         }
 
-        setData(response as TodaysTasksData);
+        /**
+         * Backend gerçek response:
+         * {
+         *   success: true,
+         *   tasks,
+         *   at_risk_topics,
+         *   total_at_risk,
+         *   ...
+         * }
+         */
+        if (payload.success !== true) {
+          throw new Error('Geçersiz API yanıtı');
+        }
+
+        // ✅ ENVELOPE AÇILDI – UI'nin beklediği shape korunuyor
+        setData(payload as TodaysTasksData);
 
       } catch (err: any) {
         console.error('[useTodaysTasks] fetch error:', err);
 
-        // Retry (max 3 deneme)
+        // Retry (max 3 deneme: 0,1,2)
         if (retryCount < 2) {
+          willRetry = true;
           await new Promise((resolve) => setTimeout(resolve, 1000));
           return fetchTodaysTasks(retryCount + 1);
         }
@@ -66,7 +69,10 @@ export const useTodaysTasks = (): UseTodaysTasksReturn => {
         setError(message);
         setData(null);
       } finally {
-        setIsLoading(false);
+        // Retry varsa loading'i kapatıp flicker yaratma
+        if (!willRetry) {
+          setIsLoading(false);
+        }
       }
     },
     []

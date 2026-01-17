@@ -22,3 +22,21 @@ api_router.include_router(feedback.router, tags=["feedback"])
 
 # Feature flags
 api_router.include_router(feature_flags.router, prefix="/flags", tags=["feature-flags"])
+
+# app/api/v1/api.py
+from app.motors.priority.adapter import router as priority_router
+
+api_router.include_router(priority_router)
+
+from app.motors.difficulty.adapter import router as difficulty_router
+api_router.include_router(difficulty_router)
+
+from app.motors.time_pace.adapter import router as time_pace_router
+api_router.include_router(time_pace_router)
+
+from app.motors.unified.adapter import router as unified_router
+api_router.include_router(unified_router)
+
+from app.api.v1.endpoints.student.motors.unified import router as unified_motor_router
+
+api_router.include_router(unified_motor_router)
