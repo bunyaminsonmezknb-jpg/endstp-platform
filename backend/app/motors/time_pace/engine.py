@@ -222,3 +222,16 @@ def run_time_engine(payload: TimeEngineInput) -> TimeEngineOutput:
         generated_at=now.isoformat(),
         items=items,
     )
+# =============================================================================
+# Alias for orchestrator compatibility (FAZ 4D)
+# =============================================================================
+def run_time_pace_engine(payload: TimeEngineInput) -> TimeEngineOutput:
+    """
+    Alias wrapper for orchestrator.
+    Keeps naming consistent with other motors:
+    - run_bs_model_engine
+    - run_difficulty_engine
+    - run_priority_engine
+    - run_time_pace_engine
+    """
+    return run_time_engine(payload)

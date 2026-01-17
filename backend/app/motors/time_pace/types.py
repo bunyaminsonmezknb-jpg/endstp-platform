@@ -92,3 +92,13 @@ class TimeEngineOutput:
     engine_version: str
     generated_at: str
     items: List[TimeItem]
+# =============================================================================
+# Orchestrator alias types (FAZ 4D)
+# =============================================================================
+
+# Engine-level alias
+TimePaceEngineInput = TimeEngineInput
+TimePaceEngineOutput = TimeEngineOutput
+
+# Topic-level alias
+TimePaceTopicInput = TimeTopicInput if 'TimeTopicInput' in globals() else None
