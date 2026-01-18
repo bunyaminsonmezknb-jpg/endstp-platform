@@ -1,94 +1,77 @@
-import { createClient } from '@supabase/supabase-js'
+/**
+ * API Client – Supabase Session Guarded (L5)
+ */
+import { getUserTimezone } from '@/lib/utils/timezone';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
-// =========================
-// SUPABASE CLIENT (FRONTEND)
-// =========================
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY,
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  }
-)
-
-// =========================
-// BACKEND API BASE
-// =========================
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
-
-// =========================
-// AUTH – TEK KAYNAK
-// =========================
-
-async function getAccessToken(): Promise<string | null> {
-  const { data, error } = await supabase.auth.getSession()
-
-  if (error) {
-    console.error('Supabase session error:', error.message)
-    return null
-  }
-
-  return data.session?.access_token ?? null
+interface RequestOptions extends RequestInit {
+  headers?: Record<string, string>;
 }
-
-// =========================
-// GENERIC API REQUEST
-// =========================
 
 export async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestOptions = {}
 ): Promise<T> {
-  const token = await getAccessToken()
+  const supabase = getSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const token = session?.access_token;
+
+  // ⚠️ Session henüz hazır değil
+  if (!token) {
+    throw {
+      code: 'SESSION_NOT_READY',
+      silent: true,
+    };
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-  }
+    'X-User-Timezone': getUserTimezone(),
+    Authorization: `Bearer ${token}`,
+    ...options.headers,
+  };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
-  })
+  });
 
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`API ${response.status}: ${text}`)
+    let errorBody: any = {};
+    try {
+      errorBody = await response.json();
+    } catch {}
+
+    if (response.status === 401) {
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    }
+
+    throw {
+      status: response.status,
+      body: errorBody,
+    };
   }
 
-  return response.json() as Promise<T>
+  return response.json();
 }
 
-// =========================
-// DOMAIN-SPECIFIC HELPERS
-// =========================
 
 export const api = {
-  // Subjects
-  getSubjects: () =>
-    apiRequest<any[]>('/api/v1/subjects'),
-
-  // Topics
-  getTopics: (subjectId: string) =>
-    apiRequest<any[]>(`/api/v1/topics/${subjectId}`),
-
-  // Student Dashboard
-  getStudentDashboard: () =>
-    apiRequest<any>('/api/v1/student/dashboard'),
-
-  // Feature flags / health
-  getHealthFlags: () =>
-    apiRequest<any>('/api/v1/flags/health-status'),
-}
+  get: <T>(endpoint: string) => apiRequest<T>(endpoint, { method: 'GET' }),
+  post: <T>(endpoint: string, body?: any) =>
+    apiRequest<T>(endpoint, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  put: <T>(endpoint: string, body?: any) =>
+    apiRequest<T>(endpoint, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  delete: <T>(endpoint: string) => apiRequest<T>(endpoint, { method: 'DELETE' }),
+};

@@ -66,9 +66,13 @@ export default function StudentDashboard() {
         setTasksSummary(data.summary);
         setTasksList(data.tasks || []);
       }
-    } catch (err) {
-      console.error('Tasks summary fetch error:', err);
-    }
+      } catch (err: any) {
+        if (err?.code === 'SESSION_NOT_READY' || err?.status === 401) {
+          return; // 🔕 sessiz
+        }
+        console.error('Tasks summary fetch error:', err);
+      }
+
   }, []);
 
   useEffect(() => {
@@ -90,9 +94,13 @@ export default function StudentDashboard() {
         if (data.success) {
           setWeeklySubjects(data);
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.code === 'SESSION_NOT_READY' || err?.status === 401) {
+          return; // 🔕 sessiz
+        }
         console.error('Weekly subjects fetch error:', err);
       }
+
     };
     fetchWeeklySubjects();
   }, []);
@@ -108,7 +116,15 @@ export default function StudentDashboard() {
     );
   }
 
-  if (error) {
+  // 🔒 L5 UI RULE:
+  // SESSION_NOT_READY / UNAUTHORIZED dashboard'u kırmaz
+  const isSilentSessionError =
+    typeof error === 'string' &&
+    (error.includes('SESSION_NOT_READY') ||
+    error.includes('Unauthorized') ||
+    error.includes('UNAUTHORIZED'))
+
+  if (error && !isSilentSessionError) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-200 via-purple-100 to-blue-200 flex items-center justify-center">
         <div className="bg-white rounded-3xl p-8 max-w-md text-center shadow-2xl">
@@ -125,6 +141,7 @@ export default function StudentDashboard() {
       </div>
     );
   }
+
 
   if (!dashboardData) {
     return null;

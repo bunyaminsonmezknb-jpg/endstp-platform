@@ -72,3 +72,9 @@ export function withFeatureFlag<P extends object>(
     return <Component {...props} />;
   };
 }
+export function resetFeatureFlagsForDev() {
+  if (process.env.NODE_ENV === 'development') {
+    cachedFlags = {};
+    flagsPromise = null;
+  }
+}

@@ -74,15 +74,21 @@ export default function ProgressPage() {
           monthly: monthly?.data ?? null,
         },
       });
-    } catch (err: any) {
-      if (err?.status === 401) {
-        router.push('/login');
-        return;
+      } 
+      catch (err: any) {
+        if (err?.code === 'SESSION_NOT_READY') return;
+
+        if (err?.status === 401) {
+          router.push('/login');
+          return;
+        }
+
+        console.error('Progress data load error:', err);
+        setError('Veriler yüklenirken hata oluştu');
       }
 
-      console.error('Progress data load error:', err);
-      setError('Veriler yüklenirken hata oluştu');
-    } finally {
+
+    finally {
       setIsLoading(false);
     }
   }
@@ -126,6 +132,7 @@ export default function ProgressPage() {
             </button>
           </div>
         )}
+
 
         {/* PROJECTION & GOAL */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

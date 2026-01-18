@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api/client';
+import { handleClientError } from '@/lib/errors/handleClientError';
 
 interface ApiTopic {
   id: string;
@@ -102,12 +103,10 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
 
   fetchDashboardData: async (studentId?: string) => {
     set({ isLoading: true, error: null });
-    
+
     try {
-      // Yeni endpoint: /student/dashboard (token'dan ID alır)
       const response = await api.get<any>('/student/dashboard');
-      
-      // Transform API response
+
       const dashboardData: DashboardData = {
         studentName: response.student_name || 'Öğrenci',
         streak: response.streak || 0,
@@ -122,7 +121,7 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
           name: topic.name,
           subject: topic.subject,
           rememberingRate: topic.rememberingRate,
-          status: (topic.status || "unknown").toLowerCase() as any,
+          status: (topic.status || 'unknown').toLowerCase() as any,
           statusText: topic.statusText,
           emoji: topic.emoji,
           daysSinceLastTest: topic.days_since_last_test,
@@ -130,34 +129,38 @@ export const useStudentDashboard = create<StudentDashboardStore>((set) => ({
           latestNet: topic.latest_net,
           latestSuccessRate: topic.latest_success_rate,
           nextReview: topic.next_review
-  ? {
-      daysRemaining: topic.next_review.days_remaining,
-      urgency: topic.next_review.urgency
-    }
-  : undefined,
+            ? {
+                daysRemaining: topic.next_review.days_remaining,
+                urgency: topic.next_review.urgency,
+              }
+            : undefined,
           achievementBadge: topic.achievementBadge,
         })),
-
-          // ✅ KRİTİK
-      topic_counts: response.topic_counts || {
-        healthy: 0,
-        warning: 0,
-        frozen: 0,
-        critical: 0,
-      },
-
+        topic_counts: response.topic_counts || {
+          healthy: 0,
+          warning: 0,
+          frozen: 0,
+          critical: 0,
+        },
         criticalAlert: response.critical_alert,
         projection: response.projection,
       };
 
       set({ dashboardData, isLoading: false });
     } catch (err: any) {
-      set({ 
-        error: err.message || 'Dashboard yüklenemedi', 
-        isLoading: false 
+      handleClientError(err, {
+        onShowError: () => {
+          set({
+            error: err?.message || 'Dashboard yüklenemedi',
+            isLoading: false,
+          });
+        },
       });
+
+      set({ isLoading: false });
     }
   },
+
 
   setDashboardData: (data: DashboardData) => set({ dashboardData: data }),
 

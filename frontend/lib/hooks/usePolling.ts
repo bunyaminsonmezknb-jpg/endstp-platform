@@ -8,6 +8,13 @@ interface UsePollingOptions {
   pauseOnHidden?: boolean;
 }
 
+/**
+ * L5-safe polling hook
+ * - Prevents overlapping calls
+ * - Silently ignores 401 / silent errors
+ * - Pauses on tab hidden
+ * - Does NOT cause UI error spam
+ */
 export function usePolling({
   callback,
   interval,
@@ -17,9 +24,10 @@ export function usePolling({
 }: UsePollingOptions) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRunningRef = useRef(false);
+  const isStoppedRef = useRef(false);
   const callbackRef = useRef(callback);
 
-  // callback güncellendiğinde referansı yenile
+  // Keep callback ref fresh
   useEffect(() => {
     callbackRef.current = callback;
   }, [callback]);
@@ -29,25 +37,33 @@ export function usePolling({
     if (!enabled) return;
 
     const run = async () => {
-      if (isRunningRef.current) return;
+      if (isRunningRef.current || isStoppedRef.current) return;
+
       isRunningRef.current = true;
       try {
         await callbackRef.current();
-      } finally {
+      } catch (err: any) {
+        // 🔕 Silent / expected errors
+        if (err?.silent || err?.status === 401) {
+          // Stop polling until component re-mounts or enabled toggles
+          isStoppedRef.current = true;
+          return;
+        }
+
+        // ❗ Real error – log but don't crash UI
+        console.error('🔁 Polling error:', err);
+      }
+      finally {
         isRunningRef.current = false;
       }
     };
 
-    if (immediate) {
-      run();
-    }
-
-    const startInterval = () => {
-      if (intervalRef.current) return;
+    const start = () => {
+      if (intervalRef.current || isStoppedRef.current) return;
       intervalRef.current = setInterval(run, interval);
     };
 
-    const stopInterval = () => {
+    const stop = () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -56,24 +72,28 @@ export function usePolling({
 
     const handleVisibilityChange = () => {
       if (!pauseOnHidden) return;
-
-      if (document.hidden) {
-        stopInterval();
-      } else {
-        startInterval();
-      }
+      if (document.hidden) stop();
+      else start();
     };
 
-    startInterval();
+    if (immediate) {
+      run();
+    }
+
+    start();
 
     if (pauseOnHidden) {
       document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
     return () => {
-      stopInterval();
+      stop();
+      isStoppedRef.current = false;
       if (pauseOnHidden) {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        document.removeEventListener(
+          'visibilitychange',
+          handleVisibilityChange
+        );
       }
     };
   }, [enabled, interval, immediate, pauseOnHidden]);
