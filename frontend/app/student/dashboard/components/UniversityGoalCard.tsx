@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/lib/api/client';
 import FeedbackButtons from './FeedbackButtons';
+import { useAuthReady } from '@/lib/hooks/useAuthReady';
 
-// Arayüz Tanımlamaları
 interface SubjectGoal {
   name: string;
   current: number;
@@ -48,6 +49,8 @@ interface GoalData {
 }
 
 export default function UniversityGoalCard() {
+  const { ready } = useAuthReady();
+
   const [goalData, setGoalData] = useState<GoalData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,33 +58,91 @@ export default function UniversityGoalCard() {
   const [showTYTDetails, setShowTYTDetails] = useState(false);
   const [showAYTDetails, setShowAYTDetails] = useState(false);
 
-  useEffect(() => {
-    fetchGoalData();
+  const retryRef = useRef(0);
+  const timerRef = useRef<any>(null);
+  const inFlightRef = useRef(false);
+  const requestIdRef = useRef(0);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
   }, []);
 
-  const fetchGoalData = async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    return () => {
+      clearTimer();
+      requestIdRef.current += 1;
+      inFlightRef.current = false;
+    };
+  }, [clearTimer]);
+
+  const fetchGoalData = useCallback(async () => {
+    if (!ready) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    clearTimer();
+    const myRequestId = ++requestIdRef.current;
+
+    if (retryRef.current === 0) setIsLoading(true);
     setError(null);
 
-    try {
-      
+    let scheduledRetry = false;
 
-      const response = await api.post('/student/goal') as any;
-      if (response.status === 'no_data') {
+    try {
+      const response = (await api.get('/student/goal')) as any;
+
+      if (myRequestId !== requestIdRef.current) return;
+
+      retryRef.current = 0;
+
+      if (response?.status === 'no_data') {
         setGoalData(null);
-        } else {
-          setGoalData(response);
-        }
+      } else {
+        setGoalData(response as GoalData);
+      }
     } catch (err: any) {
-      setError(err.message || 'Hedef bilgisi yüklenemedi');
+      if (myRequestId !== requestIdRef.current) return;
+
+      if (err?.code === 'SESSION_NOT_READY') {
+        const next = retryRef.current + 1;
+        retryRef.current = next;
+
+        if (next <= 10) {
+          const delay = Math.min(4000, 250 * Math.pow(2, next - 1));
+          scheduledRetry = true;
+
+          timerRef.current = setTimeout(() => {
+            inFlightRef.current = false;
+            fetchGoalData();
+          }, delay);
+
+          return;
+        }
+
+        setError('Oturum hazırlanamadı. Lütfen sayfayı yenileyin.');
+        return;
+      }
+
+      setError(err?.message || 'Hedef bilgisi yüklenemedi');
     } finally {
-      setIsLoading(false);
+      if (!scheduledRetry) {
+        if (myRequestId === requestIdRef.current) setIsLoading(false);
+        inFlightRef.current = false;
+      }
     }
-  };
+  }, [ready, clearTimer]);
+
+  useEffect(() => {
+    if (!ready) return;
+    fetchGoalData();
+  }, [ready, fetchGoalData]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'achieved': return '✅';  // Yeşil tick
+      case 'achieved': return '✅';
       case 'close': return '🟡';
       case 'inProgress': return '🟠';
       case 'distant': return '🔴';
@@ -121,7 +182,7 @@ export default function UniversityGoalCard() {
     return '📈';
   };
 
-  if (isLoading) {
+  if (!ready || isLoading) {
     return (
       <div className="bg-purple-100 rounded-2xl p-8 shadow-lg min-w-80">
         <div className="text-center">
@@ -140,7 +201,10 @@ export default function UniversityGoalCard() {
           <div className="text-red-700 font-bold mb-2">Hedef Bilgisi Hatası</div>
           <div className="text-sm text-red-600 mb-4">{error}</div>
           <button
-            onClick={fetchGoalData}
+            onClick={() => {
+              retryRef.current = 0;
+              fetchGoalData();
+            }}
             className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
           >
             Tekrar Dene
@@ -155,11 +219,9 @@ export default function UniversityGoalCard() {
       <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-8 text-center min-w-80">
         <div className="text-6xl mb-4">🎯</div>
         <h3 className="text-xl font-bold text-gray-800 mb-2">Henüz Hedef Verisi Yok</h3>
-        <p className="text-gray-600 mb-4">
-          Hedef hesaplayabilmek için önce test sonuçları girmelisiniz.
-        </p>
+        <p className="text-gray-600 mb-4">Hedef hesaplayabilmek için önce test sonuçları girmelisiniz.</p>
         <a
-          href="/test-entry"
+          href="/student/test-entry"
           className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700"
         >
           Test Ekle
@@ -170,27 +232,28 @@ export default function UniversityGoalCard() {
 
   return (
     <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-2xl p-6 shadow-xl min-w-80">
-      {/* ANA BAŞLIK */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="text-5xl">🏆</div>
           <div>
             <div className="text-sm opacity-90 font-medium">Nihai Hedef Yolculuğun</div>
-            <div className="text-2xl font-bold leading-tight">
-              Hedefine Doğru İlerliyorsun
-            </div>
+            <div className="text-2xl font-bold leading-tight">Hedefine Doğru İlerliyorsun</div>
             <div className="text-xs opacity-75 mt-1">
               Genel İlerleme: <span className="font-bold">%{goalData.overall_progress}</span>
             </div>
           </div>
         </div>
 
-        {/* İlerleme Halkası */}
         <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
           <svg viewBox="0 0 100 100" className="transform -rotate-90">
             <circle cx="50" cy="50" r="45" stroke="rgba(255,255,255,0.2)" strokeWidth="8" fill="none" />
             <circle
-              cx="50" cy="50" r="45" stroke="white" strokeWidth="8" fill="none"
+              cx="50"
+              cy="50"
+              r="45"
+              stroke="white"
+              strokeWidth="8"
+              fill="none"
               strokeDasharray="282.6"
               strokeDashoffset={282.6 * (1 - goalData.overall_progress / 100)}
               strokeLinecap="round"
@@ -203,25 +266,22 @@ export default function UniversityGoalCard() {
         </div>
       </div>
 
-      {/* ANA İÇERİK */}
       <div className={`mt-6 pt-6 ${!showLadder ? 'border-t border-white/20' : ''}`}>
-        
-        {/* MERDİVEN GİZLİ - AKTİF HEDEF */}
         {!showLadder && (
           <div className="space-y-4">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border-2 border-white/30">
-              
-              {/* Başlık */}
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-2xl">{getStatusEmoji(goalData.overall_progress)}</span>
                 <div className="flex-1">
-                  <div className="text-xs opacity-90 font-medium">Aktif Hedef ({goalData.active_goal.level}. Tercih)</div>
+                  <div className="text-xs opacity-90 font-medium">
+                    Aktif Hedef ({goalData.active_goal.level}. Tercih)
+                  </div>
                   <div className="text-lg font-bold leading-tight">{goalData.active_goal.university}</div>
                   <div className="text-xs opacity-75">{goalData.active_goal.department}</div>
                 </div>
               </div>
 
-              {/* TYT BÖLÜMÜ */}
+              {/* TYT */}
               <div className="bg-white/10 rounded-lg p-3 mb-3">
                 <div className="flex justify-between items-center mb-2">
                   <div className="text-sm font-bold">📘 TYT</div>
@@ -241,19 +301,18 @@ export default function UniversityGoalCard() {
                   <span className="font-bold">%{goalData.tyt.progress_percent}</span>
                   <span>{goalData.tyt.target_net}</span>
                 </div>
-                
-                {/* TYT Detaylar */}
+
                 <button
                   onClick={() => setShowTYTDetails(!showTYTDetails)}
                   className="mt-2 text-xs opacity-75 hover:opacity-100 transition-opacity underline w-full text-center"
                 >
                   {showTYTDetails ? '▲ Ders detaylarını gizle' : '▼ Ders detaylarını göster'}
                 </button>
-                
+
                 {showTYTDetails && (
                   <div className="mt-3 pt-3 border-t border-white/20 space-y-2">
                     {goalData.tyt.subjects.map((subject, index) => {
-                      const subjectProgress = (subject.current / subject.target) * 100;
+                      const subjectProgress = subject.target > 0 ? (subject.current / subject.target) * 100 : 0;
                       return (
                         <div key={index} className="bg-white/5 rounded-lg p-2">
                           <div className="flex justify-between text-xs mb-1">
@@ -261,10 +320,7 @@ export default function UniversityGoalCard() {
                             <span className="opacity-75">{subject.current} / {subject.target} net</span>
                           </div>
                           <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-white/60 transition-all"
-                              style={{ width: `${subjectProgress}%` }}
-                            />
+                            <div className="h-full bg-white/60 transition-all" style={{ width: `${subjectProgress}%` }} />
                           </div>
                         </div>
                       );
@@ -273,7 +329,7 @@ export default function UniversityGoalCard() {
                 )}
               </div>
 
-              {/* AYT BÖLÜMÜ */}
+              {/* AYT */}
               <div className="bg-white/10 rounded-lg p-3 mb-3">
                 <div className="flex justify-between items-center mb-2">
                   <div className="text-sm font-bold">📗 AYT</div>
@@ -293,19 +349,18 @@ export default function UniversityGoalCard() {
                   <span className="font-bold">%{goalData.ayt.progress_percent}</span>
                   <span>{goalData.ayt.target_net}</span>
                 </div>
-                
-                {/* AYT Detaylar */}
+
                 <button
                   onClick={() => setShowAYTDetails(!showAYTDetails)}
                   className="mt-2 text-xs opacity-75 hover:opacity-100 transition-opacity underline w-full text-center"
                 >
                   {showAYTDetails ? '▲ Ders detaylarını gizle' : '▼ Ders detaylarını göster'}
                 </button>
-                
+
                 {showAYTDetails && (
                   <div className="mt-3 pt-3 border-t border-white/20 space-y-2">
                     {goalData.ayt.subjects.map((subject, index) => {
-                      const subjectProgress = (subject.current / subject.target) * 100;
+                      const subjectProgress = subject.target > 0 ? (subject.current / subject.target) * 100 : 0;
                       return (
                         <div key={index} className="bg-white/5 rounded-lg p-2">
                           <div className="flex justify-between text-xs mb-1">
@@ -313,10 +368,7 @@ export default function UniversityGoalCard() {
                             <span className="opacity-75">{subject.current} / {subject.target} net</span>
                           </div>
                           <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-white/60 transition-all"
-                              style={{ width: `${subjectProgress}%` }}
-                            />
+                            <div className="h-full bg-white/60 transition-all" style={{ width: `${subjectProgress}%` }} />
                           </div>
                         </div>
                       );
@@ -324,10 +376,9 @@ export default function UniversityGoalCard() {
                   </div>
                 )}
               </div>
-              
-              {/* DURUM MESAJI */}
+
+              {/* DURUM */}
               <div className="space-y-2 text-sm">
-                {/* Sınav Tarihi Geçtiyse */}
                 {goalData.days_remaining <= 0 && (
                   <div className="flex items-center gap-2 bg-red-500/20 rounded-lg p-2">
                     <span className="text-red-200">⚠️</span>
@@ -336,11 +387,9 @@ export default function UniversityGoalCard() {
                     </span>
                   </div>
                 )}
-                
-                {/* Sınav Henüz Gelmemişse */}
+
                 {goalData.days_remaining > 0 && (
                   <>
-                    {/* TYT Mesajı */}
                     {goalData.tyt.remaining_net > 0 ? (
                       <div className="flex items-center gap-2">
                         <span className="text-blue-200">📘</span>
@@ -357,8 +406,7 @@ export default function UniversityGoalCard() {
                         <span className="text-green-200 font-bold">TYT hedefini başardın!</span>
                       </div>
                     )}
-                    
-                    {/* AYT Mesajı */}
+
                     {goalData.ayt.remaining_net > 0 ? (
                       <div className="flex items-center gap-2">
                         <span className="text-orange-200">📗</span>
@@ -375,8 +423,7 @@ export default function UniversityGoalCard() {
                         <span className="text-green-200 font-bold">AYT hedefini başardın!</span>
                       </div>
                     )}
-                    
-                    {/* Geri Sayım */}
+
                     <div className="flex items-center gap-2">
                       <span className="text-yellow-200">⏰</span>
                       <span>Sınava <strong>{goalData.days_remaining} gün</strong> kaldı!</span>
@@ -388,15 +435,14 @@ export default function UniversityGoalCard() {
           </div>
         )}
 
-        {/* MERDİVEN AÇIK */}
         {showLadder && (
           <div className="space-y-3 animate-fade-in">
             {[...goalData.ladder].reverse().map((goal) => (
               <div
                 key={goal.priority}
                 className={`${
-                  goal.status === 'achieved' 
-                    ? 'bg-green-500/30 border-2 border-green-400' 
+                  goal.status === 'achieved'
+                    ? 'bg-green-500/30 border-2 border-green-400'
                     : 'bg-white/10'
                 } backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-all cursor-pointer`}
               >
@@ -430,14 +476,13 @@ export default function UniversityGoalCard() {
             ))}
 
             <div className="bg-yellow-500/20 rounded-xl p-3 text-xs">
-              <span className="font-bold">💡 Koçluk İpucu:</span> En üst hedefine odaklan, 
+              <span className="font-bold">💡 Koçluk İpucu:</span> En üst hedefine odaklan,
               diğerleri doğal olarak gelecek!
             </div>
           </div>
         )}
       </div>
 
-      {/* MERDİVEN AÇMA/KAPAMA */}
       <button
         onClick={() => {
           setShowLadder(!showLadder);
@@ -451,16 +496,15 @@ export default function UniversityGoalCard() {
         {showLadder ? '▲ Merdiveni Gizle' : '▼ Merdiveni Göster'}
       </button>
 
-      {/* FEEDBACK BUTONU */}
       <div className="mt-4 pt-4 border-t border-white/20 flex justify-center">
         <FeedbackButtons
           componentType="goal_card"
           variant="like-dislike"
           size="sm"
-          metadata={{ 
+          metadata={{
             overall_progress: goalData.overall_progress,
             tyt_progress: goalData.tyt.progress_percent,
-            ayt_progress: goalData.ayt.progress_percent
+            ayt_progress: goalData.ayt.progress_percent,
           }}
         />
       </div>

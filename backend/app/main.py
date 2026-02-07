@@ -2,43 +2,42 @@
 End.STP Backend API
 FastAPI ana uygulama - 4 Motor Sistemi
 """
-# ============================================
-# CRITICAL: Load .env FIRST, before ANY imports
-# ============================================
-from pathlib import Path
-from dotenv import load_dotenv
-import os
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# ============================================
+# 0) ENV LOAD (ALTIN STANDART - TEK KEZ)
+# ============================================
+
+from pathlib import Path
+import os
+import time
+
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
 ENV_PATH = BASE_DIR / ".env"
 
-load_dotenv(dotenv_path=ENV_PATH, override=True)
+loaded = load_dotenv(dotenv_path=ENV_PATH, override=True)
+print(f"✅ .env loaded={loaded} path={ENV_PATH}")
 
-# Fail-fast if env not loaded
-assert os.getenv("SUPABASE_URL"), "❌ SUPABASE_URL not loaded!"
-assert os.getenv("SUPABASE_SERVICE_ROLE_KEY"), "❌ SERVICE_ROLE_KEY not loaded!"
-
-print("✅ Environment variables loaded successfully")
+# Fail-fast (prod’da assert yerine daha kontrollü olabilir; şimdilik OK)
+assert os.getenv("SUPABASE_URL"), "❌ SUPABASE_URL not loaded"
+assert os.getenv("SUPABASE_SERVICE_ROLE_KEY"), "❌ SUPABASE_SERVICE_ROLE_KEY not loaded"
+assert os.getenv("SUPABASE_JWT_SECRET"), "❌ SUPABASE_JWT_SECRET not loaded"
 
 # ============================================
-# Now safe to import app modules
+# 1) NOW SAFE TO IMPORT APP MODULES
 # ============================================
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.v1.api import api_router
 from app.api.v1.student_analysis import router as student_router
-import time
-from contextlib import asynccontextmanager
-from app.api.v1.endpoints import (
-    motors, 
-    motor_health, 
-    motor_test,
-    segmentation  # YENİ!
-)
+
+from app.api.v1.endpoints import motors, motor_health, motor_test, segmentation
 
 # ============================================
-# 1. APP TANIMI (ÖNCELİKLE BU!)
+# 2) APP TANIMI
 # ============================================
 
 app = FastAPI(
@@ -47,121 +46,109 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
 )
 
 # ============================================
-# 2. CORS MIDDLEWARE
+# 3) CORS MIDDLEWARE
 # ============================================
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,
 )
 
 # ============================================
-# 3. MONITORING MIDDLEWARE
+# 4) MONITORING MIDDLEWARE
 # ============================================
 
-async def report_slow_endpoint(path: str, response_time_ms: int):
-    """Report slow response time to feature flags"""
+async def _report_slow_or_error(flag_key: str, payload: dict):
     try:
-        flag_key = None
-        if "/student/tasks/today" in path:
-            flag_key = "daily_tasks"
-        elif "/student/todays-tasks" in path:
-            flag_key = "at_risk_display"
-        elif "/test-entry" in path:
-            flag_key = "test_entry"
-        
-        if flag_key:
-            from app.db.session import get_supabase_admin
-            supabase = get_supabase_admin()
-            
-            supabase.table("feature_flags").update({
-                "avg_response_time_ms": response_time_ms,
-                "last_success_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
-            }).eq("flag_key", flag_key).execute()
-            
-            print(f"⚠️ SLOW: {flag_key} took {response_time_ms}ms")
+        from app.db.session import get_supabase_admin
+        supabase = get_supabase_admin()
+        supabase.table("feature_flags").update(payload).eq("flag_key", flag_key).execute()
     except Exception as e:
-        print(f"Monitoring error: {e}")
+        print(f"Monitoring report failed: {e}")
 
-async def report_endpoint_error(path: str, error: str, response_time_ms: int):
-    """Report error to feature flags"""
-    try:
-        flag_key = None
-        if "/student/tasks/today" in path:
-            flag_key = "daily_tasks"
-        elif "/student/todays-tasks" in path:
-            flag_key = "at_risk_display"
-        elif "/test-entry" in path:
-            flag_key = "test_entry"
-        
-        if flag_key:
-            from app.db.session import get_supabase_admin
-            supabase = get_supabase_admin()
-            
-            result = supabase.table("feature_flags").select("error_count, health_score").eq("flag_key", flag_key).execute()
-            if result.data:
-                current = result.data[0]
-                new_error_count = current["error_count"] + 1
-                new_health = max(0, current["health_score"] - 10)
-                
-                supabase.table("feature_flags").update({
-                    "error_count": new_error_count,
-                    "health_score": new_health,
-                    "last_error_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "last_error_message": str(error)[:500],
-                    "avg_response_time_ms": response_time_ms
-                }).eq("flag_key", flag_key).execute()
-                
-                print(f"🚨 ERROR: {flag_key} - {error}")
-    except Exception as e:
-        print(f"Error reporting failed: {e}")
+def _flag_from_path(path: str) -> str | None:
+    if "/student/tasks/today" in path:
+        return "daily_tasks"
+    if "/student/todays-tasks" in path:
+        return "at_risk_display"
+    if "/test-entry" in path:
+        return "test_entry"
+    return None
 
 @app.middleware("http")
 async def monitor_response_time(request, call_next):
     start_time = time.time()
-    
     try:
         response = await call_next(request)
-        process_time = int((time.time() - start_time) * 1000)  # ms
+        process_time = int((time.time() - start_time) * 1000)
         response.headers["X-Process-Time"] = str(process_time)
-        
-        # Report slow endpoints (background task)
-        if process_time > 1000:
-            await report_slow_endpoint(request.url.path, process_time)
-        
+
+        flag_key = _flag_from_path(request.url.path)
+        if flag_key and process_time > 1000:
+            await _report_slow_or_error(
+                flag_key,
+                {
+                    "avg_response_time_ms": process_time,
+                    "last_success_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+            print(f"⚠️ SLOW: {flag_key} took {process_time}ms")
+
         return response
-        
+
     except Exception as e:
         process_time = int((time.time() - start_time) * 1000)
-        await report_endpoint_error(request.url.path, str(e), process_time)
+        flag_key = _flag_from_path(request.url.path)
+        if flag_key:
+            # önce mevcut değerleri çekip güvenli artır
+            try:
+                from app.db.session import get_supabase_admin
+                supabase = get_supabase_admin()
+                r = supabase.table("feature_flags").select("error_count, health_score").eq("flag_key", flag_key).execute()
+                current = (r.data or [{}])[0]
+                new_error_count = int(current.get("error_count", 0)) + 1
+                new_health = max(0, int(current.get("health_score", 100)) - 10)
+
+                await _report_slow_or_error(
+                    flag_key,
+                    {
+                        "error_count": new_error_count,
+                        "health_score": new_health,
+                        "last_error_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "last_error_message": str(e)[:500],
+                        "avg_response_time_ms": process_time,
+                    },
+                )
+            except Exception as ee:
+                print(f"Error reporting failed: {ee}")
+
         raise
 
 # ============================================
-# 4. ROUTERS (SIRALAMA ÖNEMLİ!)
+# 5) ROUTERS
 # ============================================
 
-# Eski sistem routers
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(student_router)
 
 # Progress router (MODULAR)
 try:
     from app.api.v1.endpoints.progress import router as progress_router
-    app.include_router(
-        progress_router, 
-        prefix="/api/v1",
-        tags=["progress"]
-    )
+    app.include_router(progress_router, prefix="/api/v1", tags=["progress"])
     print("✅ Progress router loaded successfully")
 except ImportError as e:
     print(f"⚠️  Progress router not found: {e}")
@@ -170,40 +157,18 @@ except Exception as e:
 
 # Motor Routers
 try:
-    # Motor Health Endpoints
-    app.include_router(
-        motor_health.router,
-        prefix="/api/v1/motors",
-        tags=["motor-health"]
-    )
-    
-    # Motor Test Endpoints
-    app.include_router(
-        motor_test.router,
-        prefix="/api/v1/motors",
-        tags=["motors-test"]
-    )
-    
-    # Main Motors Endpoints
-    app.include_router(
-        motors.router,
-        prefix="/api/v1/motors",
-        tags=["motors"]
-    )
-    
+    app.include_router(motor_health.router, prefix="/api/v1/motors", tags=["motor-health"])
+    app.include_router(motor_test.router, prefix="/api/v1/motors", tags=["motors-test"])
+    app.include_router(motors.router, prefix="/api/v1/motors", tags=["motors"])
     print("✅ Motors router loaded successfully")
 except ImportError as e:
     print(f"⚠️  Motors router not found: {e}")
 except Exception as e:
     print(f"❌ Error loading motors router: {e}")
 
-# Segmentation Router (YENİ!)
+# Segmentation Router
 try:
-    app.include_router(
-        segmentation.router, 
-        prefix="/api/v1/segmentation", 
-        tags=["segmentation"]
-    )
+    app.include_router(segmentation.router, prefix="/api/v1/segmentation", tags=["segmentation"])
     print("✅ Segmentation router loaded successfully")
 except ImportError as e:
     print(f"⚠️  Segmentation router not found: {e}")
@@ -211,7 +176,7 @@ except Exception as e:
     print(f"❌ Error loading segmentation router: {e}")
 
 # ============================================
-# 5. ROOT ENDPOINTS
+# 6) ROOT ENDPOINTS
 # ============================================
 
 @app.get("/")
@@ -221,7 +186,7 @@ async def root():
         "version": "1.0.0",
         "docs": "/api/docs",
         "motors": ["BS-Model", "Difficulty", "Time", "Priority"],
-        "meta_motor": "Segmentation"
+        "meta_motor": "Segmentation",
     }
 
 @app.get("/health")

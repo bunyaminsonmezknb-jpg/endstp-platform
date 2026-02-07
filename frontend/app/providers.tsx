@@ -1,35 +1,38 @@
-'use client'
+// frontend/app/providers.tsx
+'use client';
 
-import { Toaster } from 'react-hot-toast'
+import { useEffect, useState } from 'react';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      {children}
-      <Toaster 
-        position="top-right"
-        toastOptions={{
-          duration: 5000,
-          style: {
-            background: '#fff',
-            color: '#363636',
-            fontSize: '14px',
-            fontWeight: '500',
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
-        }}
-      />
-    </>
-  )
+export default function Providers({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    // ⭐ Basit session check
+    async function init() {
+      try {
+        const supabase = getSupabaseClient();
+        await supabase.auth.getSession();
+        setReady(true);
+      } catch (e) {
+        console.error('Providers init failed:', e);
+        setReady(true); // Yine de render et
+      }
+    }
+
+    init();
+  }, []);
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-700">Yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }

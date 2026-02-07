@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Providers } from './providers';
+import Providers from './providers'; // ✅ DOĞRU - default import
 import FloatingFeatureMonitor from '@/components/FloatingFeatureMonitor';
 
 export const metadata: Metadata = {

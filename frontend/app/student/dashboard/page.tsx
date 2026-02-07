@@ -26,6 +26,8 @@ import { usePolling } from '@/lib/hooks/usePolling'
  */
 
 export default function StudentDashboard() {
+console.log('[DASHBOARD] render');
+  const [sessionReady, setSessionReady] = useState(false);
   const { dashboardData, isLoading, error, fetchDashboardData } = useStudentDashboard();
   const stableFetchDashboardData = useCallback(() => {
   fetchDashboardData();

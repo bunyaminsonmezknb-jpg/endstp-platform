@@ -1,44 +1,88 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+// frontend/middleware.ts
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function middleware(req: NextRequest) {
-  // ✅ SUPABASE COOKIE'LERİNİ KONTROL ET
-  // Supabase kendi cookie'lerini kullanır: sb-<project-ref>-auth-token
-  const cookies = req.cookies.getAll()
-  const hasSupabaseSession = cookies.some(cookie => 
-    cookie.name.startsWith('sb-') && cookie.name.includes('auth-token')
-  )
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
 
-  const protectedRoutes = ['/student', '/test-entry', '/admin', '/reports']
-  const isProtectedRoute = protectedRoutes.some(route =>
-    req.nextUrl.pathname.startsWith(route)
-  )
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value,
+            ...options,
+          });
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          });
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          });
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value: '',
+            ...options,
+          });
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          });
+          response.cookies.set({
+            name,
+            value: '',
+            ...options,
+          });
+        },
+      },
+    }
+  );
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const protectedRoutes = ['/student', '/test-entry', '/admin', '/reports'];
+  const isProtectedRoute = protectedRoutes.some((route) =>
+    request.nextUrl.pathname.startsWith(route)
+  );
 
   const isAuthPage =
-    req.nextUrl.pathname === '/login' ||
-    req.nextUrl.pathname === '/register'
+    request.nextUrl.pathname === '/login' ||
+    request.nextUrl.pathname === '/register';
 
-  console.log('🔍 Middleware:', {
-    path: req.nextUrl.pathname,
-    hasSession: hasSupabaseSession,
-    isProtected: isProtectedRoute,
-    isAuth: isAuthPage,
-    cookies: cookies.map(c => c.name)
-  })
-
-  // 🔒 Protected route + session yok → login
-  if (isProtectedRoute && !hasSupabaseSession) {
-    console.log('❌ No session, redirect to login')
-    return NextResponse.redirect(new URL('/login', req.url))
+  if (isProtectedRoute && !session) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = '/login';
+    redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
+    return NextResponse.redirect(redirectUrl);
   }
 
-  // 🔁 Login/Register + session var → dashboard
-  if (isAuthPage && hasSupabaseSession) {
-    console.log('✅ Has session, redirect to dashboard')
-    return NextResponse.redirect(new URL('/student/dashboard', req.url))
+  if (isAuthPage && session) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = '/student/dashboard';
+    return NextResponse.redirect(redirectUrl);
   }
 
-  return NextResponse.next()
+  return response;
 }
 
 export const config = {
@@ -50,4 +94,4 @@ export const config = {
     '/login',
     '/register',
   ],
-}
+};

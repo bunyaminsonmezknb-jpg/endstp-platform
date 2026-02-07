@@ -1,17 +1,20 @@
 """
 Authentication Endpoints (Supabase v2)
+- signup/signin: Supabase üzerinden session üretir
+- me: Backend tarafında Authorization Bearer token ile doğrulama (HS256)
 """
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
-from pydantic import BaseModel, EmailStr
+
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Header, Depends
+from pydantic import BaseModel, EmailStr
+
 from app.db.session import get_supabase
-from app.core.auth import get_current_user
+from app.core.auth_hs256 import get_current_user  # ✅ HS256 doğrulama
 
 router = APIRouter()
 
-# -----------------------------
-# MODELS
-# -----------------------------
+
 class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
@@ -25,43 +28,33 @@ class SignInRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
+    access_token: Optional[str]
     token_type: str = "bearer"
     user: dict
 
 
 class UserResponse(BaseModel):
     id: str
-    email: str
-    full_name: str
-    role: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    role: str = "authenticated"
 
 
-# -----------------------------
-# SIGNUP
-# -----------------------------
 @router.post("/signup", response_model=TokenResponse)
 async def signup(credentials: SignUpRequest):
-    """Kayıt ol"""
     supabase = get_supabase()
-
     try:
-        auth_response = supabase.auth.sign_up({
-            "email": credentials.email,
-            "password": credentials.password,
-            "options": {
-                "data": {
-                    "full_name": credentials.full_name,
-                    "role": credentials.role
-                }
+        auth_response = supabase.auth.sign_up(
+            {
+                "email": credentials.email,
+                "password": credentials.password,
+                "options": {"data": {"full_name": credentials.full_name, "role": credentials.role}},
             }
-        })
-
+        )
         if not auth_response.user:
             raise HTTPException(status_code=400, detail="Kayıt oluşturulamadı")
 
         session = auth_response.session
-
         return {
             "access_token": session.access_token if session else None,
             "token_type": "bearer",
@@ -69,93 +62,51 @@ async def signup(credentials: SignUpRequest):
                 "id": auth_response.user.id,
                 "email": credentials.email,
                 "full_name": credentials.full_name,
-                "role": credentials.role
-            }
+                "role": credentials.role,
+            },
         }
-
     except Exception as e:
         print("❌ signup error:", str(e))
         raise HTTPException(status_code=400, detail="Kayıt yapılamadı")
 
 
-# -----------------------------
-# SIGNIN
-# -----------------------------
 @router.post("/signin", response_model=TokenResponse)
 async def signin(credentials: SignInRequest):
-    """Giriş yap"""
     supabase = get_supabase()
-
     try:
-        auth_response = supabase.auth.sign_in_with_password({
-            "email": credentials.email,
-            "password": credentials.password
-        })
-
+        auth_response = supabase.auth.sign_in_with_password(
+            {"email": credentials.email, "password": credentials.password}
+        )
         if not auth_response.user:
             raise HTTPException(status_code=401, detail="Email veya şifre hatalı")
 
         session = auth_response.session
-
         return {
-            "access_token": session.access_token,
+            "access_token": session.access_token if session else None,
             "token_type": "bearer",
             "user": {
                 "id": auth_response.user.id,
                 "email": auth_response.user.email,
-                "full_name": auth_response.user.user_metadata.get("full_name", ""),
-                "role": auth_response.user.user_metadata.get("role", "student")
-            }
+                "full_name": (auth_response.user.user_metadata or {}).get("full_name", ""),
+                "role": (auth_response.user.user_metadata or {}).get("role", "student"),
+            },
         }
-
     except Exception as e:
         print("❌ signin error:", str(e))
         raise HTTPException(status_code=401, detail="Giriş yapılamadı")
 
 
-# -----------------------------
-# SIGNOUT
-# -----------------------------
 @router.post("/signout")
 async def signout(authorization: Optional[str] = Header(None)):
-    """Çıkış yap"""
-    if authorization:
-        supabase = get_supabase()
-        supabase.auth.sign_out()
+    # Backend signout idempotent: frontend signOut esas.
     return {"success": True, "message": "Signed out"}
 
 
-# -----------------------------
-# CURRENT USER
-# -----------------------------
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: dict = Depends(get_current_user)):
-    """Mevcut kullanıcı"""
-    return current_user
-
-
-@router.get("/me")
-async def get_current_user_info(
-    request: Request,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Get current user information
-    Returns user data + access token for API calls
-    """
-    # Extract access token from cookies
-    auth_cookie = request.cookies.get('sb-runbsfxytxmtzweuaufr-auth-token')
-    access_token = None
-    
-    if auth_cookie:
-        try:
-            import json
-            auth_data = json.loads(auth_cookie)
-            access_token = auth_data[0]  # [0] is access_token, [1] is refresh_token
-        except:
-            pass
-    
+async def me(current_user: dict = Depends(get_current_user)):
     return {
-        "user": current_user,
-        "access_token": access_token
+        "id": current_user.get("id") or current_user.get("sub"),
+        "email": current_user.get("email"),
+        "full_name": current_user.get("full_name"),
+        "role": current_user.get("role", "authenticated"),
     }

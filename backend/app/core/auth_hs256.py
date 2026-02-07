@@ -2,120 +2,141 @@
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
 # File: auth_hs256.py
-# Created: 2025-01-02
-# Phase: MVP (Phase 1)
-# Author: End.STP Team
+# Role: Supabase HS256 JWT verification for FastAPI (backend)
 #
-# 🌍 LOCALIZATION STATUS:
-#   [x] UTC datetime handling
-#   [ ] Multi-language support (Phase 2)
-#   [ ] Database uses _tr/_en columns
-#   [ ] API accepts Accept-Language header (Phase 2)
-#   [x] No hardcoded text
-#
-# 📋 HARDCODED ITEMS (Temporary - Mark with line numbers):
-#   - EXPECTED_AUDIENCE = "authenticated"
-#
-# 🚀 MIGRATION NOTES (Phase 2 Actions):
-#   - JWKS-based validation (RS256) when enabled
-#
-# 📚 RELATED DOCS:
-#   - docs/AUTH_SECURITY.md
+# Golden rules:
+# - No token value logging (ever)
+# - Only safe debug when AUTH_DEBUG=1
 # =============================================================================
 
-"""
-Supabase JWT Authentication (HS256)
-----------------------------------
-Fallback authentication when JWKS is unavailable.
+from __future__ import annotations
 
-Responsibilities:
-- Validate JWT via HS256 + SUPABASE_JWT_SECRET
-- Enforce issuer & audience
-- Return normalized user payload
-
-IMPORTANT:
-- This file is SECURITY-CRITICAL
-- Do NOT modify logic without explicit review
-"""
-
-from typing import Optional
 import os
+import time
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import Header, HTTPException
-from jose import jwt, JWTError
+from jose import JWTError, ExpiredSignatureError, jwt
 
 
-# =============================================================================
-# CONFIG
-# =============================================================================
-
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
-
-if not SUPABASE_URL:
-    raise RuntimeError("SUPABASE_URL not set")
-
-if not SUPABASE_JWT_SECRET:
-    raise RuntimeError("SUPABASE_JWT_SECRET not set")
-
-EXPECTED_ISSUER = f"{SUPABASE_URL}/auth/v1"
-EXPECTED_AUDIENCE = "authenticated"
+def _is_debug() -> bool:
+    return (os.getenv("AUTH_DEBUG") or "").strip() in ("1", "true", "TRUE", "yes", "YES")
 
 
-# =============================================================================
-# AUTH CORE
-# =============================================================================
+def _safe_print(*args: Any) -> None:
+    if _is_debug():
+        print(*args)
 
-def get_current_user(
-    authorization: Optional[str] = Header(None),
-):
+
+def _get_config() -> Tuple[str, str, str]:
     """
-    Validate Supabase JWT (HS256)
-
     Returns:
+      (secret, expected_issuer, expected_audience)
+    """
+    supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+    secret = (os.getenv("SUPABASE_JWT_SECRET") or "").strip()
+
+    if not supabase_url:
+        raise RuntimeError("SUPABASE_URL not set")
+    if not secret:
+        raise RuntimeError("SUPABASE_JWT_SECRET not set")
+
+    expected_issuer = f"{supabase_url}/auth/v1"
+    expected_audience = os.getenv("SUPABASE_JWT_AUD") or "authenticated"
+
+    # SAFE DEBUG
+    _safe_print(
+        "AUTH DEBUG config:",
         {
-            id: str,
-            sub: str,
-            email: Optional[str],
-            role: str
-        }
+            "supabase_url_present": bool(supabase_url),
+            "secret_len": len(secret) if secret else None,
+            "expected_issuer": expected_issuer,
+            "expected_audience": expected_audience,
+        },
+    )
+
+    return secret, expected_issuer, expected_audience
+
+
+def _decode_claims_unverified(token: str) -> Dict[str, Any]:
+    """
+    Unverified claims only for SAFE debug (iss/aud/exp/sub).
+    """
+    try:
+        claims = jwt.get_unverified_claims(token)
+        # SAFE subset
+        safe = {k: claims.get(k) for k in ("iss", "aud", "exp", "sub")}
+        _safe_print("AUTH DEBUG token_claims:", safe)
+        return claims
+    except Exception:
+        return {}
+
+
+def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+    """
+    FastAPI dependency:
+      Authorization: Bearer <access_token>
+    Returns normalized dict:
+      { id/sub, email, full_name, role }
     """
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization header required",
-        )
+        raise HTTPException(status_code=401, detail="Authorization header required")
 
-    token = authorization.split(" ", 1)[1].strip()
+    token = authorization.replace("Bearer ", "", 1).strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Authorization header required")
+
+    secret, expected_issuer, expected_audience = _get_config()
+
+    # SAFE debug: show only subset of claims (unverified)
+    _decode_claims_unverified(token)
 
     try:
         payload = jwt.decode(
             token,
-            SUPABASE_JWT_SECRET,
+            secret,
             algorithms=["HS256"],
-            audience=EXPECTED_AUDIENCE,
-            issuer=EXPECTED_ISSUER,
+            issuer=expected_issuer,
+            audience=expected_audience,
+            options={
+                "verify_signature": True,
+                "verify_aud": True,
+                "verify_iss": True,
+                "verify_exp": True,
+            },
         )
-
-        return {
-            "id": payload["sub"],
-            "sub": payload["sub"],
-            "email": payload.get("email"),
-            "role": payload.get("role", "authenticated"),
-        }
-
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
     except JWTError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token",
-        )
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Supabase access token standard fields
+    user_id = payload.get("sub") or payload.get("user_id") or payload.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user_metadata = payload.get("user_metadata") or {}
+    app_metadata = payload.get("app_metadata") or {}
+
+    email = payload.get("email") or user_metadata.get("email")
+    full_name = user_metadata.get("full_name")
+    role = user_metadata.get("role") or app_metadata.get("role") or payload.get("role") or "authenticated"
+
+    return {
+        "id": user_id,
+        "sub": user_id,
+        "email": email,
+        "full_name": full_name,
+        "role": role,
+        "iat": payload.get("iat"),
+        "exp": payload.get("exp"),
+    }
 
 
-def get_current_active_user(
-    authorization: Optional[str] = Header(None),
-):
+def get_current_active_user(current_user: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Alias for get_current_user
-    (reserved for future active/disabled checks)
+    Placeholder for future: blocked/disabled checks etc.
     """
-    return get_current_user(authorization)
+    return current_user

@@ -55,10 +55,10 @@ export default function TestEntryClient() {
   const successRate = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0;
 
   // ✅ Test süresi için NaN-safe ve null-aware değer
-const durationMinutes =
-  testDuration && !isNaN(parseInt(testDuration))
-    ? parseInt(testDuration)
-    : null;
+  const durationMinutes =
+    testDuration && !isNaN(parseInt(testDuration))
+      ? parseInt(testDuration)
+      : null;
 
   // ✅ TOPLAM SORU KONTROLÜ (EditTestModal gibi)
   const isValidTotal = () => totalQuestions === 12;
@@ -76,7 +76,6 @@ const durationMinutes =
     return localISOTime;
   };
 
-
   // LocalStorage'dan son seçimleri yükle
   useEffect(() => {
     const lastSubject = localStorage.getItem('last_subject_id');
@@ -86,25 +85,39 @@ const durationMinutes =
     if (lastTopic) setSelectedTopic(lastTopic);
   }, []);
 
-  // Subjects yükle (ESKİ DAVRANIŞ + api client)
+  // Subjects yükle
   useEffect(() => {
+    let cancelled = false;
+
     const fetchSubjects = async () => {
       try {
+        setLoadingSubjects(true);
+
         const response = (await api.get('/subjects')) as any;
-        setSubjects(response.data || response);
-      } catch (err) {
+        if (cancelled) return;
+
+        setSubjects(response?.data || response);
+      } catch (err: any) {
+        // ✅ SESSION_NOT_READY gelirse sessizce çık (UI kırma)
+        if (err?.code === 'SESSION_NOT_READY' && err?.silent) return;
+
         console.error('Subjects fetch error:', err);
         setError('Dersler yüklenemedi');
       } finally {
-        setLoadingSubjects(false);
+        if (!cancelled) setLoadingSubjects(false);
       }
     };
 
     fetchSubjects();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // ✅ Pre-fill from query params (subjects yüklendikten sonra) — ESKİ ÖZELLİK AYNI
+  // ✅ Pre-fill from query params (subjects yüklendikten sonra)
   useEffect(() => {
+    let cancelled = false;
+
     const subjectId = searchParams.get('subject_id');
     const topicId = searchParams.get('topic_id');
 
@@ -114,39 +127,50 @@ const durationMinutes =
     // Subject seç
     setSelectedSubject(subjectId);
 
-    // Topics yükle ve topic seç
     const loadTopics = async () => {
       try {
         setLoadingTopics(true);
 
         const response = (await api.get(`/subjects/${subjectId}/topics`)) as any;
-        const topicsData = response.data || response;
+        if (cancelled) return;
+
+        const topicsData = response?.data || response;
         setTopics(topicsData);
 
         // Topic seç + scroll
         setTimeout(() => {
+          if (cancelled) return;
           setSelectedTopic(topicId);
 
           setTimeout(() => {
+            if (cancelled) return;
             document.getElementById('test-form')?.scrollIntoView({
               behavior: 'smooth',
               block: 'start',
             });
           }, 300);
         }, 100);
-      } catch (e) {
+      } catch (e: any) {
+        if (e?.code === 'SESSION_NOT_READY' && e?.silent) return;
+
         console.error('Topics fetch error:', e);
         setError('Konular yüklenemedi');
       } finally {
-        setLoadingTopics(false);
+        if (!cancelled) setLoadingTopics(false);
       }
     };
 
     loadTopics();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, subjects]);
 
-  // Subject değişince topics yükle — ESKİ ÖZELLİK AYNI
+  // Subject değişince topics yükle
   useEffect(() => {
+    let cancelled = false;
+
     if (!selectedSubject) {
       setTopics([]);
       return;
@@ -158,19 +182,27 @@ const durationMinutes =
       setLoadingTopics(true);
       try {
         const response = (await api.get(`/subjects/${selectedSubject}/topics`)) as any;
-        setTopics(response.data || response);
-      } catch (err) {
+        if (cancelled) return;
+
+        setTopics(response?.data || response);
+      } catch (err: any) {
+        if (err?.code === 'SESSION_NOT_READY' && err?.silent) return;
+
         console.error('Topics fetch error:', err);
         setError('Konular yüklenemedi');
       } finally {
-        setLoadingTopics(false);
+        if (!cancelled) setLoadingTopics(false);
       }
     };
 
     fetchTopics();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedSubject]);
 
-  // Konu seçildiğinde kaydet — ESKİ ÖZELLİK AYNI
+  // Konu seçildiğinde kaydet
   useEffect(() => {
     if (selectedTopic) {
       localStorage.setItem('last_topic_id', selectedTopic);
@@ -183,7 +215,6 @@ const durationMinutes =
     setEmptyCount('');
     setTestDuration('');
   };
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,14 +232,13 @@ const durationMinutes =
     setLastTest(null);
 
     try {
-      // ✅ Gelecek tarih kontrolü (ESKİ ÖZELLİK AYNI)
-    const nowLocal = getTurkeyDateTime(); // aslında artık global local
+      // ✅ Gelecek tarih kontrolü
+      const nowLocal = getTurkeyDateTime();
 
-    if (testDateTime > nowLocal) {
-      throw new Error('⚠️ Gelecek tarih seçilemez! Test zaten çözülmüş olmalı.');
-    }
+      if (testDateTime > nowLocal) {
+        throw new Error('⚠️ Gelecek tarih seçilemez! Test zaten çözülmüş olmalı.');
+      }
 
- 
       // 1) Test kaydet (Backend)
       const testPayload = {
         subject_id: selectedSubject,
@@ -247,11 +277,10 @@ const durationMinutes =
 
       setSuccess(true);
 
-      // ✅ ESKİ AKIŞ: 2 sn sonra geçmiş testlere yönlendir
+      // ✅ 2 sn sonra geçmiş testlere yönlendir
       setTimeout(() => {
         router.push('/past-tests');
       }, 2000);
-
     } catch (err: any) {
       console.error('Test entry error:', err);
       setError(err.message || 'Test kaydı sırasında hata oluştu');
@@ -260,17 +289,15 @@ const durationMinutes =
     }
   };
 
-  // Logout (ESKİ)
+  // Logout
   const handleLogout = () => {
-    // cookie-based auth’ta genelde supabase signOut yapılır ama
-    // senin eski akışı bozmuyoruz: yine login’e atıyoruz.
     document.cookie = 'access_token=; path=/; max-age=0';
     router.push('/login');
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-purple-50">
-      {/* Header (ESKİ UI) */}
+      {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div
@@ -300,7 +327,7 @@ const durationMinutes =
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8" id="test-form">
-        {/* Success Message (ESKİ UI + NEW motor gösterimi EK) */}
+        {/* Success Message */}
         {success && (
           <div className="bg-green-100 border-2 border-green-500 text-green-800 px-6 py-4 rounded-2xl mb-6 animate-pulse">
             <div className="flex items-center gap-3">
@@ -310,14 +337,14 @@ const durationMinutes =
                 <div className="text-sm">Net: {net.toFixed(2)} 🎉</div>
                 <div className="text-xs mt-1">Geçmiş testlere yönlendiriliyorsunuz...</div>
 
-                {/* NEW: task auto completed (varsa) */}
+                {/* NEW: task auto completed */}
                 {lastTest?.task_auto_completed && (
                   <div className="text-xs mt-2 text-green-700">
                     🎉 Görev otomatik tamamlandı: {lastTest.completed_task?.task_name}
                   </div>
                 )}
 
-                {/* NEW: Motor sonuçları (UI’ı bozmadan küçük kartlar) */}
+                {/* NEW: Motor sonuçları */}
                 {motorResults && (
                   <div className="mt-3 space-y-2">
                     <div className="text-xs text-gray-600">
@@ -363,7 +390,7 @@ const durationMinutes =
           </div>
         )}
 
-        {/* Error Message (ESKİ UI) */}
+        {/* Error Message */}
         {error && (
           <div className="bg-red-100 border-2 border-red-500 text-red-800 px-6 py-4 rounded-2xl mb-6">
             <div className="flex items-center gap-3">
@@ -376,12 +403,12 @@ const durationMinutes =
           </div>
         )}
 
-        {/* Form (ESKİ UI) */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-2xl p-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">📝 Konu Öğrenme Testi</h1>
           <p className="text-gray-600 mb-6">Çözdüğünüz 12 soruluk test sonucunu girin</p>
 
-          {/* Tarih ve Saat (ESKİ UI + pedagojik satır zaten vardı) */}
+          {/* Tarih ve Saat */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               📅 Test Tarihi ve Saati
@@ -400,11 +427,9 @@ const durationMinutes =
             </p>
           </div>
 
-          {/* Subject Dropdown (ESKİ UI) */}
+          {/* Subject Dropdown */}
           <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              📚 Ders
-            </label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">📚 Ders</label>
             {loadingSubjects ? (
               <div className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl bg-gray-50 text-gray-500">
                 Dersler yükleniyor...
@@ -430,12 +455,10 @@ const durationMinutes =
             )}
           </div>
 
-          {/* Topic Dropdown (ESKİ UI) */}
+          {/* Topic Dropdown */}
           {selectedSubject && (
             <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                📖 Konu
-              </label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">📖 Konu</label>
               {loadingTopics ? (
                 <div className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl bg-gray-50 text-gray-500">
                   Konular yükleniyor...
@@ -460,12 +483,10 @@ const durationMinutes =
             </div>
           )}
 
-          {/* Soru Sayıları (ESKİ UI - boyutlar, şekiller, fontlar aynı) */}
+          {/* Soru Sayıları */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div>
-              <label className="block text-sm font-semibold text-green-700 mb-2">
-                ✅ Doğru
-              </label>
+              <label className="block text-sm font-semibold text-green-700 mb-2">✅ Doğru</label>
               <input
                 type="number"
                 min="0"
@@ -480,9 +501,7 @@ const durationMinutes =
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-red-700 mb-2">
-                ❌ Yanlış
-              </label>
+              <label className="block text-sm font-semibold text-red-700 mb-2">❌ Yanlış</label>
               <input
                 type="number"
                 min="0"
@@ -497,9 +516,7 @@ const durationMinutes =
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                ⭕ Boş
-              </label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">⭕ Boş</label>
               <input
                 type="number"
                 min="0"
@@ -514,7 +531,7 @@ const durationMinutes =
             </div>
           </div>
 
-          {/* Test Süresi (ESKİ UI) */}
+          {/* Test Süresi */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               ⏱️ Test Süresi (Opsiyonel)
@@ -533,11 +550,12 @@ const durationMinutes =
               <span className="text-gray-600 font-semibold">dakika</span>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              💡 12 soruyu kaç dakikada çözdüğünüzü girin. Hız analizi için kullanılacak (isteğe bağlı)
+              💡 12 soruyu kaç dakikada çözdüğünüzü girin. Hız analizi için kullanılacak (isteğe
+              bağlı)
             </p>
           </div>
 
-          {/* ✅ HESAPLANAN DEĞERLER (ESKİ UI AYNEN) */}
+          {/* Hesaplanan Değerler */}
           <div
             className={`rounded-2xl p-6 mb-6 border-2 ${
               isValidTotal()
@@ -572,9 +590,7 @@ const durationMinutes =
 
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">📊 Net</div>
-                <div className="text-3xl font-bold text-purple-600">
-                  {net.toFixed(2)}
-                </div>
+                <div className="text-3xl font-bold text-purple-600">{net.toFixed(2)}</div>
               </div>
 
               <div className="text-center">
@@ -586,7 +602,7 @@ const durationMinutes =
             </div>
           </div>
 
-          {/* Butonlar (ESKİ UI + disabled/silik koşulları AYNEN) */}
+          {/* Butonlar */}
           <div className="flex gap-4 mb-4">
             <button
               type="button"
@@ -599,9 +615,19 @@ const durationMinutes =
 
             <button
               type="submit"
-              disabled={loading || !selectedSubject || !selectedTopic || !testDateTime || !isValidTotal()}
+              disabled={
+                loading ||
+                !selectedSubject ||
+                !selectedTopic ||
+                !testDateTime ||
+                !isValidTotal()
+              }
               className={`flex-1 py-3 rounded-xl text-white font-semibold transition-all ${
-                loading || !selectedSubject || !selectedTopic || !testDateTime || !isValidTotal()
+                loading ||
+                !selectedSubject ||
+                !selectedTopic ||
+                !testDateTime ||
+                !isValidTotal()
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:scale-105 shadow-lg'
               }`}

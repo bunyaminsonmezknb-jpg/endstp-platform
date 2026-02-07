@@ -1,22 +1,33 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/lib/api/client';
 import FeedbackButtons from './FeedbackButtons';
+import { useAuthReady } from '@/lib/hooks/useAuthReady';
 
-// =====================
-// Types
-// =====================
-interface ProjectionData {
-  totalTopics: number;
-  completedTopics: number;
-  estimatedDays: number;
-  estimatedDate: string;
+type ApiSuccess<T> = { success: true; data: T };
+type ApiFail = { success: false; error?: any; message?: string };
+
+async function unwrap<T>(p: Promise<any>): Promise<T> {
+  const res = (await p) as ApiSuccess<T> | ApiFail | T;
+  if (res && typeof res === 'object' && 'success' in res) {
+    const r = res as any;
+    if (r.success) return r.data as T;
+    throw r.error || new Error(r.message || 'API error');
+  }
+  return res as T;
 }
 
-// =====================
-// FIX: Halka grafiği parametreleri
-// =====================
+type ProjectionData = {
+  overall_progress: number; // 0.1 veya 10 gibi gelebilir (aşağıda normalize ediyoruz)
+  estimated_completion_date: string;
+  days_remaining: number;
+  weekly_improvement: number;
+  topics_mastered: number;
+  topics_in_progress: number;
+  topics_not_started: number;
+};
+
 const circularProgressParams = {
   size: 140,
   strokeWidth: 12,
@@ -25,58 +36,96 @@ const circularProgressParams = {
 };
 
 export default function ProjectionCard() {
+  const { ready } = useAuthReady();
+
   const [projection, setProjection] = useState<ProjectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
-  useEffect(() => {
-    fetchProjection();
+  const retryRef = useRef(0);
+  const timerRef = useRef<any>(null);
+  const inFlightRef = useRef(false);
+  const requestIdRef = useRef(0);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
   }, []);
 
-  const fetchProjection = async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    return () => {
+      clearTimer();
+      requestIdRef.current += 1;
+      inFlightRef.current = false;
+    };
+  }, [clearTimer]);
+
+  const fetchProjection = useCallback(async () => {
+    if (!ready) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    clearTimer();
+    const myRequestId = ++requestIdRef.current;
+
+    if (retryRef.current === 0) setIsLoading(true);
     setError(null);
 
-    try {
-      const response = (await api.post('/student/projection')) as any;
+    let scheduledRetry = false;
 
-      if (response?.status === 'no_data') {
-        setProjection(null);
-      } else if (response?.projection) {
-        setProjection({
-          totalTopics: Number(
-            response.projection.total_topics ??
-              response.projection.totalTopics ??
-              0
-          ),
-          completedTopics: Number(
-            response.projection.completed_topics ??
-              response.projection.completedTopics ??
-              0
-          ),
-          estimatedDays: Number(
-            response.projection.estimated_days ??
-              response.projection.estimatedDays ??
-              0
-          ),
-          estimatedDate:
-            response.projection.estimated_date ??
-            response.projection.estimatedDate ??
-            '',
-        });
+    const run = async function runFetch(): Promise<void> {
+      try {
+        // ✅ DOĞRU: GET + /student/progress/projection
+        const data = await unwrap<ProjectionData>(api.get('/student/progress/projection'));
+
+        if (myRequestId !== requestIdRef.current) return;
+
+        retryRef.current = 0;
+        setProjection(data);
+      } catch (err: any) {
+        if (myRequestId !== requestIdRef.current) return;
+
+        if (err?.code === 'SESSION_NOT_READY') {
+          const next = retryRef.current + 1;
+          retryRef.current = next;
+
+          if (next <= 10) {
+            const delay = Math.min(4000, 250 * Math.pow(2, next - 1));
+            scheduledRetry = true;
+
+            timerRef.current = setTimeout(() => {
+              inFlightRef.current = false;
+              run(); // ✅ self reference yok
+            }, delay);
+
+            return;
+          }
+
+          setError('Oturum hazırlanamadı. Lütfen sayfayı yenileyin.');
+          return;
+        }
+
+        setError(err?.message || 'Projeksiyon yüklenemedi');
+      } finally {
+        if (!scheduledRetry) {
+          if (myRequestId === requestIdRef.current) setIsLoading(false);
+          inFlightRef.current = false;
+        }
       }
-    } catch (err: any) {
-      setError(err?.message || 'Projeksiyon yüklenemedi');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
 
-  // =====================
-  // Loading / Error
-  // =====================
-  if (isLoading) {
+    await run();
+  }, [ready, clearTimer]);
+
+  useEffect(() => {
+    if (!ready) return;
+    fetchProjection();
+  }, [ready, fetchProjection]);
+
+  if (!ready || isLoading) {
     return (
       <div className="bg-purple-100 rounded-2xl p-8 shadow-lg">
         <div className="text-center">
@@ -92,12 +141,13 @@ export default function ProjectionCard() {
       <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-6">
         <div className="text-center">
           <div className="text-4xl mb-2">⚠️</div>
-          <div className="text-red-700 font-bold mb-2">
-            Projeksiyon Hatası
-          </div>
+          <div className="text-red-700 font-bold mb-2">Projeksiyon Hatası</div>
           <div className="text-sm text-red-600 mb-4">{error}</div>
           <button
-            onClick={fetchProjection}
+            onClick={() => {
+              retryRef.current = 0;
+              fetchProjection();
+            }}
             className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
           >
             Tekrar Dene
@@ -111,14 +161,10 @@ export default function ProjectionCard() {
     return (
       <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
-        <h3 className="text-xl font-bold text-gray-800 mb-2">
-          Henüz Projeksiyon Verisi Yok
-        </h3>
-        <p className="text-gray-600 mb-4">
-          Projeksiyon hesaplayabilmek için önce test sonuçları girmelisiniz.
-        </p>
+        <h3 className="text-xl font-bold text-gray-800 mb-2">Henüz Projeksiyon Verisi Yok</h3>
+        <p className="text-gray-600 mb-4">Projeksiyon için önce test sonucu girmelisin.</p>
         <a
-          href="/test-entry"
+          href="/student/test-entry"
           className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700"
         >
           Test Ekle
@@ -127,79 +173,42 @@ export default function ProjectionCard() {
     );
   }
 
-  // =====================
-  // Calculations
-  // =====================
-  const remainingTopics =
-    projection.totalTopics - projection.completedTopics;
+  // ✅ overall_progress bazen 0.1 (oran) bazen 10 (yüzde) olabilir
+  const overallPercent =
+    projection.overall_progress <= 1 ? projection.overall_progress * 100 : projection.overall_progress;
 
-  const progressPercent =
-    projection.totalTopics > 0
-      ? Math.min(
-          100,
-          (projection.completedTopics / projection.totalTopics) * 100
-        )
-      : 0;
+  const circumference = 2 * Math.PI * circularProgressParams.radius;
+  const progressOffset = circumference - (overallPercent / 100) * circumference;
 
-  const circumference =
-    2 * Math.PI * circularProgressParams.radius;
-
-  const progressOffset =
-    circumference -
-    Math.min(1, projection.estimatedDays / 365) * circumference;
+  const totalTopics =
+    projection.topics_mastered + projection.topics_in_progress + projection.topics_not_started;
 
   const velocityText = (() => {
-    if (remainingTopics <= 0) return 'Tamamlandı 🎉';
-    if (projection.estimatedDays <= 0) return 'Veri yetersiz';
-
-    const daily = remainingTopics / projection.estimatedDays;
-    return daily < 1
-      ? `${(daily * 7).toFixed(1)} konu/hafta`
-      : `${daily.toFixed(1)} konu/gün`;
+    if (projection.days_remaining <= 0) return 'Tarih geçti';
+    if (projection.weekly_improvement <= 0) return 'Hız hesaplanamadı';
+    return `${projection.weekly_improvement.toFixed(2)} puan/hafta`;
   })();
 
   const gradientColor =
-    projection.estimatedDays > 60
+    projection.days_remaining > 120
       ? 'from-red-500 to-red-700'
-      : projection.estimatedDays > 30
+      : projection.days_remaining > 60
       ? 'from-orange-500 to-orange-700'
       : 'from-purple-500 to-indigo-600';
 
-  // =====================
-  // Render
-  // =====================
   return (
-    <div
-      className={`bg-gradient-to-r ${gradientColor} text-white rounded-2xl p-6 shadow-xl`}
-    >
-      {/* HEADER */}
+    <div className={`bg-gradient-to-r ${gradientColor} text-white rounded-2xl p-6 shadow-xl`}>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm opacity-90">
-            Tahmini Bitiş Tarihi
-          </div>
-          <div className="text-2xl font-bold">
-            {projection.estimatedDate}
-          </div>
+          <div className="text-sm opacity-90">Tahmini Bitiş Tarihi</div>
+          <div className="text-2xl font-bold">{projection.estimated_completion_date}</div>
           <div className="text-xs opacity-75 mt-1">
-            {projection.completedTopics}/{projection.totalTopics} konu •
-            Hız: {velocityText}
+            {projection.topics_mastered}/{totalTopics} konu • Hız: {velocityText}
           </div>
         </div>
 
-        {/* CIRCULAR GRAPH */}
-        <div
-          className="relative"
-          style={{
-            width: circularProgressParams.size,
-            height: circularProgressParams.size,
-          }}
-        >
-          <svg
-            width={circularProgressParams.size}
-            height={circularProgressParams.size}
-            className="-rotate-90"
-          >
+        <div className="relative" style={{ width: circularProgressParams.size, height: circularProgressParams.size }}>
+          <svg width={circularProgressParams.size} height={circularProgressParams.size} className="-rotate-90">
             <circle
               cx={circularProgressParams.center}
               cy={circularProgressParams.center}
@@ -222,28 +231,19 @@ export default function ProjectionCard() {
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold">
-              {projection.estimatedDays}
-            </div>
-            <div className="text-xs">gün</div>
+            <div className="text-3xl font-bold">{projection.days_remaining}</div>
+            <div className="text-xs">gün kaldı</div>
           </div>
         </div>
       </div>
 
-      {/* PROGRESS BAR */}
       <div className="mt-6 bg-white/10 rounded-xl p-4">
-        <div className="text-sm font-bold mb-2">
-          Genel İlerleme: %{progressPercent.toFixed(0)}
-        </div>
+        <div className="text-sm font-bold mb-2">Genel İlerleme: %{overallPercent.toFixed(0)}</div>
         <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-green-400 transition-all"
-            style={{ width: `${progressPercent}%` }}
-          />
+          <div className="h-full bg-green-400 transition-all" style={{ width: `${overallPercent}%` }} />
         </div>
       </div>
 
-      {/* DETAILS */}
       <button
         onClick={() => setShowDetails(!showDetails)}
         className="mt-4 text-xs underline opacity-80 hover:opacity-100 w-full"
@@ -253,20 +253,20 @@ export default function ProjectionCard() {
 
       {showDetails && (
         <div className="mt-4 space-y-2 text-xs">
-          <div>Kalan konu: {remainingTopics}</div>
-          <div>Günlük hız: {velocityText}</div>
+          <div>Mastered: {projection.topics_mastered}</div>
+          <div>In progress: {projection.topics_in_progress}</div>
+          <div>Not started: {projection.topics_not_started}</div>
         </div>
       )}
 
-      {/* FEEDBACK */}
       <div className="mt-4 pt-4 border-t border-white/20 flex justify-center">
         <FeedbackButtons
           componentType="projection_card"
           variant="like-dislike"
           size="sm"
           metadata={{
-            estimated_days: projection.estimatedDays,
-            progress_percent: progressPercent.toFixed(1),
+            overall_percent: overallPercent.toFixed(1),
+            days_remaining: projection.days_remaining,
           }}
         />
       </div>
