@@ -7,6 +7,7 @@ import { api } from '@/lib/api/client';
 import ProjectionCard from '../dashboard/components/ProjectionCard';
 import UniversityGoalCard from '../dashboard/components/UniversityGoalCard';
 import ProgressTrendChart from './components/ProgressTrendChart';
+import SubjectProgressList from './components/SubjectProgressList'; // ⭐ EKLENDI
 
 type NormalizedError = {
   code?: string;
@@ -45,11 +46,13 @@ export default function ProgressPage() {
   const [loadingTrend, setLoadingTrend] = useState(true);
   const [trendError, setTrendError] = useState<NormalizedError | null>(null);
 
-  // ✅ titreme/loop önleme: in-flight + requestId
+  // ⭐ SUBJECTS STATE
+  const [subjects, setSubjects] = useState<any[] | null>(null);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [subjectsError, setSubjectsError] = useState<NormalizedError | null>(null);
+
   const inFlightRef = useRef(false);
   const requestIdRef = useRef(0);
-
-  // ✅ SESSION_NOT_READY retry state
   const retryRef = useRef(0);
   const timerRef = useRef<any>(null);
 
@@ -63,7 +66,7 @@ export default function ProgressPage() {
   useEffect(() => {
     return () => {
       clearTimer();
-      requestIdRef.current += 1; // eski sonuçlar boşa düşsün
+      requestIdRef.current += 1;
       inFlightRef.current = false;
     };
   }, [clearTimer]);
@@ -82,7 +85,6 @@ export default function ProgressPage() {
     let scheduledRetry = false;
 
     try {
-      // ✅ Backend ile uyumlu: trends + prediction (weekly/monthly)
       const weeklyTrends = await api.get<any>(
         `/student/progress/trends?${qs({ period: 'weekly', num_periods: 24 })}`
       );
@@ -100,8 +102,6 @@ export default function ProgressPage() {
 
       retryRef.current = 0;
 
-      // ProgressTrendChart’in beklediği shape:
-      // weeklyData / monthlyData / weeklyPrediction / monthlyPrediction
       setTrend({
         weeklyData: weeklyTrends?.data ?? weeklyTrends,
         monthlyData: monthlyTrends?.data ?? monthlyTrends,
@@ -146,10 +146,29 @@ export default function ProgressPage() {
     }
   }, [ready, clearTimer]);
 
+  // ⭐ SUBJECTS FETCH
+  const fetchSubjects = useCallback(async () => {
+    if (!ready) return;
+
+    setLoadingSubjects(true);
+    setSubjectsError(null);
+
+    try {
+      const response = await api.get<any>('/student/progress/subjects');
+      setSubjects(response?.data ?? response);
+    } catch (err: any) {
+      const e = normalizeError(err);
+      setSubjectsError(e);
+    } finally {
+      setLoadingSubjects(false);
+    }
+  }, [ready]);
+
   useEffect(() => {
     if (!ready) return;
     fetchTrend();
-  }, [ready, fetchTrend]);
+    fetchSubjects(); // ⭐ SUBJECTS FETCH
+  }, [ready, fetchTrend, fetchSubjects]);
 
   if (!ready) {
     return (
@@ -166,11 +185,13 @@ export default function ProgressPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Top Cards */}
       <div className="grid gap-6 lg:grid-cols-2">
         <ProjectionCard />
         <UniversityGoalCard />
       </div>
 
+      {/* Trend Chart */}
       {showTrendError ? (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
           <div className="font-semibold text-red-800">Trend Hatası</div>
@@ -192,6 +213,30 @@ export default function ProgressPage() {
           monthlyPrediction={trend?.monthlyPrediction}
           isLoading={loadingTrend}
         />
+      )}
+
+      {/* ⭐ SUBJECT PROGRESS LIST - YENİDEN EKLENDİ */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <SubjectProgressList 
+          subjects={subjects} 
+          isLoading={loadingSubjects} 
+        />
+      </div>
+
+      {/* Subjects Error */}
+      {subjectsError && !loadingSubjects && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+          <div className="font-semibold text-red-800">Ders Verisi Hatası</div>
+          <div className="text-sm text-red-700 mt-1">
+            {subjectsError.message}
+          </div>
+          <button
+            onClick={fetchSubjects}
+            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+          >
+            Tekrar Dene
+          </button>
+        </div>
       )}
     </div>
   );
