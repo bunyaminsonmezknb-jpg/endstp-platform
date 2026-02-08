@@ -92,7 +92,7 @@ export default function UniversityGoalCard() {
     let scheduledRetry = false;
 
     try {
-      const response = (await api.get('/student/goal')) as any;
+      const response = (await api.get('/student/progress/goal')) as any;
 
       if (myRequestId !== requestIdRef.current) return;
 

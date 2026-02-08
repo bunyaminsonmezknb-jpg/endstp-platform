@@ -2,7 +2,6 @@
 Progress & Goals Router - Main Endpoints
 ⭐ MODULAR VERSION with Exam Weight Integration
 ⭐ UTC-AWARE with Period Key Fix (2024-12-24)
-⭐ MVP: Goal endpoint returns no_data (Phase 2'de real data)
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
 from datetime import datetime, timedelta
@@ -24,7 +23,7 @@ from .calculators import (
     calculate_topic_mastery_level,
     calculate_phase_and_progress,
     calculate_mastery_counts,
-    calculate_trends
+    calculate_trends  # ⭐ YENİ - Trend hesaplama
 )
 from .exam_weight import (
     calculate_exam_weight_multiplier,
@@ -32,7 +31,7 @@ from .exam_weight import (
 )
 
 router = APIRouter(
-    prefix="/student/progress",
+    prefix="/student/progress",  # ⭐ OLMALI!
     tags=["progress"]
 )
 
@@ -95,7 +94,7 @@ async def get_progress_projection(
         # Overall progress
         overall_progress = (topics_mastered / total_topics * 100) if total_topics > 0 else 0
         
-        # Haftalık gelişme (son 4 hafta) - UTC-AWARE
+        # Haftalık gelişme (son 4 hafta) - UTC-AWARE ⭐
         now = datetime.utcnow()
         four_weeks_ago = now - timedelta(weeks=4)
         
@@ -118,7 +117,6 @@ async def get_progress_projection(
             remaining_progress = 100 - overall_progress
             weeks_needed = remaining_progress / weekly_improvement
             days_remaining = int(weeks_needed * 7)
-            # TODO GLOBAL: Use format_date_localized() for i18n
             completion_date = (now + timedelta(days=days_remaining)).strftime("%Y-%m-%d")
         else:
             days_remaining = 999
@@ -143,7 +141,7 @@ async def get_progress_projection(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==================== ENDPOINT 2: SUBJECTS (WITH EXAM WEIGHT) ====================
+# ==================== ENDPOINT 2: SUBJECTS (WITH EXAM WEIGHT) ⭐ ====================
 
 @router.get("/subjects")
 async def get_subject_progress(
@@ -152,6 +150,8 @@ async def get_subject_progress(
 ):
     """
     Ders bazlı ilerleme (KADEMELI MODEL + EXAM WEIGHT + UNIQUE TOPICS)
+    ⭐ Priority score with exam weight multiplier
+    ⭐ Unique topics tested tracking
     """
     try:
         student_id = current_user.get("id")
@@ -197,10 +197,10 @@ async def get_subject_progress(
             
             test_count = len(tests)
             
-            # Unique topics tested
+            # ==================== UNIQUE TOPICS TESTED ⭐ ====================
             unique_topics_tested = len(set(test['topic_id'] for test in tests)) if tests else 0
             
-            # Phase calculation
+            # ==================== PHASE CALCULATION ====================
             (
                 progress_percentage,
                 avg_success_rate,
@@ -210,13 +210,14 @@ async def get_subject_progress(
                 disclaimer
             ) = calculate_phase_and_progress(tests, topics_total)
             
-            # 0 test durumu
+            # ==================== 0 TEST DURUMU (HİBRİT MODEL) ⭐ ====================
             if test_count == 0:
                 trend = "unknown"
                 phase = "BAŞLANMAMIŞ"
                 disclaimer = f"Bu derste henüz yeterli veri yok. İlk testini çözerek analizi aktif hale getirebilirsin. ({topics_total} konu mevcut)"
             
-            # Phase disclaimer güncelleme
+            # ==================== PHASE DISCLAIMER GÜNCELLEMESİ ⭐ ====================
+            # Disclaimer'ı unique_topics_tested ile güncelle (sadece test_count > 0 için)
             elif test_count < 5:
                 phase = "PHASE 1: Keşif"
                 disclaimer = f"📊 {test_count} test ve {unique_topics_tested} farklı konu ile başlangıç aşamasındasınız. Daha fazla konu çalışarak kapsam artırın!"
@@ -225,9 +226,8 @@ async def get_subject_progress(
                 disclaimer = f"📈 {test_count} test ve {unique_topics_tested}/{topics_total} konu kapsamı ile gelişim sürecinde. Kapsam artışı önemli!"
             else:
                 phase = "PHASE 3: Olgunluk"
-                disclaimer = f"🎯 {test_count} test ve {unique_topics_tested}/{topics_total} konu ile olgun aşamasındasınız. Unutma eğrisi takibi aktif."
-            
-            # Mastery counts
+                disclaimer = f"🎯 {test_count} test ve {unique_topics_tested}/{topics_total} konu ile olgun aşamasındasınız. Unutma eğrisi takibi aktif."            
+            # ==================== MASTERY COUNTS ====================
             (
                 topics_mastered_universal,
                 topics_mastered_personal,
@@ -235,7 +235,7 @@ async def get_subject_progress(
                 topics_not_started
             ) = calculate_mastery_counts(tests, [t['id'] for t in topics])
             
-            # Exam weight multiplier
+            # ==================== EXAM WEIGHT MULTIPLIER ⭐ ====================
             exam_multiplier = 1.0
             total_exam_questions = 0
             
@@ -248,6 +248,7 @@ async def get_subject_progress(
                     exam_weight_result.data or []
                 )
             except Exception as e:
+                # ⚠️ Tablo yoksa default değer kullan
                 print(f"⚠️ Exam weight fallback: {subject['code']}")
             
             # Priority score hesapla
@@ -257,9 +258,10 @@ async def get_subject_progress(
                 exam_multiplier
             )
             
-            # Last test date
+            # ==================== LAST TEST DATE ====================
             last_test_date = None
             if tests:
+                # En son test tarihini bul
                 sorted_tests = sorted(tests, key=lambda x: x.get('test_date', ''), reverse=True)
                 last_test_date = sorted_tests[0].get('test_date')
             
@@ -273,7 +275,7 @@ async def get_subject_progress(
                 "topics_mastered_personal": topics_mastered_personal,
                 "topics_in_progress": topics_in_progress,
                 "topics_not_started": topics_not_started,
-                "unique_topics_tested": unique_topics_tested,
+                "unique_topics_tested": unique_topics_tested,  # ⭐ YENİ
                 "avg_success_rate": avg_success_rate,
                 "trend": trend,
                 "trend_icon": trend_icon,
@@ -283,10 +285,10 @@ async def get_subject_progress(
                 "exam_weight_multiplier": round(exam_multiplier, 2),
                 "total_exam_questions": total_exam_questions,
                 "priority_score": priority_score,
-                "last_test_date": last_test_date
+                "last_test_date": last_test_date  # ⭐ YENİ
             })
         
-        # Priority score'a göre sırala
+        # ⭐ Priority score'a göre sırala (en yüksek önce)
         subject_progress.sort(key=lambda x: x['priority_score'], reverse=True)
         
         return {
@@ -300,7 +302,7 @@ async def get_subject_progress(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==================== ENDPOINT 3: TRENDS (UTC-AWARE) ====================
+# ==================== ENDPOINT 3: TRENDS (UTC-AWARE FIX) ⭐⭐⭐ ====================
 
 @router.get("/trends")
 async def get_progress_trends(
@@ -311,18 +313,24 @@ async def get_progress_trends(
 ):
     """
     Haftalık/aylık trend grafiği
+    ⭐ UTC-AWARE - Period key mismatch fix
+    ⭐ calculators.calculate_trends() kullanıyor
     """
     try:
         student_id = current_user.get("id")
         
-        # Öğrencinin tüm testlerini çek
+        # ===============================
+        # 1) Öğrencinin tüm testlerini çek
+        # ===============================
         tests_result = supabase.table("student_topic_tests").select(
             "id, test_date, subject_id, topic_id, success_rate"
         ).eq("student_id", student_id).order("test_date").execute()
         
         tests = tests_result.data or []
         
-        # Ders isimlerini çek
+        # ===============================
+        # 2) Ders isimlerini çek (tek sorgu)
+        # ===============================
         subjects_result = supabase.table("subjects").select(
             "id, name_tr"
         ).execute()
@@ -332,7 +340,9 @@ async def get_progress_trends(
             for s in (subjects_result.data or [])
         }
         
-        # Trend hesapla
+        # ===============================
+        # 3) Trend Hesapla (calculators.py kullanıyor)
+        # ===============================
         data = calculate_trends(
             tests=tests,
             period=period,
@@ -340,7 +350,9 @@ async def get_progress_trends(
             subjects=subjects_map
         )
         
-        # Debug output
+        # ===============================
+        # 4) DEBUG OUTPUT (isteğe bağlı)
+        # ===============================
         print(f"\n📊 TREND DEBUG:")
         print(f"Period: {period}")
         print(f"Total tests: {data['count']}")
@@ -348,7 +360,9 @@ async def get_progress_trends(
         print(f"Overall trend: {data['overall_trend'][:3]}...")
         print(f"Subjects: {len(data['subjects'])}")
         
-        # Response format (Chart.js uyumlu)
+        # ===============================
+        # 5) Response Format (Chart.js uyumlu)
+        # ===============================
         return {
             "success": True,
             "data": {
@@ -416,7 +430,7 @@ async def get_forgetting_prediction(
         for subject_id, subject_tests in subject_data.items():
             last_success = subject_tests[0]['success_rate']
             
-            # UTC-AWARE tarih parse
+            # UTC-AWARE tarih parse ⭐
             last_date_obj = to_utc_date(subject_tests[0]['test_date'])
             last_date = datetime.combine(last_date_obj, datetime.min.time())
             
@@ -438,7 +452,6 @@ async def get_forgetting_prediction(
                 "current": last_success,
                 "future": future_predictions,
                 "decay_rate": round(decay_rate * 100, 1),
-                # TODO GLOBAL: Use format_date_localized() for i18n
                 "last_test_date": last_date.strftime('%Y-%m-%d')
             }
             
@@ -470,16 +483,6 @@ async def get_forgetting_prediction(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==================== ENDPOINT 5: GOAL (MVP) ====================
-
-@router.get("/goal")
-async def get_university_goal(current_user: dict = Depends(get_current_user)):
-    """
-    Üniversite hedefi - MVP sürümü
-    Phase 2'de TYT/AYT net tracking ve gerçek data gelecek
-    """
-    return {"status": "no_data"}
-
 # ==================== HEALTH CHECK ====================
 
 @router.get("/health")
@@ -487,12 +490,204 @@ async def progress_health():
     """Health check"""
     return {
         "status": "healthy",
-        "endpoints": 5,
-        "features": ["projection", "subjects", "trends", "prediction", "goal"],
+        "endpoints": 4,
+        "features": ["projection", "subjects", "trends", "prediction"],
         "data_source": "student_topic_tests",
         "exam_weight_enabled": True,
         "modular_structure": True,
-        "utc_aware": True,
-        "period_key_fix": "2024-12-24",
-        "goal_status": "MVP (no_data only)"
+        "utc_aware": True,  # ⭐ YENİ
+        "period_key_fix": "2024-12-24"  # ⭐ YENİ
     }
+@router.get("/goal")
+async def get_university_goal(
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_admin)
+):
+    """
+    Üniversite hedefi bilgisi
+    """
+    try:
+        student_id = current_user.get("id")
+        
+        # Kullanıcı hedefini çek
+        goal_result = supabase.table("student_goals").select(
+            "*, university_tiers(*)"
+        ).eq("user_id", student_id).execute()
+        
+        if not goal_result.data:
+            return {
+                "success": True,
+                "data": None,
+                "message": "Henüz hedef belirlenmemiş"
+            }
+        
+        goal = goal_result.data[0]
+        tier = goal.get("university_tiers", {})
+        
+        return {
+            "success": True,
+            "data": {
+                "tier_number": tier.get("tier_number"),
+                "tier_name": tier.get("name_tr"),
+                "target_date": goal.get("target_date"),
+                "progress_percentage": goal.get("progress_percentage", 0.0),
+                "min_rank": tier.get("min_rank"),
+                "max_rank": tier.get("max_rank")
+            }
+        }
+    
+    except Exception as e:
+        print(f"❌ Goal error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/goal")
+async def get_university_goal(
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_admin)
+):
+    """
+    Üniversite hedefi - MVP sürümü (basitleştirilmiş)
+    TODO: Phase 2'de TYT/AYT net hesaplamaları eklenecek
+    """
+    try:
+        student_id = current_user.get("id")
+        
+        # Genel progress'i al
+        tests_result = supabase.table("student_topic_tests").select(
+            "topic_id, success_rate"
+        ).eq("student_id", student_id).execute()
+        
+        tests = tests_result.data or []
+        
+        if not tests:
+            return {
+                "status": "no_data",
+                "message": "Henüz test verisi yok"
+            }
+        
+        # Basit progress hesapla
+        unique_topics = len(set(t['topic_id'] for t in tests))
+        total_topics = 150  # Yaklaşık
+        overall_progress = int((unique_topics / total_topics) * 100)
+        
+        # Mock TYT/AYT data
+        return {
+            "overall_progress": overall_progress,
+            "days_remaining": 120,  # Mock: 4 ay
+            "tyt": {
+                "current_net": int(overall_progress * 0.8),  # Yaklaşık
+                "target_net": 100,
+                "progress_percent": overall_progress,
+                "remaining_net": max(0, 100 - int(overall_progress * 0.8)),
+                "daily_increase_needed": 1,
+                "subjects": []  # Şimdilik boş
+            },
+            "ayt": {
+                "current_net": int(overall_progress * 0.6),
+                "target_net": 80,
+                "progress_percent": int(overall_progress * 0.75),
+                "remaining_net": max(0, 80 - int(overall_progress * 0.6)),
+                "daily_increase_needed": 1,
+                "subjects": []
+            },
+            "active_goal": {
+                "university": "Hedef Üniversite",
+                "department": "Mühendislik",
+                "level": 1
+            },
+            "ladder": []  # Merdiven sistemi Phase 2'de
+        }
+    
+    except Exception as e:
+        print(f"❌ Goal error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@router.get("/goal")
+async def get_university_goal(
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_admin)
+):
+    """
+    Üniversite hedefi bilgisi (Safe version - no joins)
+    Returns no_data if goal not found or error occurs
+    """
+    try:
+        student_id = current_user.get("id")
+        
+        # BASİT SORGU - Join yok
+        goal_result = supabase.table("student_goals").select("*").eq(
+            "user_id", student_id
+        ).execute()
+        
+        if not goal_result.data or len(goal_result.data) == 0:
+            return {"status": "no_data"}
+        
+        # Test sayısını al
+        tests_result = supabase.table("student_topic_tests").select(
+            "topic_id"
+        ).eq("student_id", student_id).execute()
+        
+        tests = tests_result.data or []
+        
+        if not tests:
+            overall_progress = 0
+        else:
+            unique_topics = len(set(t['topic_id'] for t in tests))
+            overall_progress = int((unique_topics / 150) * 100)
+        
+        # Days remaining (mock for now)
+        days_remaining = 120
+        
+        # TYT/AYT progress (approximation)
+        tyt_progress = int(overall_progress * 0.8)
+        ayt_progress = int(overall_progress * 0.6)
+        
+        return {
+            "overall_progress": overall_progress,
+            "days_remaining": days_remaining,
+            "tyt": {
+                "current_net": tyt_progress,
+                "target_net": 100,
+                "progress_percent": tyt_progress,
+                "remaining_net": max(0, 100 - tyt_progress),
+                "daily_increase_needed": 1,
+                "subjects": []
+            },
+            "ayt": {
+                "current_net": ayt_progress,
+                "target_net": 80,
+                "progress_percent": int(ayt_progress * 1.25),
+                "remaining_net": max(0, 80 - ayt_progress),
+                "daily_increase_needed": 1,
+                "subjects": []
+            },
+            "active_goal": {
+                "university": "Hedef Üniversite",
+                "department": "Mühendislik",
+                "level": 1
+            },
+            "ladder": []
+        }
+    
+    except Exception as e:
+        # HATA OLSA DAHİ 500 VERME - no_data dön
+        print(f"⚠️ Goal error (returning no_data): {e}")
+        import traceback
+        traceback.print_exc()
+        return {"status": "no_data"}
+
+# ==================== ENDPOINT 5: GOAL (NO_DATA) ====================
+
+@router.get("/goal")
+async def get_university_goal(
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_admin)
+):
+    """Üniversite hedefi - Always returns no_data for MVP"""
+    return {"status": "no_data"}
