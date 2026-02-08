@@ -140,14 +140,20 @@ export default function ProgressTrendChart({
     [ready, weeklyPrediction, monthlyPrediction]
   );
 
-  // ✅ FIX: futureLabels'ı useMemo dışında hesapla (her render'da aynı)
   const futureLabels = useMemo(() => {
     return period === 'weekly'
       ? ['Gelecek hafta', '2 hafta sonra', '3 hafta sonra', '4 hafta sonra']
       : ['Gelecek ay', '2 ay sonra', '3 ay sonra', '4 ay sonra'];
   }, [period]);
 
-  // ✅ FIX: chartData içinde tüm derived values'ları hesapla
+  // ⭐ RENK PALETİ
+  const subjectColors = [
+    'rgb(147, 51, 234)',  // Mor
+    'rgb(59, 130, 246)',  // Mavi
+    'rgb(34, 197, 94)',   // Yeşil
+    'rgb(249, 115, 22)'   // Turuncu
+  ];
+
   const chartData = useMemo(() => {
     if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
       return {
@@ -156,10 +162,12 @@ export default function ProgressTrendChart({
       };
     }
 
-    // overall dataset
+    // ⭐ GENEL ORTALAMA (İNDİGO)
     const overallDataset = {
       label: 'Genel Ortalama',
       data: data.overall_trend || [],
+      borderColor: 'rgb(99, 102, 241)', // İndigo
+      backgroundColor: 'rgba(99, 102, 241, 0.1)',
       borderWidth: 4,
       pointRadius: 6,
       pointHoverRadius: 8,
@@ -167,19 +175,25 @@ export default function ProgressTrendChart({
       fill: true,
     };
 
-    // subjects
-    const subjectDatasets = (data.datasets || []).map((ds: any) => ({
-      label: ds.label,
-      data: ds.data,
-      borderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      tension: 0.4,
-      fill: true,
-      subjectId: ds.subject_id,
-    }));
+    // ⭐ DERSLER (RENKLERLE)
+    const subjectDatasets = (data.datasets || []).map((ds: any, idx: number) => {
+      const color = subjectColors[idx % subjectColors.length];
+      
+      return {
+        label: ds.label,
+        data: ds.data,
+        borderColor: color,
+        backgroundColor: color.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.4,
+        fill: true,
+        subjectId: ds.subject_id,
+      };
+    });
 
-    // prediction datasets
+    // ⭐ TAHMİN DATASETS
     const predictionDatasets: any[] = [];
     const preds = prediction?.predictions;
 
@@ -194,6 +208,8 @@ export default function ProgressTrendChart({
             firstPred.current,
             ...firstPred.future,
           ],
+          borderColor: 'rgba(99, 102, 241, 0.5)',
+          backgroundColor: 'transparent',
           borderWidth: 4,
           borderDash: [5, 5],
           pointRadius: 4,
@@ -203,9 +219,10 @@ export default function ProgressTrendChart({
       }
 
       if (showSubjects) {
-        subjectDatasets.forEach((ds: any) => {
+        subjectDatasets.forEach((ds: any, idx: number) => {
           const pred = preds[ds.subjectId];
           if (pred) {
+            const color = subjectColors[idx % subjectColors.length];
             predictionDatasets.push({
               label: `${ds.label} (Senaryo)`,
               data: [
@@ -213,6 +230,8 @@ export default function ProgressTrendChart({
                 pred.current,
                 ...pred.future,
               ],
+              borderColor: color.replace(')', ', 0.5)'),
+              backgroundColor: 'transparent',
               borderWidth: 2,
               borderDash: [5, 5],
               pointRadius: 3,
@@ -232,9 +251,8 @@ export default function ProgressTrendChart({
         ...predictionDatasets,
       ],
     };
-  }, [data, showPrediction, showSubjects, prediction, futureLabels]);
+  }, [data, showPrediction, showSubjects, prediction, futureLabels, subjectColors]);
 
-  // ✅ FIX: options da useMemo içinde
   const options: any = useMemo(() => {
     return {
       responsive: true,
@@ -272,7 +290,6 @@ export default function ProgressTrendChart({
     };
   }, [futureLabels]);
 
-  // Loading
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-4">
@@ -282,7 +299,6 @@ export default function ProgressTrendChart({
     );
   }
 
-  // Empty
   if (!data || !Array.isArray(data.labels) || data.labels.length === 0) {
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6 text-gray-600">
