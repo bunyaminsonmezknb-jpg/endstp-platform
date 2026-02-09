@@ -1,6 +1,6 @@
 """
 End.STP Backend API
-FastAPI ana uygulama - 4 Motor Sistemi
+FastAPI ana uygulama - 4 Motor Sistemi + Admin Panel
 """
 
 # ============================================
@@ -19,7 +19,7 @@ ENV_PATH = BASE_DIR / ".env"
 loaded = load_dotenv(dotenv_path=ENV_PATH, override=True)
 print(f"✅ .env loaded={loaded} path={ENV_PATH}")
 
-# Fail-fast (prod’da assert yerine daha kontrollü olabilir; şimdilik OK)
+# Fail-fast
 assert os.getenv("SUPABASE_URL"), "❌ SUPABASE_URL not loaded"
 assert os.getenv("SUPABASE_SERVICE_ROLE_KEY"), "❌ SUPABASE_SERVICE_ROLE_KEY not loaded"
 assert os.getenv("SUPABASE_JWT_SECRET"), "❌ SUPABASE_JWT_SECRET not loaded"
@@ -33,7 +33,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.api import api_router
 from app.api.v1.student_analysis import router as student_router
-
 from app.api.v1.endpoints import motors, motor_health, motor_test, segmentation
 
 # ============================================
@@ -42,7 +41,7 @@ from app.api.v1.endpoints import motors, motor_health, motor_test, segmentation
 
 app = FastAPI(
     title="End.STP API",
-    description="Akıllı Öğrenme Analiz Sistemi - 4 Motors",
+    description="Akıllı Öğrenme Analiz Sistemi - 4 Motors + Admin Panel",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -114,7 +113,6 @@ async def monitor_response_time(request, call_next):
         process_time = int((time.time() - start_time) * 1000)
         flag_key = _flag_from_path(request.url.path)
         if flag_key:
-            # önce mevcut değerleri çekip güvenli artır
             try:
                 from app.db.session import get_supabase_admin
                 supabase = get_supabase_admin()
@@ -142,6 +140,7 @@ async def monitor_response_time(request, call_next):
 # 5) ROUTERS
 # ============================================
 
+# Main API router (includes admin)
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(student_router)
 
@@ -182,13 +181,14 @@ except Exception as e:
 @app.get("/")
 async def root():
     return {
-        "message": "End.STP API - 4 Motors + Segmentation",
+        "message": "End.STP API - 4 Motors + Segmentation + Admin Panel",
         "version": "1.0.0",
         "docs": "/api/docs",
         "motors": ["BS-Model", "Difficulty", "Time", "Priority"],
         "meta_motor": "Segmentation",
+        "admin_panel": "enabled"
     }
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "motors": 4, "meta_motor": "segmentation"}
+    return {"status": "healthy", "motors": 4, "meta_motor": "segmentation", "admin": "enabled"}
