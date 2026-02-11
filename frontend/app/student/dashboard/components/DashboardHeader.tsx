@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 interface DashboardHeaderProps {
   studentName: string;
@@ -26,10 +28,15 @@ function DashboardHeader({ studentName, streak, studentId }: DashboardHeaderProp
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen]);
 
-  const handleLogout = useCallback(() => {
-    document.cookie = 'access_token=; path=/; max-age=0';
-    router.push('/login');
+  const handleLogout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.push('/login');
+      router.refresh();
+    }
   }, [router]);
+
 
   const handleNewTest = useCallback(() => router.push('/test-entry'), [router]);
   const handlePastTests = useCallback(() => router.push('/past-tests'), [router]);
@@ -39,12 +46,16 @@ function DashboardHeader({ studentName, streak, studentId }: DashboardHeaderProp
   const handleHelp = useCallback(() => router.push('/student/help'), [router]);
 
   const getInitials = (name: string) =>
-    name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
 
   return (
     <div className="bg-white rounded-3xl shadow-lg p-6 mb-6">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-        
         {/* Sol Taraf: Avatar + Dropdown Menu */}
         <div className="flex items-center gap-4 w-full md:w-auto relative" ref={menuRef}>
           {/* Tıklanabilir Avatar + İsim */}
@@ -55,12 +66,12 @@ function DashboardHeader({ studentName, streak, studentId }: DashboardHeaderProp
             <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold shrink-0 group-hover:scale-105 transition-transform">
               {getInitials(studentName)}
             </div>
-            
+
             <div className="text-left">
               <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-2">
                 Hoş geldin, {studentName}! 👋
-                <ChevronDown 
-                  size={20} 
+                <ChevronDown
+                  size={20}
                   className={`text-gray-500 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}
                 />
               </h1>
@@ -135,7 +146,7 @@ function DashboardHeader({ studentName, streak, studentId }: DashboardHeaderProp
           >
             ➕ Yeni Test Ekle
           </button>
-          
+
           <button
             onClick={handlePastTests}
             className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:scale-105 transition-transform shadow-lg whitespace-nowrap"

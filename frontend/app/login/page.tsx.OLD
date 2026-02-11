@@ -1,5 +1,5 @@
 // frontend/app/login/page.tsx
-// FINAL VERSION - supabase import + role-based redirect
+// ✅ FIX: supabase import eklendi
 
 'use client';
 
@@ -13,8 +13,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
-  // ✅ FIX: Create supabase client
+  // ✅ FIX: supabase client oluştur
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -27,11 +28,11 @@ export default function LoginPage() {
     
     setLoading(true);
     setError(null);
+    setDebugInfo('');
 
     try {
-      console.log('🔐 [LOGIN] Starting login...');
-      
-      // 1. Auth login
+      // 1) Auth login
+      console.log('🔐 [LOGIN] Step 1: Auth login...');
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -41,15 +42,16 @@ export default function LoginPage() {
         console.error('❌ [LOGIN] Auth error:', authError);
         throw new Error(authError.message);
       }
-
       if (!authData.session) {
-        console.error('❌ [LOGIN] No session created');
+        console.error('❌ [LOGIN] Session oluşturulamadı');
         throw new Error('Session oluşturulamadı');
       }
 
-      console.log('✅ [LOGIN] Auth successful:', authData.session.user.email);
+      console.log('✅ [LOGIN] Auth successful, user:', authData.session.user.id);
+      setDebugInfo(`✅ Auth OK: ${authData.session.user.email}`);
 
-      // 2. Get role from user_profiles
+      // 2) Role kontrolü
+      console.log('🔍 [LOGIN] Step 2: Role kontrolü...');
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('role')
@@ -57,30 +59,35 @@ export default function LoginPage() {
         .single();
 
       if (profileError) {
-        console.error('⚠️ [LOGIN] Profile error:', profileError.message);
-        console.log('→ Fallback to student dashboard');
+        console.error('❌ [LOGIN] Profile fetch error:', profileError);
+        setDebugInfo(`⚠️ Profile error: ${profileError.message} - Fallback to student`);
+        // Fallback: student
         router.push('/student/dashboard');
         return;
       }
 
       const role = profile?.role ?? 'student';
-      console.log('✅ [LOGIN] Role:', role);
+      console.log('✅ [LOGIN] Role bulundu:', role);
+      setDebugInfo(`✅ Role: ${role}`);
 
-      // 3. Role-based redirect
+      // 3) Role-based redirect
+      console.log('🚀 [LOGIN] Step 3: Redirect...', role);
+      
       if (role === 'admin') {
-        console.log('→ Redirecting to /admin');
+        console.log('→ Admin paneline yönlendiriliyor: /admin');
         router.push('/admin');
       } else if (role === 'coach') {
-        console.log('→ Redirecting to /coach/dashboard');
+        console.log('→ Coach paneline yönlendiriliyor: /coach/dashboard');
         router.push('/coach/dashboard');
       } else {
-        console.log('→ Redirecting to /student/dashboard');
+        console.log('→ Student paneline yönlendiriliyor: /student/dashboard');
         router.push('/student/dashboard');
       }
 
     } catch (err: any) {
-      console.error('❌ [LOGIN] Error:', err);
+      console.error('❌ [LOGIN] Fatal error:', err);
       setError(err?.message ?? 'Giriş başarısız');
+      setDebugInfo(`❌ Error: ${err?.message}`);
     } finally {
       setLoading(false);
     }
@@ -89,10 +96,13 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">End.STP</h1>
-          <p className="text-gray-600 mt-2">Smart Learning Insights</p>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">End.STP Giriş</h1>
+
+        {debugInfo && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-900 text-sm font-mono">
+            {debugInfo}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -109,8 +119,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="email@example.com"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               required
               disabled={loading}
             />
@@ -124,8 +133,7 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="••••••••"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               required
               disabled={loading}
             />
@@ -134,39 +142,28 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
           >
             {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t">
-          <p className="text-sm font-semibold text-gray-700 mb-3 text-center">
-            Test Kullanıcıları:
-          </p>
-          <div className="space-y-2 text-xs">
-            <div className="p-2 bg-purple-50 rounded">
-              <p className="font-mono text-purple-900">
-                <span className="font-semibold">Admin:</span> admin2@admin.com
-              </p>
-              <p className="font-mono text-purple-700">
-                Şifre: admin123admin
-              </p>
-            </div>
-            <div className="p-2 bg-blue-50 rounded">
-              <p className="font-mono text-blue-900">
-                <span className="font-semibold">Öğrenci:</span> student@test.com
-              </p>
-              <p className="font-mono text-blue-700">
-                Şifre: test123
-              </p>
-            </div>
+        <div className="mt-6 text-center text-sm text-gray-600">
+          <p className="font-semibold mb-2">Test kullanıcılar:</p>
+          <div className="space-y-1">
+            <p className="font-mono text-xs">
+              <span className="text-purple-700">admin2@admin.com</span> / admin123admin
+            </p>
+            <p className="font-mono text-xs">
+              <span className="text-blue-700">student@test.com</span> / test123
+            </p>
           </div>
         </div>
 
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-xs text-yellow-900">
-            💡 <span className="font-semibold">Dev Mode:</span> F12 → Console açın, login akışını izleyin
+        <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs">
+          <p className="font-semibold text-yellow-900 mb-1">🐛 Debug Mode:</p>
+          <p className="text-yellow-800">
+            Console'u aç (F12 → Console) ve login akışını takip et.
           </p>
         </div>
       </div>

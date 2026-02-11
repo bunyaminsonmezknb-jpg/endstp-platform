@@ -55,5 +55,5 @@ api_router.include_router(admin_router.router, prefix="/admin", tags=["admin"])
 # =========================================================
 # NOTES:
 # - Admin router main.py'de ayrı olarak include ediliyor idi şimdi tek bir router altında toplandı
-# - Unified motors şimdilik kapalı
+# - Unified motors şimdilik kapalı. 
 # =========================================================
