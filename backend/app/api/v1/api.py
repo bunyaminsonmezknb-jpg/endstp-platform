@@ -24,6 +24,8 @@ from app.motors.time_pace.adapter import router as time_pace_router
 
 # Admin router
 from app.api.v1.endpoints.admin import router as admin_router
+from app.api.v1.endpoints import audit_log
+
 
 # =========================================================
 # ROUTER INCLUDES
@@ -52,6 +54,9 @@ api_router.include_router(time_pace_router)
 
 # Admin Panel
 api_router.include_router(admin_router.router, prefix="/admin", tags=["admin"])
+api_router.include_router(audit_log.router)
+
+
 # =========================================================
 # NOTES:
 # - Admin router main.py'de ayrı olarak include ediliyor idi şimdi tek bir router altında toplandı
