@@ -24,4 +24,4 @@ router.include_router(features.router, tags=["admin-features"])
 router.include_router(dashboard.router, tags=["admin-dashboard"])
 
 # Audit log
-router.include_router(audit.router, tags=["admin-audit"])
+
