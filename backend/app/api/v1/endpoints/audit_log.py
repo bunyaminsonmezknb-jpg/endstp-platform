@@ -14,19 +14,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Query, Request
+from pydantic import BaseModel
 
-# NOTE:
-# Bu dosyada DB erişimini projenizdeki mevcut pattern'e göre bağlamalısın.
-# Aşağıdaki örnek: Supabase service role client ile insert + select yapar.
-from app.core.supabase import get_supabase_service_client  # sende farklıysa uyarlayacağız
-from app.api.v1.deps import utc_now
+from app.core.supabase import get_supabase_service_client
 
 router = APIRouter(prefix="/admin/audit-log", tags=["admin-audit-log"])
+
+# L5: canonical read contract lives in audit.v_admin_audit_logs
+AUDIT_READ_SOURCE = "audit.v_admin_audit_logs"
 
 
 class AuditLogItem(BaseModel):
@@ -50,7 +49,6 @@ class AuditLogListResponse(BaseModel):
 
 
 def _get_ip(request: Request) -> Optional[str]:
-    # reverse proxy varsa x-forwarded-for gelebilir
     xff = request.headers.get("x-forwarded-for")
     if xff:
         return xff.split(",")[0].strip()
@@ -58,47 +56,16 @@ def _get_ip(request: Request) -> Optional[str]:
     return client.host if client else None
 
 
-async def write_admin_audit_log(
-    *,
-    request: Request,
-    actor_id: Optional[str],
-    actor_email: Optional[str],
-    action_type: str,
-    entity: str,
-    entity_id: Optional[str] = None,
-    payload: Optional[Dict[str, Any]] = None,
-    diff: Optional[Dict[str, Any]] = None,
-    request_id: Optional[str] = None,
-) -> None:
+async def write_admin_audit_log(**_: Any) -> None:
     """
-    Append-only audit log writer.
-    Uses service role client (RLS bypass) => güvenli ve stabil.
+    ❌ DEPRECATED (L5):
+    Audit log write işlemi endpoint seviyesinde yapılmaz.
+    DB trigger (audit.capture_row_changes) append-only olarak yazar.
+
+    Bu fonksiyon bilinçli olarak devre dışıdır.
+    Yanlışlıkla kullanımı engellemek için exception fırlatır.
     """
-    supabase = get_supabase_service_client()
-
-    ip = _get_ip(request)
-    user_agent = request.headers.get("user-agent")
-
-    row = {
-        "created_at": utc_now().isoformat(),
-        "actor_id": actor_id,
-        "actor_email": actor_email,
-        "action_type": action_type,
-        "entity": entity,
-        "entity_id": entity_id,
-        "request_id": request_id,
-        "ip": ip,
-        "user_agent": user_agent,
-        "payload": payload,
-        "diff": diff,
-    }
-
-    # best-effort: audit yazılamasa bile ana akış bozulmasın (ama log'a düşürmek istersin)
-    try:
-        supabase.table("admin_audit_logs").insert(row).execute()
-    except Exception:
-        # burada projenizdeki logger ile kaydetmek iyi olur
-        return
+    raise RuntimeError("L5 audit: write_admin_audit_log is disabled (DB-trigger only).")
 
 
 @router.get("", response_model=AuditLogListResponse)
@@ -108,15 +75,19 @@ async def list_audit_logs(
     entity: Optional[str] = Query(default=None),
     action_type: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
-    # cursor: created_at ISO string (basit cursor)
-    cursor: Optional[str] = Query(default=None),
+    cursor: Optional[str] = Query(default=None),  # created_at ISO string
 ):
     supabase = get_supabase_service_client()
 
-    query = supabase.table("admin_audit_logs").select("*").order("created_at", desc=True).limit(limit)
+    # ✅ view okuma: schema-qualified view için from_ daha stabil
+    query = (
+        supabase.from_(AUDIT_READ_SOURCE)
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+    )
 
     if cursor:
-        # created_at < cursor
         query = query.lt("created_at", cursor)
 
     if entity:
@@ -125,8 +96,7 @@ async def list_audit_logs(
     if action_type:
         query = query.eq("action_type", action_type)
 
-    if q:
-        # Basit OR arama (ilkel ama Phase-1 için yeterli)
+    if q and q.strip():
         qq = q.strip()
         query = query.or_(
             f"action_type.ilike.%{qq}%,entity.ilike.%{qq}%,actor_email.ilike.%{qq}%,entity_id.ilike.%{qq}%"
@@ -135,7 +105,5 @@ async def list_audit_logs(
     res = query.execute()
     data = res.data or []
 
-    items = data
-    next_cursor = items[-1]["created_at"] if len(items) == limit else None
-
-    return {"items": items, "next_cursor": next_cursor}
+    next_cursor = data[-1]["created_at"] if len(data) == limit else None
+    return {"items": data, "next_cursor": next_cursor}
