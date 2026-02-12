@@ -1,80 +1,112 @@
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
-# File: features.py
+# File: backend/app/api/v1/endpoints/admin/features.py
 # Role: Admin feature flags management endpoints
 # Created: 2026-02-09
+# Phase: MVP (Phase 1)
 # Author: End.STP Team
 #
 # Golden rules:
 # - UTC timestamps (timestamptz)
 # - Admin-only access (get_current_admin guard)
-# - Audit logging on all mutations
+# - ❌ No endpoint-level audit writes (DB trigger writes)
 # - Kill switches for motors and UI components
 # =============================================================================
 
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
 from app.api.v1.deps_admin import get_current_admin
 from app.db.session import get_supabase_admin
-from typing import List, Dict, Any
 
 router = APIRouter()
 
 
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class ToggleFeatureFlagBody(BaseModel):
+    enabled: bool
+
+
 @router.get("/feature-flags", response_model=List[Dict[str, Any]])
 async def get_admin_feature_flags(
-    current_admin: dict = Depends(get_current_admin)
+    _current_admin: dict = Depends(get_current_admin),
 ):
     """
     Get all admin panel feature flags
-    
     Auth: Admin only
-    Returns: List of feature flags
     """
     supabase = get_supabase_admin()
-    result = supabase.table("admin_feature_flags").select(
-        "id, flag_key, flag_name_tr, flag_name_en, "
-        "is_enabled, category, criticality, updated_at"
-    ).order("category", "criticality").execute()
-    
-    return result.data
+
+    res = (
+        supabase.table("admin_feature_flags")
+        .select(
+            "id, flag_key, flag_name_tr, flag_name_en, is_enabled, category, criticality, updated_at, updated_by"
+        )
+        .order("category")
+        .order("criticality")
+        .execute()
+    )
+
+    err = getattr(res, "error", None)
+    if err:
+        raise HTTPException(status_code=500, detail=f"Feature flags read failed: {err}")
+
+    return res.data or []
 
 
 @router.put("/feature-flags/{flag_key}")
 async def toggle_feature_flag(
     flag_key: str,
-    enabled: bool,
-    current_admin: dict = Depends(get_current_admin)
+    body: ToggleFeatureFlagBody,
+    current_admin: dict = Depends(get_current_admin),
 ):
     """
     Toggle feature flag on/off
-    
     Auth: Admin only
-    Creates audit log entry
+    Body: { "enabled": true/false }
+    ❌ Audit log insert burada yok (DB trigger yazar).
     """
     supabase = get_supabase_admin()
-    
-    # Get current state
-    before = supabase.table("admin_feature_flags").select("*").eq(
-        "flag_key", flag_key
-    ).single().execute()
-    
-    if not before.data:
-        raise HTTPException(404, f"Flag {flag_key} not found")
-    
-    # Update
-    after = supabase.table("admin_feature_flags").update({
-        "is_enabled": enabled,
-        "updated_by": current_admin["id"]
-    }).eq("flag_key", flag_key).execute()
-    
-    # Audit log
-    supabase.table("admin_audit_log").insert({
-        "admin_id": current_admin["id"],
-        "action_type": "toggle_feature_flag",
-        "action_category": "feature_flags",
-        "before_state": before.data,
-        "after_state": after.data[0] if after.data else None
-    }).execute()
-    
-    return after.data[0] if after.data else None
+
+    # Var mı kontrolü (frontend hata mesajı için)
+    before = (
+        supabase.table("admin_feature_flags")
+        .select("id, flag_key, is_enabled")
+        .eq("flag_key", flag_key)
+        .limit(1)
+        .execute()
+    )
+    if not (before.data or []):
+        raise HTTPException(status_code=404, detail=f"Flag {flag_key} not found")
+
+    res = (
+        supabase.table("admin_feature_flags")
+        .update(
+            {
+                "is_enabled": bool(body.enabled),
+                "updated_by": current_admin.get("id"),
+                "updated_at": utc_now_iso(),
+            }
+        )
+        .eq("flag_key", flag_key)
+        .execute()
+    )
+
+    err = getattr(res, "error", None)
+    if err:
+        raise HTTPException(status_code=500, detail=f"Feature flag update failed: {err}")
+
+    data = res.data or []
+    if not data:
+        return {"success": True}
+
+    return data[0]

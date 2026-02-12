@@ -13,7 +13,7 @@
 # =============================================================================
 
 from fastapi import APIRouter
-from . import features, dashboard, audit
+from . import features, dashboard
 
 router = APIRouter()
 
@@ -23,5 +23,5 @@ router.include_router(features.router, tags=["admin-features"])
 # Dashboard settings
 router.include_router(dashboard.router, tags=["admin-dashboard"])
 
-# Audit log
+
 

@@ -17,15 +17,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from app.core.supabase import get_supabase_service_client
+from app.api.v1.deps_admin import get_current_admin
+from app.db.session import get_supabase_admin
 
 router = APIRouter(prefix="/admin/audit-log", tags=["admin-audit-log"])
 
-# L5: canonical read contract lives in audit.v_admin_audit_logs
-AUDIT_READ_SOURCE = "audit.v_admin_audit_logs"
+# ✅ Canonical read surface for PostgREST: public schema view
+AUDIT_READ_SOURCE = "v_admin_audit_logs"
 
 
 class AuditLogItem(BaseModel):
@@ -48,22 +49,11 @@ class AuditLogListResponse(BaseModel):
     next_cursor: Optional[str] = None
 
 
-def _get_ip(request: Request) -> Optional[str]:
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    client = request.client
-    return client.host if client else None
-
-
 async def write_admin_audit_log(**_: Any) -> None:
     """
     ❌ DEPRECATED (L5):
     Audit log write işlemi endpoint seviyesinde yapılmaz.
     DB trigger (audit.capture_row_changes) append-only olarak yazar.
-
-    Bu fonksiyon bilinçli olarak devre dışıdır.
-    Yanlışlıkla kullanımı engellemek için exception fırlatır.
     """
     raise RuntimeError("L5 audit: write_admin_audit_log is disabled (DB-trigger only).")
 
@@ -71,15 +61,15 @@ async def write_admin_audit_log(**_: Any) -> None:
 @router.get("", response_model=AuditLogListResponse)
 async def list_audit_logs(
     request: Request,
+    _current_admin: dict = Depends(get_current_admin),  # ✅ admin guard
     q: Optional[str] = Query(default=None, description="Search in action_type/entity/actor_email/entity_id"),
     entity: Optional[str] = Query(default=None),
     action_type: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: Optional[str] = Query(default=None),  # created_at ISO string
 ):
-    supabase = get_supabase_service_client()
+    supabase = get_supabase_admin()
 
-    # ✅ view okuma: schema-qualified view için from_ daha stabil
     query = (
         supabase.from_(AUDIT_READ_SOURCE)
         .select("*")
@@ -103,7 +93,12 @@ async def list_audit_logs(
         )
 
     res = query.execute()
-    data = res.data or []
 
+    # ✅ Hata varsa 500 yerine açıklayıcı mesaj
+    err = getattr(res, "error", None)
+    if err:
+        raise HTTPException(status_code=500, detail=f"Audit read failed: {err}")
+
+    data = res.data or []
     next_cursor = data[-1]["created_at"] if len(data) == limit else None
     return {"items": data, "next_cursor": next_cursor}

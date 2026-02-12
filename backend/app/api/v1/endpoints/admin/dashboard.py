@@ -1,75 +1,104 @@
 # =============================================================================
 # GLOBAL-FIRST COMPLIANCE HEADER
 # =============================================================================
-# File: dashboard.py
+# File: backend/app/api/v1/endpoints/admin/dashboard.py
 # Role: Admin dashboard settings management endpoints
 # Created: 2026-02-09
+# Phase: MVP (Phase 1)
 # Author: End.STP Team
 #
 # Golden rules:
 # - UTC timestamps (timestamptz)
 # - Admin-only access (get_current_admin guard)
-# - Audit logging on all mutations
+# - ❌ No endpoint-level audit writes (DB trigger writes)
 # - Singleton table (dashboard_settings)
 # =============================================================================
 
-from fastapi import APIRouter, Depends, HTTPException
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+
 from app.api.v1.deps_admin import get_current_admin
 from app.db.session import get_supabase_admin
-from typing import Dict, Any
 
 router = APIRouter()
 
 
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class DashboardSettingsUpdate(BaseModel):
+    # Flexible payload (frontend delta gönderiyor)
+    # Pydantic extra allow => bilinmeyen alanları da kabul eder
+    class Config:
+        extra = "allow"
+
+
 @router.get("/dashboard/settings")
 async def get_dashboard_settings(
-    current_admin: dict = Depends(get_current_admin)
+    _current_admin: dict = Depends(get_current_admin),
 ):
     """
-    Get dashboard card visibility settings
-    
+    Get dashboard card visibility settings (singleton row).
     Auth: Admin only
-    Returns: Dashboard settings
     """
     supabase = get_supabase_admin()
-    result = supabase.table("dashboard_settings").select("*").execute()
-    
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(404, "Dashboard settings not found")
-    
-    return result.data[0]
+
+    # Singleton stratejin: ya `singleton=true` ya da `id='singleton'`.
+    # Mevcutta update singleton=true olduğu için burada da ona göre okuyalım.
+    res = (
+        supabase.table("dashboard_settings")
+        .select("*")
+        .eq("singleton", True)
+        .limit(1)
+        .execute()
+    )
+
+    data = res.data or []
+    if not data:
+        raise HTTPException(status_code=404, detail="Dashboard settings not found")
+
+    return data[0]
 
 
 @router.put("/dashboard/settings")
 async def update_dashboard_settings(
-    settings: Dict[str, Any],
-    current_admin: dict = Depends(get_current_admin)
+    payload: DashboardSettingsUpdate,
+    request: Request,
+    current_admin: dict = Depends(get_current_admin),
 ):
     """
-    Update dashboard settings
-    
+    Update dashboard settings (singleton).
     Auth: Admin only
-    Creates audit log entry
+    ❌ Audit log insert burada yok (DB trigger yazar).
     """
     supabase = get_supabase_admin()
-    
-    # Get current state
-    before = supabase.table("dashboard_settings").select("*").execute()
-    before_data = before.data[0] if before.data else None
-    
-    # Update (singleton table with singleton=true)
-    after = supabase.table("dashboard_settings").update({
-        **settings,
-        "updated_by": current_admin["id"]
-    }).eq("singleton", True).execute()
-    
-    # Audit log
-    supabase.table("admin_audit_log").insert({
-        "admin_id": current_admin["id"],
-        "action_type": "update_dashboard_settings",
-        "action_category": "dashboard_settings",
-        "before_state": before_data,
-        "after_state": after.data[0] if after.data else None
-    }).execute()
-    
-    return after.data[0] if after.data else None
+
+    update_data: Dict[str, Any] = dict(payload)
+
+    # Standard fields
+    update_data["updated_by"] = current_admin.get("id")
+    update_data["updated_at"] = utc_now_iso()
+
+    res = (
+        supabase.table("dashboard_settings")
+        .update(update_data)
+        .eq("singleton", True)
+        .execute()
+    )
+
+    err = getattr(res, "error", None)
+    if err:
+        raise HTTPException(status_code=500, detail=f"Dashboard settings update failed: {err}")
+
+    data = res.data or []
+    if not data:
+        # update başarılı ama data dönmediyse
+        return {"success": True}
+
+    return data[0]
