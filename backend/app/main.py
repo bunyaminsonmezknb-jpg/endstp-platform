@@ -49,22 +49,27 @@ app = FastAPI(
 )
 
 # ============================================
-# 3) CORS MIDDLEWARE
+# 3) CORS MIDDLEWARE (FIXED)
 # ============================================
+# Admin panel fix: Both localhost and 127.0.0.1 origins
+# allow_credentials=True required for JWT authentication
+# ============================================
+
+CORS_ORIGINS = [
+    "http://localhost:3000",      # ✅ Frontend dev (primary)
+    "http://127.0.0.1:3000",      # ✅ Alternative localhost
+    "http://localhost:3001",      # ✅ Alternative port
+    "http://127.0.0.1:3001",      # ✅ Alternative port + IP
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=600,
+    allow_origins=CORS_ORIGINS,              # ✅ Specific origins (not "*")
+    allow_credentials=True,                  # ✅ Required for JWT auth
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],  # ✅ All methods
+    allow_headers=["*"],                     # ✅ All headers (including Authorization)
+    expose_headers=["*"],                    # ✅ Expose response headers
+    max_age=600,                             # ✅ Preflight cache (10 min)
 )
 
 # ============================================
