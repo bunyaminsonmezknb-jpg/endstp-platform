@@ -1,7 +1,7 @@
 # ================================================
 # End.STP Backend Dependencies
 # Python 3.10+
-# Updated: 2026-01-10 (Supabase 2.27.1 upgrade)
+# Updated: 2026-02-13 (SQLAlchemy & AnyIO Update)
 # ================================================
 
 # -------------------- CORE --------------------
@@ -12,7 +12,8 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
 # -------------------- DATABASE --------------------
-sqlalchemy==2.0.23
+# Updated to 2.0.25 for direct DB access
+sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 alembic==1.12.1
 
@@ -34,6 +35,8 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 
 # -------------------- UTILITIES --------------------
+# Thread pool support
+anyio>=3.7.1
 email-validator==2.1.0
 python-dateutil==2.8.2
 

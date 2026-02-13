@@ -169,6 +169,7 @@ except ImportError as e:
     print(f"⚠️  Motors router not found: {e}")
 except Exception as e:
     print(f"❌ Error loading motors router: {e}")
+    
 
 # Segmentation Router
 try:

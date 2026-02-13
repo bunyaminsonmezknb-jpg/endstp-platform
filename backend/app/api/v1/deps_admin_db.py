@@ -17,8 +17,8 @@ from __future__ import annotations
 from fastapi import Depends, Request
 from sqlalchemy import text
 
-from app.db.session import get_db  # AsyncSession dependency
-from app.api.v1.deps_admin import get_current_admin  # mevcut admin guard (dict dönüyor)
+from app.db.session import get_db
+from app.api.v1.deps_admin import get_current_admin
 
 AUDIT_CTX_SQL = text(
     """
